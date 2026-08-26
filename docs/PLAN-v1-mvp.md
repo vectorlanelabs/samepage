@@ -27,7 +27,7 @@ Build the first useful version of Dinner Decider: a household web app for **week
 9. Manual meal add/edit/archive
 10. **External API + MCP server** (token-authenticated) so Charlie's AI tools can import meals/recipes and query history — **AI lives outside the app** (D17)
 
-**Out (explicit):** grocery/shopping list (feeds it, doesn't build it), recipe ingestion/parsing (future AI step), import UI/CLI, dice-roll ritual, non-binary vote shades, preference learning, accounts/multi-household, mobile apps.
+**Out (explicit):** grocery/shopping list (feeds it, doesn't build it), in-app recipe parsing (AI capability is external via API/MCP — D17), import UI/CLI, dice-roll ritual, non-binary vote shades, preference learning in-app, accounts/multi-household, mobile apps.
 
 ## 3. Locked decisions (reviewable before M0)
 
