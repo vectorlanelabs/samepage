@@ -2,36 +2,11 @@
 
 Chronological record of work on Dinner Decider. Oldest at top.
 
-## 2026-08-26 — Planning pass (no code shipped)
+## 2026-08-26 — Plan 1 (day 0)
 
-- **Read** the repo: `README.md` (product concept: common-ground voting + dice roll, V1/V1.5/V2 sketch) and `D20 Dinner Decider.xlsx` (legacy data).
-- **Spreadsheet audit**: 8 tabs × up to 20 meals (~155 named meals); `Times Rolled` counts on ~35 rows; 4 recipe URLs; takeout entries; one exact duplicate (`Chicken parm` in Tab 1 & 2); Sheet8 has 5 empty slots; two `(LC)`-suffixed entries. Full audit: `reference/README.md`.
-- **Checks against the family**: Pips' room-code pattern (`WORD-####` via `generateCode()`) confirmed — Dinner Decider round codes mirror it with a food-themed word list.
-- **Created**: `CHARTER.md` (scope, non-goals, locked decisions, DoD, stop criteria), `ROADMAP.md`, `docs/PLAN-v1-mvp.md` (full MVP build plan: data model, routes, common-ground algorithm, import spec, M0–M5), `docs/POST-V1.md` (v1.5 / v2 / later stubs), `CLAUDE.md` (implementer constraints), `REQUESTS.md`, `.gitignore`.
-- **Reorganized**: legacy spreadsheet moved to `reference/` with provenance note.
-- **Status**: committed & pushed. **Awaiting Charlie's charter approval before M0.**
-
-## 2026-08-26 — Correction cycle (Charlie's direction — no code shipped)
-
-- **Product shape changed**: the app is now a **weekly planning session**, not a dice-roll. The household sets lunch + dinner targets; the app serves 15–20-meal batches (same list for everyone); private **binary yes/no** votes; unanimous-yes meals kept; batches repeat until targets met.
-- **Removed from MVP**: dice ritual, "not-tonight" vote scale, pool modes, import UI/CLI, `legacy_rolls` (Times Rolled column ignored).
-- **Added**: meal `type` (lunch/dinner/both) with per-track targets; iterative batch lifecycle (`batch`, `batch_meal.kept`, `vote`); kept-meal records (`times_kept`, `last_kept_at`) as the favorites signal; tags/categories as AI-discovery hooks.
-- **Pre-seeding**: generated and committed `seed/meals.json` (155 meals, 8 categories, 4 recipe URLs with embedded names cleaned, 10 takeout-tagged, chicken-parm dup noted). No import feature — the spreadsheet is a one-time source.
-- **Docs updated**: CHARTER, ROADMAP, `docs/PLAN-v1-mvp.md` (full rewrite), `docs/POST-V1.md` (recipe intake is now a future AI step per Charlie), `reference/README.md`, README banner, REQUESTS.
-- **Blocked**: `CLAUDE.md` rewrite is a protected file — pending Charlie's explicit OK (it still references the old import spec; the plan it points to is corrected, so no danger).
-- **Status**: committed & pushed. **Still awaiting charter approval before M0.**
-
-## 2026-08-26 — Architecture decision (Charlie's question: backend or not?)
-
-- Charlie asked whether a backend is warranted (original concept floated "no backend"; library may grow large as the family recipe keeper; AI connectivity security matters).
-- **Decision: backend, self-hosted local** (FastAPI + SQLite — the plan's existing shape, now explicitly justified). Reasons: (1) private simultaneous voting needs server-enforced state, (2) the library is durable family data (recipe keeper replacing the kitchen notebook), (3) AI keys must never live in client code, (4) data-size headroom is a non-issue for SQLite with a file-based image store and a Postgres path via SQLAlchemy. No-backend only fits a single-device, throwaway, no-privacy app.
-- Plan §7 gained a "Why a backend" section; CHARTER notes the recipe-keeper durability framing; POST-V1 adds library export/backup (v1.5) and server-side-only AI keys (v2); REQUESTS tracks the export item.
-- **Status**: committed & pushed. **Still awaiting charter approval before M0.**
-
-## 2026-08-26 — Deployment decision (Charlie's call)
-
-- **Not self-hosting locally**: Dinner Decider deploys to Charlie's **Hostinger VPS**, internet-facing behind HTTPS (Caddy auto-TLS), from day one. No LAN/Tailscale dependency.
-- **Implications landed**: plan §7.1 (deployment: Docker Compose or systemd + Caddy, env `DD_SECRET`/`DD_ACCESS_KEY`/`DD_DB_PATH`/`DD_PORT`, daily DB backup + snapshots); charter D13 (VPS + HTTPS + household passphrase access gate — reviewable); M5 tasks expanded (VPS deploy docs, access-gate middleware, backup job).
-- **CLAUDE.md refreshed** (Charlie approved the protected-file write): corrected product shape, VPS deployment, internet-facing security rule (no secrets in HTML/JS), ownership rules.
-- REQUESTS: hosting item resolved; CLAUDE.md item resolved.
-- **Status**: committed & pushed. **Still awaiting charter approval before M0.**
+- **Read** the repo: `README.md` (product concept — replace the D8/D20 spreadsheet-and-dice ritual, which "narrows the list but does not really solve the decision problem", with consensus voting) and `D20 Dinner Decider.xlsx` (the legacy data).
+- **Audited the spreadsheet**: 8 tabs × up to 20 meals (~155 named meals); 4 recipe URLs (2 standalone cells, 2 embedded in meal names); 10 takeout entries; one exact duplicate ("Chicken parm" ×2); Sheet8 has 15 of 20 slots; `Times Rolled` column noted and deliberately ignored.
+- **Scope refined with Charlie** (day-0 planning, not iterations): weekly planning sessions — set lunch/dinner targets; iterative 15–20-meal yes/no batches (same list for everyone, private votes); unanimous-yes meals kept until targets met. Binary votes. No dice (the thing being replaced). Grocery list out of scope. Library pre-seeded (no import feature). Kept-meal records (`times_kept`) seed favorites. Tags/categories as AI hooks. Recipes arrive via a future AI step (photo/link → recipe).
+- **Architecture decided**: backend (FastAPI + SQLite), **VPS-hosted** on Charlie's Hostinger VPS behind HTTPS; single household passphrase as the access gate; daily DB backups — the library is the family recipe keeper (replacing the kitchen notebook).
+- **Produced**: `CHARTER.md` (pending approval), `ROADMAP.md`, `docs/PLAN-v1-mvp.md`, `docs/POST-V1.md`, `CLAUDE.md`, `REQUESTS.md`, `seed/meals.json` (155 meals) + `seed/README.md`, `reference/README.md`; README gained a pointer to the operative docs.
+- **Status**: committed & pushed. Awaiting charter approval before M0.

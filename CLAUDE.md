@@ -7,7 +7,9 @@
 - Python 3.12+, **uv** for env/deps, **FastAPI**, **SQLAlchemy 2.x**, **SQLite**, **Jinja2**, **HTMX** + minimal vanilla JS.
 - **No frontend build step. No Node.** No new runtime dependencies without lead approval (note it in REQUESTS.md instead). openpyxl is a **dev-only** dependency (seed regeneration).
 
-## Product shape (corrected 2026-08-26 — do not regress to the old concept)
+## Product shape (binding)
+
+The app exists to **replace** the spreadsheet-and-dice ritual — it was never a dice-roll app; the D8/D20 mechanic is the pain point, not the product.
 
 - The product is a **weekly planning session**: set lunch/dinner targets → iterative batches of 15–20 meals → private **binary yes/no** votes → unanimous-yes meals kept → repeat until targets met.
 - **No dice roll. No "not tonight" / vote shades. No import feature or import UI.** The library is pre-seeded from `seed/meals.json`.

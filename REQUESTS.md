@@ -7,7 +7,7 @@ Wanted-but-not-blocking ideas. The lead picks these up when appropriate, or Char
 - [ ] **Batch size default** — plan says 15, settable 15–20 at session creation. Confirm 15 is the right default.
 - [ ] **Track order** — plan runs dinner track first, then lunch. Confirm.
 - [ ] **Over-target keeps** — when a batch agrees on more meals than the week needs, the starter picks which to keep (multi-select). Confirm that's the right behavior.
-- [ ] **Dice ritual** — the D8/D20 roll is out of the MVP flow per the corrected direction. Optional: resurrect it later as a fun pick among kept meals (already in POST-V1 "later"). Charlie's call.
+- [ ] **Dice ritual** — the D8/D20 roll (the thing being replaced) stays out of the MVP. Optional: resurrect it later as a fun pick among kept meals (already in POST-V1 "later"). Charlie's call.
 - [ ] **Adversarial plan review** — run Oscar (ai-grouch) over `docs/PLAN-v1-mvp.md` before M0, catch plan-level flaws while it's cheap.
 - [ ] **Recipe display** — MVP stores recipe links (4 meals) and shows them; the clean cooking view/printing stays post-MVP. Confirm that's enough for v1.
 - [ ] **Library export** — JSON export of meals + recipes as backup/portability (v1.5 candidate; MVP documents the .db-copy backup story in M5).

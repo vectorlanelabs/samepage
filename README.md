@@ -2,7 +2,7 @@
 
 A household meal-decision app that learns what everyone will actually eat.
 
-> **Direction updated 2026-08-26.** The product is now a **weekly planning session**, not a dice roll: the household sets how many dinners and lunches the week needs, the app serves 15–20 meal options at a time (the same list for everyone), each person votes **yes/no** privately, meals where **everyone said yes** are kept, and the app keeps serving batches until the week's targets are met. The meal library is **pre-seeded** from the legacy spreadsheet (including its recipe links); grocery-list building is explicitly out of scope (the decision feed is the product). The prose below is the original concept narrative; **the operative spec is [`CHARTER.md`](CHARTER.md) and [`docs/PLAN-v1-mvp.md`](docs/PLAN-v1-mvp.md)**.
+> **What this is.** Dinner Decider **replaces the D8/D20 spreadsheet-and-dice ritual** — the dice narrow the list but do not solve the decision problem. The product is a **weekly planning session**: the household sets how many dinners and lunches the week needs, the app serves 15–20 meal options at a time (the same list for everyone), each person votes **yes/no** privately, meals where **everyone said yes** are kept, and the app keeps serving batches until the week's targets are met. The meal library is **pre-seeded** from the legacy spreadsheet (including its recipe links); grocery-list building is explicitly out of scope (the decision feed is the product). The prose below is the original concept write-up; **the operative spec is [`CHARTER.md`](CHARTER.md) and [`docs/PLAN-v1-mvp.md`](docs/PLAN-v1-mvp.md)**.
 
 ## Project docs
 

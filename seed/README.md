@@ -1,6 +1,6 @@
 # seed/ — Pre-seeded meal data
 
-`meals.json` is the **pre-seeded meal library** for the app. Per the corrected product direction (2026-08-26), there is **no import feature** — the app comes up with this data baked in.
+`meals.json` is the **pre-seeded meal library** for the app. There is **no import feature** — the app comes up with this data baked in.
 
 ## Provenance
 

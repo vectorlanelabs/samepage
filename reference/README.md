@@ -14,7 +14,7 @@ This file is the **read-only migration source** for Dinner Decider's import pipe
 ### Audit snapshot (2026-08-26, at planning time)
 
 - **~155 named meals** — Sheet1–Sheet7 have all 20 slots filled; Sheet8 has 15 filled (rows 16–20 empty).
-- **"Times Rolled"** populated on 34 rows (counts of 1–2); 37 historical dice rolls in total. **This column is ignored by the product** (Charlie's direction, 2026-08-26) — it is not carried into `seed/meals.json`.
+- **"Times Rolled"** populated on 34 rows (counts of 1–2); 37 historical dice rolls in total. **This column is ignored by the product** — it is not carried into `seed/meals.json`.
 - **4 recipe URLs**: TikTok (Sheet2, col E) and damndelicious.net (Sheet8, col D) as standalone cells; cookincanuck.com (Sheet5) and allrecipes.com (Sheet6) embedded at the end of the meal name.
 - **Takeout entries present** (Chili's, Taco Bell, McDonald's, Chick Fil A, Panda Express, Raising Cane's, Whataburger, Subway, Los Hermanos, "Order Pizza") — these are intentional dinner answers, not noise.
 - **Catch-all entries**: "Make do", "Leftovers", "yesterday's chicken".
@@ -24,6 +24,6 @@ This file is the **read-only migration source** for Dinner Decider's import pipe
 ### Data conventions used by the seed pipeline
 
 - Sheet index (1–8) → category `Tab N` (renamable in-app later).
-- `Times Rolled` → **ignored** (corrected direction 2026-08-26).
+- `Times Rolled` → **ignored**.
 - Known restaurant names → auto-tagged `takeout` in the seed (curated list, not an AI guess).
 - Embedded URLs are stripped from meal names into `source_url` during seed generation.

@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | **Pending Charlie's approval** (plan committed 2026-08-26, corrected 2026-08-26; implementation not started) |
+| **Status** | **Pending Charlie's approval** (Plan 1 committed 2026-08-26; implementation not started) |
 | **Repo** | `vectorlanelabs/dinnerdecider` |
-| **Type** | Household web app — self-hosted, local-network friendly |
+| **Type** | Household web app — web-first, VPS-hosted |
 | **Budget** | 25 directed cycles for v1 MVP (or milestone-list completion, whichever comes first) |
 | **Source docs** | `README.md` (original concept) · `reference/D20 Dinner Decider.xlsx` (legacy data) · `docs/PLAN-v1-mvp.md` (operative build plan) |
 
@@ -23,13 +23,13 @@ One household — Charlie's family (roughly 2–6 people who plan meals together
 
 The output is the week's meal plan — which then feeds grocery planning done elsewhere. **Grocery-list building is explicitly out of scope.**
 
-## Core mechanic (corrected 2026-08-26)
+## Core mechanic
 
-- **Consensus by unanimous yes, in batches.** No dice, no "not tonight" shades — binary yes/no, iterated until the week is planned.
+- **Consensus by unanimous yes, in batches.** Binary yes/no, iterated until the week is planned. The D8/D20 spreadsheet-and-dice ritual is the thing being replaced — it has no role in the app.
 - **Private voting.** Votes are hidden until a batch closes; only the unanimous-yes results are shown. No tallies, no "who rejected what".
 - **Pre-seeded library.** The legacy spreadsheet's meals (and the recipe links it has) ship with the app. No import feature.
 - **Favorites emerge from data.** Every kept meal is recorded (`times_kept`), so favorites can be determined from successful matches over time.
-- **A real backend** (FastAPI + SQLite, **VPS-hosted** on Charlie's Hostinger VPS behind HTTPS — decided 2026-08-26) — required for private simultaneous voting, durable family data, and future AI key security. Rationale in plan §7, deployment in §7.1.
+- **A real backend** (FastAPI + SQLite, **VPS-hosted** on Charlie's Hostinger VPS behind HTTPS) — required for private simultaneous voting, durable family data, and future AI key security. Rationale in plan §7, deployment in §7.1.
 
 ## Non-goals (v1 MVP)
 
@@ -58,7 +58,8 @@ The output is the week's meal plan — which then feeds grocery planning done el
 | D10 | **Tracks** | Meals are typed `lunch` / `dinner` / `both`. Sessions set a target per track; tracks run **dinner first, then lunch**. |
 | D11 | **Seed dedupe** | Loader dedupes by normalized name (casefold + collapsed whitespace); exact duplicates logged and skipped (e.g. the two "Chicken parm" rows). |
 | D12 | **Polling, not websockets** | Page refresh / short poll on session pages. |
-| D13 | **Deployment** | **VPS-hosted** (Hostinger, Charlie's call 2026-08-26) behind HTTPS (Caddy auto-TLS); single household passphrase (`DD_ACCESS_KEY`, once per device) as the access gate — no accounts, PINs unchanged; daily DB backup + provider snapshots (family recipes are irreplaceable). Reviewable. |
+| D13 | **Over-target keeps** | If unanimous-yes meals exceed remaining slots, the starter chooses which to keep (multi-select, max = remaining). Kept = counted; dropped = recorded as voted, not kept. |
+| D14 | **Deployment** | **VPS-hosted** (Hostinger) behind HTTPS (Caddy auto-TLS); single household passphrase (`DD_ACCESS_KEY`, once per device) as the access gate — no accounts, PINs unchanged; daily DB backup + provider snapshots (family recipes are irreplaceable). Reviewable. |
 
 ## Milestones (v1 MVP)
 
@@ -93,4 +94,4 @@ From household devices **anywhere** (the app is on the VPS behind HTTPS — phon
 
 ## Approval
 
-This charter is **pending Charlie's sign-off**. Implementation cycles (M0+) begin only after approval. Every locked decision is reviewable — corrections welcome before M0.
+This charter is **pending Charlie's sign-off**. Implementation cycles (M0+) begin only after approval. Every locked decision is reviewable — feedback welcome before M0.

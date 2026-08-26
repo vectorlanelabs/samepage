@@ -1,6 +1,6 @@
 # Dinner Decider — v1 MVP Implementation Plan
 
-> Status: **committed 2026-08-26 (corrected per Charlie's direction), awaiting charter approval** · Owner: Bartowski (lead) · Concept source: `README.md` (superseded in parts) · Charter: `CHARTER.md`
+> Status: **Plan 1 — committed 2026-08-26, awaiting charter approval** · Owner: Bartowski (lead) · Concept source: `README.md` · Charter: `CHARTER.md`
 >
 > This document is the reference for implementation. Decisions in §3 are **locked unless marked reviewable** — the implementer follows this spec; it does not make product decisions.
 
@@ -12,7 +12,7 @@ Build the first useful version of Dinner Decider: a household web app for **week
 
 ## 2. Scope
 
-**In (corrected 2026-08-26):**
+**In:**
 
 1. Household profiles (people + PINs, no accounts)
 2. Meal library — meals have **title, type (lunch/dinner/both), category, tags, recipe (link/text)**
@@ -119,7 +119,7 @@ Notes:
 
 ## 7. Architecture & app layout
 
-### Why a backend (and why self-hosted local) — decided 2026-08-26
+### Why a backend (and why VPS-hosted)
 
 The original concept conversation floated a "no backend" shape (static page, per-browser storage). It is the wrong shape for this product, for four concrete reasons:
 
@@ -128,7 +128,7 @@ The original concept conversation floated a "no backend" shape (static page, per
 3. **AI keys must never live in a browser.** Recipe intake/discovery (v2) needs an LLM; provider keys belong in server-side env vars, never in client JS.
 4. **Data-size headroom is a non-issue.** Even a generous family library — thousands of recipes with ingredients, instructions, and notes — is a few MB of text in SQLite; images live as files on disk, not blobs. SQLite (WAL mode) handles a household's concurrent write rate trivially, and SQLAlchemy keeps any later Postgres migration a config change, not a rewrite.
 
-The honest no-backend case is a single-device, throwaway, no-privacy app — not this one. The README's own architecture section describes a server shape ("desktop/web host or lightweight server… persistent local database"), and this plan commits to it: **a VPS-hosted backend** (FastAPI + SQLite) on Charlie's Hostinger VPS — decided 2026-08-26, **no local hosting**. The household reaches it from anywhere via HTTPS; no LAN or Tailscale dependency. The app itself is deployment-agnostic (uvicorn + SQLite); hosting details in §7.1.
+The honest no-backend case is a single-device, throwaway, no-privacy app — not this one. The README's own architecture section describes a server shape ("desktop/web host or lightweight server… persistent local database"), and this plan commits to it: **a VPS-hosted backend** (FastAPI + SQLite) on Charlie's Hostinger VPS — **no local hosting**. The household reaches it from anywhere via HTTPS; no LAN or Tailscale dependency. The app itself is deployment-agnostic (uvicorn + SQLite); hosting details in §7.1.
 
 ### Layout
 
@@ -163,7 +163,7 @@ dinnerdecider/
 - Templates server-rendered; voting interactions are `hx-post` calls; batch progress via short polling (D12).
 - **No Node, no bundler, no build step.** HTMX vendored as a static file.
 
-### 7.1 Deployment (VPS) — decided 2026-08-26
+### 7.1 Deployment (VPS)
 
 - **Target**: Charlie's Hostinger Ubuntu VPS (where Hermes already runs). The app is **internet-facing from day one** — no local hosting, no LAN/Tailscale dependency. Responsive web UI means family phones just need a browser and the URL.
 - **HTTPS**: Caddy reverse proxy with auto-TLS (Let's Encrypt). Domain: a subdomain of an existing owned domain (e.g. `dinner.*`) — M5 ops detail.
