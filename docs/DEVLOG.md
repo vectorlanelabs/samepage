@@ -82,6 +82,6 @@ Chronological record of work on Dinner Decider. Oldest at top.
 | Multi-worker deployment needs a DB-level bootstrap guard | — | **deferred** — documented in code; tracked in REQUESTS (deployment is single-process uvicorn) |
 | Unauthenticated `/people` returns bare 403 (no redirect to /login) | nit | **deferred** — UX polish; tracked in REQUESTS |
 
-**CI**: still zero runs (5 pushes now) — tracked in REQUESTS; local gates are the verification.
+**CI**: removed 2026-08-26 per Charlie (error emails on every commit; will re-enable when a hosting environment exists). Runs had been failing GitHub-side (~12s, zero steps, logs 404) with no determined cause — local gates are the verification. Tracked in REQUESTS.
 
 **Next**: M2 — meal library CRUD + pre-seeded data (seed loader from `seed/meals.json`, library screen per handoff screen 6/7).
