@@ -2,7 +2,7 @@
 
 > Status: **Plan 1 — committed 2026-08-26, awaiting charter approval** · Owner: Bartowski (lead) · Concept source: `README.md` · Charter: `CHARTER.md`
 >
-> Incorporated 2026-08-26: [`docs/INITIAL-PLAN-REVIEW.md`](INITIAL-PLAN-REVIEW.md) — all 12 findings accepted and applied (roster freeze, Alembic migrations, WAL-safe backups, lunch-track seed, admin/security, strengthened privacy, README truthfulness, deployment wording, recipe-use experience, fixed batch size, idempotency, deactivate-not-delete).
+> Incorporated 2026-08-26: [`docs/INITIAL-PLAN-REVIEW.md`](INITIAL-PLAN-REVIEW.md) — all 12 findings accepted and applied (roster freeze, Alembic migrations, WAL-safe backups, lunch-track seed, admin/security, strengthened privacy, README truthfulness, deployment wording, recipe-use experience, fixed batch size, idempotency, deactivate-not-delete). Plus 2026-08-26 (Charlie): **majority-yes meals shown in results with host acceptance** — unanimous auto-kept, majority offered to the host while slots remain.
 >
 > This document is the reference for implementation. Decisions in §3 are **locked unless marked reviewable** — the implementer follows this spec; it does not make product decisions.
 
@@ -36,15 +36,15 @@ Build the first useful version of Dinner Decider: a household web app for **week
 | D2 | **Identity** | No accounts. `Person` = name + 4-digit PIN, **stored hashed** (PBKDF2, per-person salt — stdlib). Signed-cookie session stores `person_id` per device. | Privacy of votes without an account system. Hashed because the app is internet-facing (review #5). |
 | D3 | **Session codes** | `WORD-####` (e.g. `TACO-1234`), food-themed ~100-word list, easy-to-spell words only | Mirrors Pips' `generateCode()` (`WORD-NUMBER`); short enough to read aloud across a room. |
 | D4 | **Vote scale** | Binary `yes` / `no` | Charlie's direction. No "not tonight" shades in MVP. |
-| D5 | **Keep rule & roster** | The participant roster **freezes when the starter begins voting** (lobby phase first; late join disallowed in v1). A meal qualifies iff **every required participant has an explicit `yes` vote** on it. Auto-close requires every roster member to vote on every meal; manual close treats missing votes as `no`. | Review #1: unanimity must be defined over a fixed roster, not "whoever happened to vote". |
+| D5 | **Keep rule & roster** | The participant roster **freezes when the starter begins voting** (lobby phase first; late join disallowed in v1). **Unanimous**: a meal qualifies automatically iff **every required participant has an explicit `yes` vote**. **Majority** (host-optional, Charlie 2026-08-26): non-unanimous meals where `yes > no` (ties excluded; missing votes count as `no` on manual close) are shown in the results with **aggregate counts only** — the **host (session starter) may accept** them while slots remain. Auto-close requires every roster member to vote on every meal; manual close treats missing votes as `no`. | Review #1: unanimity over a fixed roster. Majority acceptance is the household's escape hatch for near-misses — a host decision, never automatic. |
 | D6 | **Batch assembly** | **15 options per batch, fixed** — an implementation tuning parameter, not a household setup choice (revisit after real use). Pool = active meals of the active track (`type == track` or `type == "both"`), **minus any meal already voted on in this session**; shuffled, take `min(15, len(pool))`. | Review #10: batch size is tuning, not a planning decision. No repeats within a session. |
 | D7 | **Pre-seeding** | `seed/meals.json` (committed; generated from the spreadsheet) + `scripts/seed.py` loader. **No import feature** — the spreadsheet is a one-time source, not a user flow. | Charlie: "No need to import the spreadsheet… I want all of that pre-seeded." |
 | D8 | **Tags & categories** | First-class metadata: category (`Tab 1..8`, renamable) + free tags. Seed auto-tags the 10 known takeout meals. Purpose: organization now, **AI discovery hooks later**. | Charlie: "tags… so that we can pin on ai discovery steps later." |
-| D9 | **Favorites signal** | `meal.times_kept += 1` and `last_kept_at = now` on every keep; all raw votes stored. Favorites are *derived* from successful matches over time — no manual star list in MVP. | Charlie: "keep record of successful matches, so that we can start to determine favorites." |
+| D9 | **Favorites signal** | `meal.times_kept += 1` and `last_kept_at = now` on every keep (unanimous **and** host-accepted); `batch_meal.kept_by` (`unanimous`\|`host`) records how it was kept; all raw votes stored. Favorites are *derived* from successful matches over time — no manual star list in MVP. | Charlie: "keep record of successful matches, so that we can start to determine favorites." Host-accepted meals are a distinct, valuable signal. |
 | D10 | **Tracks** | Meal type `lunch` / `dinner` / `both`. Session sets `lunch_target` + `dinner_target`. Tracks run **dinner first, then lunch** (both unmet → dinner; next unmet → lunch). A `both` meal counts toward either track. **The seed carries a curated `both` subset (27 meals) so the lunch track is populated from a fresh install.** | "Meals are lunch and dinner; before beginning, the target number for each is set." Review #4: no intentionally empty core track. |
 | D11 | **Seed dedupe** | Loader dedupes by `normalized_name` (casefold + collapsed whitespace): first occurrence wins, exact duplicates logged and skipped. | The spreadsheet has "Chicken parm" twice (Tabs 1 & 2) — same meal, not two meals. |
 | D12 | **Polling, not websockets** | Page refresh / short poll on session pages | 2–6 people; realtime push is overkill. |
-| D13 | **Over-target keeps** | If unanimous-yes meals exceed remaining slots, the starter chooses which to keep (multi-select, max = remaining). Kept = counted; dropped = recorded as voted, not kept. | A batch can agree on more than the week needs; the household picks. |
+| D13 | **Over-target keeps** | Resolved **unanimous first** (starter chooses which, max = remaining slots). Majority offers are then capped by whatever slots remain; if none, majority meals are recorded as voted, not kept. Kept = counted; dropped = recorded as voted, not kept. | A batch can agree on more than the week needs; the household picks. |
 | D14 | **Deployment** | **VPS-hosted** (Hostinger) behind HTTPS (Caddy auto-TLS); household passphrase (`DD_ACCESS_KEY`, once per device) as the access gate; **backups via the SQLite backup API / `VACUUM INTO` (WAL-safe — never a raw copy of a live `.db`), restore verified in M5**; provider snapshots. | Review #3: WAL + raw file copy is not a reliable backup. |
 | D15 | **Migrations** | **Alembic from M0**; every schema change after initial creation ships as a migration (`create_all` is dev/test only). | Review #2: durable family data with a long growth path (v1.5/v2). |
 | D16 | **Administration & security** | `Person.is_admin` gates admin actions (managing people, changing PINs, archiving/unarchiving meals, maintenance ops). Secure cookie flags (`Secure`, `HttpOnly`, `SameSite`) + CSRF/origin checks on state-changing requests; PIN-verify attempt limiting. **People are deactivated, never deleted.** | Review #5/#12: internet-facing app; admin boundaries; history preserved. |
@@ -70,11 +70,12 @@ Full audit: `reference/README.md`. Facts that shaped the seed:
 | US2 | As the admin, I add/edit/archive meals with title, type, category, tags, recipe | CRUD works; archived meals leave session pools |
 | US3 | As anyone, I start a planning session: set dinners + lunches targets, share the code | Session created in lobby with code; targets stored |
 | US4 | As a household member, I join the lobby by code, identify with my PIN; once the starter begins voting, the roster is frozen and I vote yes/no on the same 15-meal batch as everyone else | Late join rejected once voting started; I see the same 15 meals; my votes are private — and never shown even after the batch closes |
-| US5 | As the starter, I begin voting (roster freezes), and later see the batch outcome | Only unanimous-yes meals shown as kept; no tallies, no individual votes; over-target → choose |
+| US5 | As the host (starter), I begin voting (roster freezes) and later see the batch outcome | Unanimous-yes meals auto-kept; **majority-yes meals shown with aggregate counts and accept/skip controls (host-only)**; no individual votes; over-target resolved by choosing |
 | US6 | As the household, we run batches until the week is planned | Target reached per track; session completes with a week summary |
 | US7 | As anyone, I see past sessions and which meals were kept | History lists sessions with kept meals; meals show `times_kept` |
 | US8 | As the admin, I fix a meal (retag, retype, edit recipe) | Edits reflect in future sessions |
 | US9 | As the admin, I manage people: add, change PINs, deactivate (never delete) | Inactive people can't join sessions; history preserved |
+| US10 | As the host, I accept a majority-yes meal | It's kept, counts toward the target, and is recorded as `kept_by='host'` (distinct from unanimous keeps) |
 
 ## 6. Data model (SQLite via SQLAlchemy 2.x declarative)
 
@@ -111,6 +112,7 @@ batch(id PK, session_id FK, seq INT, track TEXT NOT NULL,          -- lunch|dinn
       closed_at DATETIME NULL, UNIQUE(session_id, seq))
 
 batch_meal(batch_id FK, meal_id FK, sort_order INT, kept BOOL DEFAULT 0,
+           kept_by TEXT NULL,                                  -- 'unanimous' | 'host' (D9)
            PK(batch_id, meal_id))
 
 vote(id PK, batch_id FK, person_id FK, meal_id FK,
@@ -198,7 +200,7 @@ dinnerdecider/
 | POST | `/s/{code}/start` | Starter begins voting → **roster freezes**, first batch created (D5) |
 | POST | `/s/{code}/vote` | `{batch_id, meal_id, choice}` — upsert vote (US4) |
 | POST | `/s/{code}/close-batch` | Starter forces batch close (unvoted = no) |
-| POST | `/s/{code}/keep` | `{meal_ids: []}` — resolve over-target keeps (D13) |
+| POST | `/s/{code}/keep` | `{meal_ids: []}` — resolve over-target unanimous keeps **and/or host-accept majority meals** (D13/D5) |
 | POST | `/s/{code}/next` | Advance: next batch for the track, or next track, or complete |
 | POST | `/s/{code}/finish` | Mark session complete (targets met) |
 | GET | `/history` | Completed sessions, newest first, with kept meals per track |
@@ -230,20 +232,34 @@ batch = shuffle(pool)[:min(15, len(pool))]                          # D6: fixed 
 - Every roster member sees the **same batch** of meal cards (name, category, tags, type, recipe link if present, `times_kept` as "kept N× before").
 - Each member votes `yes`/`no` per meal (one tap each; can change until the batch closes).
 - **Auto-close** when every **roster member** has voted on every meal in the batch. **Manual close** by starter anytime (missing votes count as `no`).
-- **Privacy invariant (strong — D16, review #6)**: individual votes are **never exposed in the normal UI, before or after batch closure**. During voting, no client response contains any vote data other than the caller's own. After close, normal users see only **aggregate outcomes**: unanimous-yes meals (kept), no-match state, meals ultimately kept. No tallies, no "x of y voted", no "who said no". Raw votes stay server-side for future learning/diagnostics.
+- **Privacy invariant (strong — D16, review #6)**: individual votes are **never exposed in the normal UI, before or after batch closure**. During voting, no client response contains any vote data other than the caller's own. After close, normal users see only **aggregate outcomes**: unanimous-yes meals (kept), majority-yes meals with aggregate counts ("N/M yes" — never identities), no-match state, meals ultimately kept. No tallies, no "x of y voted", no "who said no". Raw votes stay server-side for future learning/diagnostics.
 
 ### 9.5 Batch results & keeps (exact)
 
 ```
 roster = frozen participants (joined before start)
-unanimous = [meal in batch where EVERY roster member voted 'yes' on it]   # D5
+votes per meal: yes / no (missing = no on manual close)
+unanimous = [meal: EVERY roster member voted 'yes']                      # D5
+majority  = [meal: not unanimous AND yes_count > no_count]               # D5 (Charlie)
 remaining_slots = track_target - kept_so_far(track)
-kept = unanimous[:remaining_slots] if len(unanimous) <= remaining_slots
-       else starter chooses via /keep (max remaining_slots)          # D13
+
+# 1) Unanimous first (auto-kept, up to remaining slots)
+if len(unanimous) > remaining_slots:
+    starter chooses which unanimous to keep (max remaining_slots)   # D13
+    # majority offers: none — no slots remain                       # D13
+else:
+    keep all unanimous (kept_by='unanimous'); remaining_slots -= len(unanimous)
+
+# 2) Majority offers (host-optional, while slots remain)
+if remaining_slots > 0:
+    show majority meals with aggregate counts ("N/M yes" — never identities)
+    host may accept any subset, capped at remaining_slots           # D13
+    accepted → kept_by='host'; declined → recorded as voted, not kept
 ```
 
-- Kept meals: `batch_meal.kept=1`, `meal.times_kept += 1`, `last_kept_at = now` (in the keep transition — idempotent, §9.9).
-- Unanimous-but-not-kept (over-target rejects) are recorded as voted, not kept.
+- **Note**: with a 2-person roster, majority == unanimous, so the majority list is empty — this feature engages with 3+ voters.
+- Kept meals: `batch_meal.kept=1`, `batch_meal.kept_by` set (`unanimous` or `host`), `meal.times_kept += 1`, `last_kept_at = now` (in the keep transition — idempotent, §9.9).
+- Over-target rejects (unanimous or majority) are recorded as voted, not kept.
 
 ### 9.6 Progression
 
@@ -251,6 +267,8 @@ kept = unanimous[:remaining_slots] if len(unanimous) <= remaining_slots
 if track target met → switch to the other track if it still has a target → else complete
 else → next batch (seq + 1) for the same track
 ```
+
+The target check runs **after** majority acceptance is resolved (accepted majority meals count toward the target). Progress never blocks on accepting majority — the host can skip and move on.
 
 ### 9.7 Completion
 
@@ -324,7 +342,7 @@ Verify: fresh DB → `uv run scripts/seed.py` → 155 meals, 8 categories, 4 URL
 | T3.4 Batch assembly (§9.3) | Correct pool; no repeats within session; stuck-track path works |
 | T3.5 Vote UI: same cards for everyone; yes/no; change-until-close | One-tap voting; per-card state |
 | T3.6 Vote endpoint upsert + **strong privacy** (§9.4) | Test: no other person's votes in any response — during voting **or after close** |
-| T3.7 Batch close (auto + manual) → unanimity over roster → keeps (incl. over-target `/keep`) | Correct keeps for table-driven cases; counters update (D9) |
+| T3.7 Batch close (auto + manual) → unanimity + majority computation → auto-keeps, **host majority acceptance**, over-target `/keep` | Correct keeps for table-driven cases; counters update (D9); `kept_by` recorded |
 | T3.8 **Idempotency** (§9.9): double-submit close/keep/next/finish | Each transition applies exactly once; `times_kept` not double-incremented |
 | T3.9 Track progression + completion + week summary (§9.6–9.7) | Full session ends with the week's plan |
 
@@ -351,7 +369,7 @@ Verify: **two-browser walkthrough** (create lobby → join ×2 → start (roster
 
 ## 12. Testing & CI strategy
 
-- **Unit (pytest)**: `session_logic` — batch assembly (pool filter, no-repeat, 15-cap), unanimity over the **frozen roster** (all-yes, one no, missing vote = no, empty roster edge), over-target keep resolution, track progression (dinner→lunch→complete, stuck track), **idempotent transitions** (double-submit close/keep/next/finish), codes (format + uniqueness), seed (counts, dedupe, idempotency, lunch pool non-empty).
+- **Unit (pytest)**: `session_logic` — batch assembly (pool filter, no-repeat, 15-cap), unanimity over the **frozen roster** (all-yes, one no, missing vote = no, empty roster edge), **majority classification** (3-1 yes is majority, 2-2 tie is not, 2-person roster has no majority), **host acceptance** (accepted → `kept_by='host'`, counted toward target; declined → not kept), over-target keep resolution (unanimous first, majority capped), track progression (dinner→lunch→complete, stuck track), **idempotent transitions** (double-submit close/keep/next/finish), codes (format + uniqueness), seed (counts, dedupe, idempotency, lunch pool non-empty).
 - **Integration**: full session flow via FastAPI `TestClient` (US1–US9 smoke); seed against a temp DB; admin gating (non-admin blocked from people/archive routes); PIN hashing + attempt limiting.
 - **Privacy test** (M3): assert no vote data other than the caller's own appears in any response — during voting **and after batch closure**.
 - **CI**: GitHub Actions — setup-uv, `uv sync`, `alembic upgrade head` on a fresh DB, `ruff check .`, `pytest -q`, on push + PR.
@@ -363,6 +381,7 @@ Verify: **two-browser walkthrough** (create lobby → join ×2 → start (roster
 |---|---|
 | Unanimous-yes keeps too rare → session stalls | Graceful stuck-track/stall paths; over-target keeps; manual finish; pivot to looser keep rules tracked for post-MVP, not improvised |
 | Roster freeze leaves someone out | Lobby is explicit ("who's in?"); late join rejected with a clear message; they can start their own session or join next week — tracked as a v1 constraint, revisit after use |
+| Majority acceptance erodes consensus | Host-controlled and visible to everyone; unanimous keeps always take priority; accepted meals are labeled `kept_by='host'` in history — a deliberate household decision, never a silent override |
 | Vote privacy leaks | Strong invariant (D16): individual votes never rendered to any client, before or after close; no tally in any response; cookie httponly + secure flags; origin/CSRF checks on state-changing requests |
 | Over-target batches create friction | `/keep` multi-select, capped at remaining slots |
 | Backup restores fail silently | WAL-safe backup mechanism (D14); M5 restore verification is a hard acceptance |
@@ -374,6 +393,7 @@ Verify: **two-browser walkthrough** (create lobby → join ×2 → start (roster
 | Question | MVP default | When to revisit |
 |---|---|---|
 | Batch size | **Fixed at 15** (D6, review #10) | After real sessions |
+| Majority rule | **Strict `yes > no`, ties excluded**; host accepts; aggregate counts only (D5) | After real sessions |
 | Track order | Dinner first, then lunch | After real sessions |
 | Does a `both` meal count toward either track? | Yes | After real sessions |
 | Over-target keeps | Starter chooses | After real sessions |

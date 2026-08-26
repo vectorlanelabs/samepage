@@ -9,6 +9,7 @@ Wanted-but-not-blocking ideas. The lead picks these up when appropriate, or Char
 - [ ] **Recipe display** — MVP stores recipe links (4 meals) and shows them; the clean cooking view/printing stays post-MVP (v2, with recipe intake). Confirm that's enough for v1.
 - [ ] **Library export** — JSON export of meals + recipes as backup/portability (v1.5 candidate; MVP ships WAL-safe DB backups in M5).
 - [ ] **Admin bootstrap** — plan says the first person created on an empty install becomes admin (there's no signup flow). Confirm that's acceptable, or name an env-var approach you'd prefer.
+- [ ] **Majority rule confirm** — locked as: strict `yes > no`, ties excluded, missing votes = no; host = session starter; aggregate counts only (privacy intact); accepted majority recorded as `kept_by='host'`; unanimous always auto-kept first. Say the word if you want a looser or tighter rule.
 
 ## Resolved (2026-08-26)
 

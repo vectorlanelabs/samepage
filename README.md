@@ -9,7 +9,7 @@ The household runs a **weekly planning session**:
 1. Someone starts a session and sets how many **dinners** and **lunches** the week needs.
 2. The app serves a batch of **15 meal options** — the same list for every participant.
 3. Each person votes **yes / no** privately.
-4. Meals where **everyone said yes** are kept for the week.
+4. Meals where **everyone said yes** are kept for the week; meals with a **majority** are shown too, and the **host can accept** any of them.
 5. The app serves another batch, and repeats, **until the week's targets are met**.
 
 Votes stay private — individual votes are never shown, before or after a batch closes. Only the outcome is revealed: the meals everyone agreed on. Every kept meal is recorded (`times_kept`), which is how favorites will be determined from actual use.
@@ -20,7 +20,7 @@ The output is the week's meal plan, which then feeds grocery planning done elsew
 
 - Pre-seeded meal library (155 meals from the household spreadsheet, including its recipe links; lunch-capable meals tagged for the lunch track)
 - Household profiles (name + PIN, no accounts)
-- Weekly planning sessions: lunch/dinner targets → iterative yes/no batches → unanimous-yes keeps until the week is planned
+- Weekly planning sessions: lunch/dinner targets → iterative yes/no batches → unanimous-yes keeps (host may accept majority-yes meals) until the week is planned
 - Kept-meal records and session history
 - Manual meal add/edit/archive
 

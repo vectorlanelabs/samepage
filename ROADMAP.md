@@ -4,7 +4,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## v1 MVP (current target)
 
-Product shape: **weekly planning sessions** — replacing the spreadsheet-and-dice ritual (the ritual is the problem this app exists to solve). Set lunch/dinner targets, iterate 15-meal yes/no batches (same list for everyone, private votes), keep unanimous-yes meals, repeat until the week is planned. Library **pre-seeded** from the legacy spreadsheet. No dice, no import feature, no grocery list.
+Product shape: **weekly planning sessions** — replacing the spreadsheet-and-dice ritual (the ritual is the problem this app exists to solve). Set lunch/dinner targets, iterate 15-meal yes/no batches (same list for everyone, private votes), keep unanimous-yes meals (host may accept majority-yes ones), repeat until the week is planned. Library **pre-seeded** from the legacy spreadsheet. No dice, no import feature, no grocery list.
 
 | ID | Milestone | Status | Notes |
 |---|---|---|---|

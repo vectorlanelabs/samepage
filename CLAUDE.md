@@ -11,7 +11,8 @@
 
 The app exists to **replace** the spreadsheet-and-dice ritual — it was never a dice-roll app; the D8/D20 mechanic is the pain point, not the product.
 
-- The product is a **weekly planning session**: set lunch/dinner targets → iterative batches of 15–20 meals → private **binary yes/no** votes → unanimous-yes meals kept → repeat until targets met.
+- The product is a **weekly planning session**: set lunch/dinner targets → iterative batches of 15 meals → private **binary yes/no** votes → **unanimous-yes meals kept automatically; majority-yes meals (yes > no, ties excluded) offered to the host to accept** → repeat until targets met.
+- Majority acceptance is a **host-only** action at batch results, shown with aggregate counts only (never who voted which way), recorded as `kept_by='host'`.
 - **No dice roll. No "not tonight" / vote shades. No import feature or import UI.** The library is pre-seeded from `seed/meals.json`.
 - Meals have title, type (lunch/dinner/both), category, tags, recipe (link/text). `times_kept`/`last_kept_at` are the favorites signal.
 - **Deployment is VPS-hosted** (Charlie's Hostinger VPS, behind HTTPS via Caddy) — the app is internet-facing; no LAN/local-only assumptions. Deployment specifics: plan §7.1. Env: `DD_SECRET`, `DD_ACCESS_KEY` (household access gate, once per device), `DD_DB_PATH`, `DD_PORT`.
