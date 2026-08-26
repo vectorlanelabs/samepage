@@ -12,3 +12,4 @@ Wanted-but-not-blocking ideas. The lead picks these up when appropriate, or Char
 - [ ] **Adversarial plan review** — run Oscar (ai-grouch) over `docs/PLAN-v1-mvp.md` before M0, catch plan-level flaws while it's cheap.
 - [ ] **Recipe display** — MVP stores recipe links (4 meals) and shows them; the clean cooking view/printing stays post-MVP. Confirm that's enough for v1.
 - [ ] **CLAUDE.md refresh** — the implementer-constraints file still describes the old product shape (import spec). Needs a rewrite to the corrected direction; **write blocked** — protected file, requires Charlie's explicit approval.
+- [ ] **Library export** — JSON export of meals + recipes as backup/portability (v1.5 candidate; MVP documents the .db-copy backup story in M5).

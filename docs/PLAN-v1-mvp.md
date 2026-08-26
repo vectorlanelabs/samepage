@@ -119,6 +119,19 @@ Notes:
 
 ## 7. Architecture & app layout
 
+### Why a backend (and why self-hosted local) — decided 2026-08-26
+
+The original concept conversation floated a "no backend" shape (static page, per-browser storage). It is the wrong shape for this product, for four concrete reasons:
+
+1. **Private simultaneous voting requires server-enforced state.** Votes must stay hidden until a batch closes. Per-browser storage has no shared trusted state — either everyone votes on one device (zero privacy) or you bolt on a cloud sync layer, which *is* a backend, just one you don't control.
+2. **The meal library is durable family data.** Dinner Decider is expected to become the family recipe keeper, replacing the hand-written dinner notebook in the kitchen. Per-browser storage is one cleared cache away from losing the notebook's contents. A server with a real DB file gives a single source of truth, backups, and a future export path.
+3. **AI keys must never live in a browser.** Recipe intake/discovery (v2) needs an LLM; provider keys belong in server-side env vars, never in client JS.
+4. **Data-size headroom is a non-issue.** Even a generous family library — thousands of recipes with ingredients, instructions, and notes — is a few MB of text in SQLite; images live as files on disk, not blobs. SQLite (WAL mode) handles a household's concurrent write rate trivially, and SQLAlchemy keeps any later Postgres migration a config change, not a rewrite.
+
+The honest no-backend case is a single-device, throwaway, no-privacy app — not this one. The README's own architecture section describes a server shape ("desktop/web host or lightweight server… persistent local database"), and this plan commits to it: **self-hosted local backend** (FastAPI + SQLite) on a household box, reachable by everyone on the home network; Tailscale for remote access; a VPS deployment is the natural upgrade path and does not change the app.
+
+### Layout
+
 ```
 dinnerdecider/
 ├── app/

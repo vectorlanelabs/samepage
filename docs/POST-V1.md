@@ -17,6 +17,7 @@
 - **Planned-week view**: calendar-style view of the week's kept meals (the session already produces the plan; this renders it).
 - **Re-run last week**: start a new session preloaded with last week's targets and settings.
 - **Meal photos**: upload flow (MVP has no photos at all).
+- **Library export/backup**: JSON export of meals + recipes, and better backup docs — the library is the family recipe keeper, so data portability is hygiene.
 - **Lunch library starter set**: a curated lunch/lunch-dinner set so the lunch track starts populated.
 - **Better library filtering**: multi-tag, type, "kept N+ times" filters.
 - **More keep rules**: e.g. "everyone yes OR at least N yes with no hard-no" — only if the unanimous rule stalls in practice (tracked, not improvised).
@@ -39,7 +40,7 @@
 - **Recipe adaptation**: near-matches made acceptable (e.g. "household tends to reject cooked onions — make it with onion powder") — explicit, never silent.
 - **Probationary pool**: new/AI-suggested meals enter a probation pool before becoming regular candidates.
 
-**Dependencies:** v1.5 library, accumulated votes/keeps, LLM provider + budget decision (deferred to planning time).
+**Dependencies:** v1.5 library, accumulated votes/keeps, LLM provider + budget decision (deferred to planning time). **AI provider keys live server-side only — never in client code** (architecture, plan §7).
 
 ---
 

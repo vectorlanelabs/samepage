@@ -29,3 +29,4 @@ Each gets a full plan doc when its trigger condition fires.
 
 - **2026-08-26** — Planning pass. Charter, v1 MVP build plan, post-MVP stubs committed; legacy spreadsheet moved to `reference/`.
 - **2026-08-26** — **Correction cycle** (Charlie's direction): product is now a weekly planning session (targets for lunch/dinner; iterative 15–20-meal yes/no batches; unanimous-yes kept until targets met). Dice ritual, not-tonight scale, and import feature removed. Library is pre-seeded (`seed/meals.json`, 155 meals, committed); Times Rolled column ignored; kept-meal records (`times_kept`) seed favorites. Awaiting charter approval.
+- **2026-08-26** — **Architecture decision**: backend confirmed (FastAPI + SQLite, self-hosted local) with explicit rationale in plan §7 (private voting state, durable family data as recipe keeper, AI key security, size headroom). Export/backup tracked as v1.5; AI keys server-side only. Awaiting charter approval.

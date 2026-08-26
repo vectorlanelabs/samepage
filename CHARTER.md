@@ -10,7 +10,7 @@
 
 ## Target user
 
-One household — Charlie's family (roughly 2–6 people who plan meals together). The household sits down (weekly) to decide the coming week's meals; one technically comfortable person (Charlie) runs and administers the app. No accounts, no installs, no onboarding ceremony.
+One household — Charlie's family (roughly 2–6 people who plan meals together). The household sits down (weekly) to decide the coming week's meals; one technically comfortable person (Charlie) runs and administers the app. No accounts, no installs, no onboarding ceremony. **Long-term, the app is expected to become the family's recipe keeper (replacing the hand-written dinner notebook in the kitchen), so the meal library is treated as durable family data, not throwaway app state.**
 
 ## Core use case
 
@@ -29,6 +29,7 @@ The output is the week's meal plan — which then feeds grocery planning done el
 - **Private voting.** Votes are hidden until a batch closes; only the unanimous-yes results are shown. No tallies, no "who rejected what".
 - **Pre-seeded library.** The legacy spreadsheet's meals (and the recipe links it has) ship with the app. No import feature.
 - **Favorites emerge from data.** Every kept meal is recorded (`times_kept`), so favorites can be determined from successful matches over time.
+- **A real backend** (FastAPI + SQLite, self-hosted local) — required for private simultaneous voting, durable family data, and future AI key security. Rationale in plan §7.
 
 ## Non-goals (v1 MVP)
 
