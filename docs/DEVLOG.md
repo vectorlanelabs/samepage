@@ -64,3 +64,24 @@ Chronological record of work on Dinner Decider. Oldest at top.
 **CI note**: workflow registered/active but the commit that adds a workflow file doesn't trigger it (GitHub quirk) — the run fires on the next push; verifying on the state-file push.
 
 **Next**: M1 — household profiles (hashed PINs, admin flag, deactivate-not-delete, people UI per handoff screen 10).
+
+## 2026-08-26 — M1 landed (cycle 2 complete)
+
+**Shipped** (`e8a83d2`, one slice): `app/pins.py` (PBKDF2-SHA256 200k, per-person salt, strict parse, constant-time compare), `app/auth.py` (session identity, require_admin/require_any, inactive sessions die instantly), login/logout + `/me`, people CRUD (admin-only, first-person auto-admin bootstrap, deactivate-not-delete, self-protection), People page per handoff screen 10 (hue avatars, ★ Admin toggle, add form), Alembic 0002 (failed_pin_attempts, locked_until), 58 tests.
+
+**Process**: implementer → lead verify (48 tests, live smoke of full auth flow incl. lockout) → Oscar on gpt-5.6-luna (**BLOCKING**, 3 findings, all live-reproduced) → fix slice (atomic SQL lockout, serialized bootstrap, fail-closed Origin) → re-review (**MINOR**, all 3 closed, 1 new minor) → micro-fix (/mcp boundary + barrier tests) → landed.
+
+**Findings disposition (nothing left behind):**
+| Finding | Sev | Disposition |
+|---|---|---|
+| Concurrent wrong-PIN logins bypass lockout (10 guesses → counter 1) | blocking | **fixed** — atomic `UPDATE ... +1` + same-transaction read-back + concurrent-lock reset; live: 10 concurrent → locked, counter 0; barrier-synchronized regression test |
+| First-person bootstrap race → 2 admins | major | **fixed** — `threading.Lock` around count→insert→commit; live: 2 concurrent → [303,403], one admin; barrier test |
+| Absent Origin trusted on state-changing routes (login CSRF) | major | **fixed** — fail-closed: mutating requests require same-origin Origin; absent → 403 except `/api/`, `/mcp`, `/mcp/` (token surfaces, M6); login-CSRF test |
+| `/mcp` exemption matched `/mcpfoo` (re-review) | minor | **fixed** — exact boundary `== "/mcp" or startswith("/mcp/")`; probe tests |
+| Concurrency tests could serialize vacuously (re-review) | minor | **fixed** — `threading.Barrier` synchronization; 5x reruns stable, no flakes |
+| Multi-worker deployment needs a DB-level bootstrap guard | — | **deferred** — documented in code; tracked in REQUESTS (deployment is single-process uvicorn) |
+| Unauthenticated `/people` returns bare 403 (no redirect to /login) | nit | **deferred** — UX polish; tracked in REQUESTS |
+
+**CI**: still zero runs (5 pushes now) — tracked in REQUESTS; local gates are the verification.
+
+**Next**: M2 — meal library CRUD + pre-seeded data (seed loader from `seed/meals.json`, library screen per handoff screen 6/7).
