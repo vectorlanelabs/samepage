@@ -29,7 +29,7 @@ The output is the week's meal plan — which then feeds grocery planning done el
 - **Private voting.** Votes are hidden until a batch closes; only the unanimous-yes results are shown. No tallies, no "who rejected what".
 - **Pre-seeded library.** The legacy spreadsheet's meals (and the recipe links it has) ship with the app. No import feature.
 - **Favorites emerge from data.** Every kept meal is recorded (`times_kept`), so favorites can be determined from successful matches over time.
-- **A real backend** (FastAPI + SQLite, self-hosted local) — required for private simultaneous voting, durable family data, and future AI key security. Rationale in plan §7.
+- **A real backend** (FastAPI + SQLite, **VPS-hosted** on Charlie's Hostinger VPS behind HTTPS — decided 2026-08-26) — required for private simultaneous voting, durable family data, and future AI key security. Rationale in plan §7, deployment in §7.1.
 
 ## Non-goals (v1 MVP)
 
@@ -58,6 +58,7 @@ The output is the week's meal plan — which then feeds grocery planning done el
 | D10 | **Tracks** | Meals are typed `lunch` / `dinner` / `both`. Sessions set a target per track; tracks run **dinner first, then lunch**. |
 | D11 | **Seed dedupe** | Loader dedupes by normalized name (casefold + collapsed whitespace); exact duplicates logged and skipped (e.g. the two "Chicken parm" rows). |
 | D12 | **Polling, not websockets** | Page refresh / short poll on session pages. |
+| D13 | **Deployment** | **VPS-hosted** (Hostinger, Charlie's call 2026-08-26) behind HTTPS (Caddy auto-TLS); single household passphrase (`DD_ACCESS_KEY`, once per device) as the access gate — no accounts, PINs unchanged; daily DB backup + provider snapshots (family recipes are irreplaceable). Reviewable. |
 
 ## Milestones (v1 MVP)
 
@@ -74,7 +75,7 @@ See `docs/PLAN-v1-mvp.md` §11 for task detail.
 
 ## Definition of done (v1 MVP)
 
-From household devices on the home network, with the pre-seeded library:
+From household devices **anywhere** (the app is on the VPS behind HTTPS — phones just need a browser), with the pre-seeded library:
 
 - A planning session starts with lunch and dinner targets set.
 - Everyone joins by code, votes **yes/no** on the same 15–20-option batches, privately.

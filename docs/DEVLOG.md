@@ -27,3 +27,11 @@ Chronological record of work on Dinner Decider. Oldest at top.
 - **Decision: backend, self-hosted local** (FastAPI + SQLite — the plan's existing shape, now explicitly justified). Reasons: (1) private simultaneous voting needs server-enforced state, (2) the library is durable family data (recipe keeper replacing the kitchen notebook), (3) AI keys must never live in client code, (4) data-size headroom is a non-issue for SQLite with a file-based image store and a Postgres path via SQLAlchemy. No-backend only fits a single-device, throwaway, no-privacy app.
 - Plan §7 gained a "Why a backend" section; CHARTER notes the recipe-keeper durability framing; POST-V1 adds library export/backup (v1.5) and server-side-only AI keys (v2); REQUESTS tracks the export item.
 - **Status**: committed & pushed. **Still awaiting charter approval before M0.**
+
+## 2026-08-26 — Deployment decision (Charlie's call)
+
+- **Not self-hosting locally**: Dinner Decider deploys to Charlie's **Hostinger VPS**, internet-facing behind HTTPS (Caddy auto-TLS), from day one. No LAN/Tailscale dependency.
+- **Implications landed**: plan §7.1 (deployment: Docker Compose or systemd + Caddy, env `DD_SECRET`/`DD_ACCESS_KEY`/`DD_DB_PATH`/`DD_PORT`, daily DB backup + snapshots); charter D13 (VPS + HTTPS + household passphrase access gate — reviewable); M5 tasks expanded (VPS deploy docs, access-gate middleware, backup job).
+- **CLAUDE.md refreshed** (Charlie approved the protected-file write): corrected product shape, VPS deployment, internet-facing security rule (no secrets in HTML/JS), ownership rules.
+- REQUESTS: hosting item resolved; CLAUDE.md item resolved.
+- **Status**: committed & pushed. **Still awaiting charter approval before M0.**

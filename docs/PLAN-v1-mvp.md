@@ -128,7 +128,7 @@ The original concept conversation floated a "no backend" shape (static page, per
 3. **AI keys must never live in a browser.** Recipe intake/discovery (v2) needs an LLM; provider keys belong in server-side env vars, never in client JS.
 4. **Data-size headroom is a non-issue.** Even a generous family library — thousands of recipes with ingredients, instructions, and notes — is a few MB of text in SQLite; images live as files on disk, not blobs. SQLite (WAL mode) handles a household's concurrent write rate trivially, and SQLAlchemy keeps any later Postgres migration a config change, not a rewrite.
 
-The honest no-backend case is a single-device, throwaway, no-privacy app — not this one. The README's own architecture section describes a server shape ("desktop/web host or lightweight server… persistent local database"), and this plan commits to it: **self-hosted local backend** (FastAPI + SQLite) on a household box, reachable by everyone on the home network; Tailscale for remote access; a VPS deployment is the natural upgrade path and does not change the app.
+The honest no-backend case is a single-device, throwaway, no-privacy app — not this one. The README's own architecture section describes a server shape ("desktop/web host or lightweight server… persistent local database"), and this plan commits to it: **a VPS-hosted backend** (FastAPI + SQLite) on Charlie's Hostinger VPS — decided 2026-08-26, **no local hosting**. The household reaches it from anywhere via HTTPS; no LAN or Tailscale dependency. The app itself is deployment-agnostic (uvicorn + SQLite); hosting details in §7.1.
 
 ### Layout
 
@@ -162,6 +162,15 @@ dinnerdecider/
 - DB file default `data/dinnerdecider.db` (gitignored), overridable via `DD_DB_PATH`.
 - Templates server-rendered; voting interactions are `hx-post` calls; batch progress via short polling (D12).
 - **No Node, no bundler, no build step.** HTMX vendored as a static file.
+
+### 7.1 Deployment (VPS) — decided 2026-08-26
+
+- **Target**: Charlie's Hostinger Ubuntu VPS (where Hermes already runs). The app is **internet-facing from day one** — no local hosting, no LAN/Tailscale dependency. Responsive web UI means family phones just need a browser and the URL.
+- **HTTPS**: Caddy reverse proxy with auto-TLS (Let's Encrypt). Domain: a subdomain of an existing owned domain (e.g. `dinner.*`) — M5 ops detail.
+- **Run**: Docker Compose (app + Caddy) *or* plain systemd + Caddy — decided at M5; the app itself is just uvicorn + SQLite either way.
+- **Access gate** (reviewable): a single **household passphrase** (`DD_ACCESS_KEY`, env var) entered once per device before first use. Keeps a public app closed to random internet traffic while preserving the no-accounts, PIN-based household UX. ~30 lines of middleware + a first-use screen.
+- **Data & backups**: SQLite at `data/dinnerdecider.db` on the VPS. Scheduled backup job (daily DB copy, keep N) + VPS provider snapshots — the library is irreplaceable family data (§7 point 2).
+- **Env**: `DD_SECRET` (session signing, random), `DD_ACCESS_KEY`, `DD_DB_PATH`, `DD_PORT`.
 
 ## 8. Routes
 
@@ -302,14 +311,16 @@ Verify: **two-browser walkthrough** (start → join ×2 → vote → close → k
 | T4.2 Library `times_kept` / `last_kept_at` + "most kept" sort | Counters correct after sessions |
 | T4.3 Empty/error states (no meals of a type, no sessions, unknown code) | No 500s; friendly messages |
 
-### M5 — Hardening, polish, docs (≈2–3 cycles)
+### M5 — Hardening, polish, deployment docs (≈3 cycles)
 
 | Task | Acceptance |
 |---|---|
 | T5.1 Responsive pass — phones are the critical path (vote screen) | Vote screen usable at 360px width |
-| T5.2 README "Run it": uv sync → seed → uvicorn; backup (copy the .db); troubleshooting | Fresh clone → running in 3 commands |
-| T5.3 Final verification: full suite + ruff + fresh-checkout run + walkthrough checklist | DoD (§15) all checked |
-| T5.4 (optional) seed/demo script | Not required for DoD |
+| T5.2 Local run docs: README "Run it" (uv sync → seed → uvicorn), troubleshooting | Fresh clone → running in 3 commands |
+| T5.3 VPS deployment: Docker Compose/systemd + Caddy HTTPS, env vars, **backup job** (daily DB copy, keep N) per §7.1 | Fresh VPS deploy from the docs lands a working HTTPS app; backup cron restores |
+| T5.4 Access gate: `DD_ACCESS_KEY` middleware + first-use screen (reviewable) | App unreachable without passphrase; remembered per device |
+| T5.5 Final verification: full suite + ruff + fresh-checkout run + walkthrough checklist | DoD (§15) all checked |
+| T5.6 (optional) seed/demo script | Not required for DoD |
 
 ## 12. Testing & CI strategy
 
