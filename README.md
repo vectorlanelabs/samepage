@@ -2,6 +2,14 @@
 
 A household meal-decision app that learns what everyone will actually eat.
 
+## Project docs
+
+- **Charter** — [`CHARTER.md`](CHARTER.md) — scope, non-goals, locked decisions, definition of done, stop criteria *(pending approval)*
+- **Roadmap** — [`ROADMAP.md`](ROADMAP.md) — milestone status
+- **v1 MVP build plan** — [`docs/PLAN-v1-mvp.md`](docs/PLAN-v1-mvp.md) — data model, routes, common-ground algorithm, import spec, M0–M5
+- **Post-MVP stubs** — [`docs/POST-V1.md`](docs/POST-V1.md) — v1.5 / v2 / later intent
+- **Legacy spreadsheet (read-only import source)** — [`reference/D20 Dinner Decider.xlsx`](reference/D20%20Dinner%20Decider.xlsx), provenance in [`reference/README.md`](reference/README.md)
+
 ## The problem
 
 Our current system is a spreadsheet with **8 tabs and 20 dinner options per tab**. To pick dinner, we roll a D8 and a D20 and use the resulting indexed meal.
