@@ -2,7 +2,7 @@
 
 > Status: **Plan 1 — committed 2026-08-26, awaiting charter approval** · Owner: Bartowski (lead) · Concept source: `README.md` · Charter: `CHARTER.md`
 >
-> Incorporated 2026-08-26: [`docs/INITIAL-PLAN-REVIEW.md`](INITIAL-PLAN-REVIEW.md) — all 12 findings accepted and applied (roster freeze, Alembic migrations, WAL-safe backups, lunch-track seed, admin/security, strengthened privacy, README truthfulness, deployment wording, recipe-use experience, fixed batch size, idempotency, deactivate-not-delete). Plus 2026-08-26 (Charlie): **majority-yes meals shown in results with host acceptance** — unanimous auto-kept, majority offered to the host while slots remain.
+> Incorporated 2026-08-26: [`docs/INITIAL-PLAN-REVIEW.md`](INITIAL-PLAN-REVIEW.md) — all 12 findings accepted and applied (roster freeze, Alembic migrations, WAL-safe backups, lunch-track seed, admin/security, strengthened privacy, README truthfulness, deployment wording, recipe-use experience, fixed batch size, idempotency, deactivate-not-delete). Plus 2026-08-26 (Charlie): **majority-yes meals shown in results with host acceptance** (unanimous auto-kept, majority offered to the host) and **AI lives outside the app** — a token-authenticated JSON API + MCP server (D17) so Charlie's AI tools import meals/recipes and run discovery; no in-app AI, ever.
 >
 > This document is the reference for implementation. Decisions in §3 are **locked unless marked reviewable** — the implementer follows this spec; it does not make product decisions.
 
@@ -25,6 +25,7 @@ Build the first useful version of Dinner Decider: a household web app for **week
 7. Record of **successful matches** (`times_kept`, `last_kept_at`, raw votes) → the seeds of favorites
 8. Session history
 9. Manual meal add/edit/archive
+10. **External API + MCP server** (token-authenticated) so Charlie's AI tools can import meals/recipes and query history — **AI lives outside the app** (D17)
 
 **Out (explicit):** grocery/shopping list (feeds it, doesn't build it), recipe ingestion/parsing (future AI step), import UI/CLI, dice-roll ritual, non-binary vote shades, preference learning, accounts/multi-household, mobile apps.
 
@@ -48,6 +49,7 @@ Build the first useful version of Dinner Decider: a household web app for **week
 | D14 | **Deployment** | **VPS-hosted** (Hostinger) behind HTTPS (Caddy auto-TLS); household passphrase (`DD_ACCESS_KEY`, once per device) as the access gate; **backups via the SQLite backup API / `VACUUM INTO` (WAL-safe — never a raw copy of a live `.db`), restore verified in M5**; provider snapshots. | Review #3: WAL + raw file copy is not a reliable backup. |
 | D15 | **Migrations** | **Alembic from M0**; every schema change after initial creation ships as a migration (`create_all` is dev/test only). | Review #2: durable family data with a long growth path (v1.5/v2). |
 | D16 | **Administration & security** | `Person.is_admin` gates admin actions (managing people, changing PINs, archiving/unarchiving meals, maintenance ops). Secure cookie flags (`Secure`, `HttpOnly`, `SameSite`) + CSRF/origin checks on state-changing requests; PIN-verify attempt limiting. **People are deactivated, never deleted.** | Review #5/#12: internet-facing app; admin boundaries; history preserved. |
+| D17 | **External API & MCP — AI lives outside the app** | Token-authenticated JSON API (`/api/v1`, Bearer `DD_API_KEY`) + **MCP server** (FastMCP, same auth): meal/recipe create/update/archive, library queries, sessions/history, aggregate stats. Charlie's AI tools (ChatGPT/Claude/Hermes) import meals/recipes and run discovery/trend analysis through it. **No in-app AI, no LLM keys — now or later.** Raw per-person votes stay server-side; API exposes aggregates only. | Charlie 2026-08-26: "We will never need to build AI directly into the app if we just give it an API we can access through MCP." Saves the entire in-app AI build; proven with real MCP imports (M6). |
 
 ## 4. Legacy spreadsheet state (evidence, audited 2026-08-26)
 
@@ -146,13 +148,15 @@ The honest no-backend case is a single-device, throwaway, no-privacy app — not
 dinnerdecider/
 ├── app/
 │   ├── main.py            # FastAPI app, middleware, route registration
-│   ├── settings.py        # env-driven (DD_DB_PATH, DD_SECRET, DD_ACCESS_KEY, DD_PORT)
+│   ├── settings.py        # env-driven (DD_DB_PATH, DD_SECRET, DD_ACCESS_KEY, DD_API_KEY, DD_PORT)
 │   ├── db.py              # engine, SessionLocal, get_db dependency (Alembic-managed schema, D15)
-│   ├── security.py        # PIN hashing (PBKDF2), origin/CSRF check middleware, cookie flags (D16)
+│   ├── security.py        # PIN hashing (PBKDF2), origin/CSRF check middleware, cookie flags, Bearer-token check (D16/D17)
 │   ├── models.py          # SQLAlchemy models (§6)
 │   ├── session_logic.py   # pure functions: batch assembly, unanimity over the frozen roster,  ← the testable core
-│   │                      #   over-target keep resolution, track progression (idempotent)
+│   │                      #   majority classification, over-target keep resolution, track progression (idempotent)
 │   ├── codes.py           # session-code generation (WORD-####, collision loop)
+│   ├── api.py             # /api/v1 JSON routes — meals/taxonomy CRUD, sessions, stats (D17, aggregate-only)
+│   ├── mcp.py             # FastMCP server — same data, exposed as MCP tools for Charlie's AI tools (D17)
 │   ├── routes/
 │   │   ├── people.py  library.py  sessions.py  history.py
 │   ├── templates/         # Jinja2 (base.html, people/, library/, sessions/, history/)
@@ -163,7 +167,7 @@ dinnerdecider/
 │   └── build_seed.py      # dev-time: regenerates seed/meals.json from reference/ (openpyxl, dev-only dep)
 ├── seed/meals.json        # pre-seeded library (committed, reviewable) + seed/README.md
 ├── tests/                 # pytest: unit (session_logic, codes, seed) + route smoke (TestClient)
-├── pyproject.toml         # uv-managed; runtime deps: fastapi, uvicorn, sqlalchemy, alembic, jinja2,
+├── pyproject.toml         # uv-managed; runtime deps: fastapi, uvicorn, sqlalchemy, alembic, jinja2, mcp,
 │                          #   python-multipart; dev deps: pytest, httpx, ruff, openpyxl
 ├── .github/workflows/ci.yml
 ├── CHARTER.md ROADMAP.md CLAUDE.md REQUESTS.md
@@ -181,8 +185,9 @@ dinnerdecider/
 - **HTTPS**: Caddy reverse proxy with auto-TLS (Let's Encrypt). Domain: a subdomain of an existing owned domain (e.g. `dinner.*`) — M5 ops detail.
 - **Run**: Docker Compose (app + Caddy) *or* plain systemd + Caddy — decided at M5; the app itself is just uvicorn + SQLite either way.
 - **Access gate** (reviewable): a single **household passphrase** (`DD_ACCESS_KEY`, env var) entered once per device before first use. Keeps a public app closed to random internet traffic while preserving the no-accounts, PIN-based household UX. ~30 lines of middleware + a first-use screen.
+- **AI access (D17)**: `/api/v1` and the MCP endpoint sit behind the same Caddy HTTPS, gated by a **Bearer token** (`DD_API_KEY`, env var) — separate from the UI passphrase. No LLM keys exist in this app (AI runs in Charlie's tools).
 - **Data & backups**: SQLite at `data/dinnerdecider.db` on the VPS (WAL mode). Backups use a **WAL-safe mechanism — the SQLite backup API or `VACUUM INTO` — never a raw copy of a live `.db`** (D14, review #3). Daily job, keep N, plus provider snapshots. **M5 verifies restore**: a backup is restored into a fresh instance and the app reads it.
-- **Env**: `DD_SECRET` (session signing, random), `DD_ACCESS_KEY`, `DD_DB_PATH`, `DD_PORT`.
+- **Env**: `DD_SECRET` (session signing, random), `DD_ACCESS_KEY` (UI gate), `DD_API_KEY` (AI-tool Bearer token), `DD_DB_PATH`, `DD_PORT`.
 
 ## 8. Routes
 
@@ -205,6 +210,22 @@ dinnerdecider/
 | POST | `/s/{code}/finish` | Mark session complete (targets met) |
 | GET | `/history` | Completed sessions, newest first, with kept meals per track |
 | POST | `/sessions/expire-stale` | (ops) mark sessions older than 24h as expired |
+
+### 8.1 External API & MCP (D17)
+
+All `/api/v1/*` and `/mcp` requests require `Authorization: Bearer <DD_API_KEY>`. Responses are JSON, **aggregate-only — never raw per-person votes**. Mutations are idempotent.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/v1/meals` | List/search meals (filters: type, category, tag, archived; sort: `times_kept`, `last_kept_at`) |
+| GET | `/api/v1/meals/{id}` | Meal detail incl. recipe fields |
+| POST | `/api/v1/meals` | Create meal (title, type, category, tags, recipe link/text) — **the AI import path** |
+| PUT | `/api/v1/meals/{id}` | Update meal |
+| POST | `/api/v1/meals/{id}/archive` · `/unarchive` | Archive/unarchive |
+| GET | `/api/v1/categories` · `/api/v1/tags` | Taxonomy |
+| GET | `/api/v1/sessions` · `/api/v1/sessions/{id}` | Sessions + kept meals (read-only) |
+| GET | `/api/v1/stats` | Aggregates: keeps by category/tag/type, yes-rate per meal, `kept_by` mix, "haven't had lately" |
+| MCP | `/mcp` | FastMCP endpoint (streamable HTTP, same Bearer auth) — tools map to the above |
 
 ## 9. Session lifecycle (the core algorithm)
 
@@ -367,11 +388,24 @@ Verify: **two-browser walkthrough** (create lobby → join ×2 → start (roster
 | T5.5 Final verification: full suite + ruff + fresh-checkout run + walkthrough checklist | DoD (§15) all checked |
 | T5.6 (optional) seed/demo script | Not required for DoD |
 
+### M6 — External API & MCP (≈2–3 cycles) — D17
+
+| Task | Acceptance |
+|---|---|
+| T6.1 Bearer auth (`DD_API_KEY`) + `/api/v1/meals` CRUD + taxonomy | No token → 401; token works; mutations idempotent |
+| T6.2 `/api/v1/sessions` + `/api/v1/stats` (aggregate-only) | **No raw per-person votes in any API response** (test) |
+| T6.3 FastMCP server over `/mcp` (same auth), tools for meals, library, sessions, stats | An MCP client lists tools; create/read meal round-trips |
+| T6.4 **Real-world proof — Option B** (recommended): import the 4 seeded recipe links via MCP | Those meals gain `recipe_text` from their links via a real AI-tool MCP session; the MCP path is proven on real data |
+| T6.5 (Option A, if preferred) parse the 4 links at seed time instead | Seed carries `recipe_text` for the 4 URL meals |
+
+Verify: connect an MCP client (e.g. `mcp` CLI / Charlie's AI tool) → list tools → create a meal → read it back → query stats; 401 without token; privacy test green.
+
 ## 12. Testing & CI strategy
 
 - **Unit (pytest)**: `session_logic` — batch assembly (pool filter, no-repeat, 15-cap), unanimity over the **frozen roster** (all-yes, one no, missing vote = no, empty roster edge), **majority classification** (3-1 yes is majority, 2-2 tie is not, 2-person roster has no majority), **host acceptance** (accepted → `kept_by='host'`, counted toward target; declined → not kept), over-target keep resolution (unanimous first, majority capped), track progression (dinner→lunch→complete, stuck track), **idempotent transitions** (double-submit close/keep/next/finish), codes (format + uniqueness), seed (counts, dedupe, idempotency, lunch pool non-empty).
 - **Integration**: full session flow via FastAPI `TestClient` (US1–US9 smoke); seed against a temp DB; admin gating (non-admin blocked from people/archive routes); PIN hashing + attempt limiting.
 - **Privacy test** (M3): assert no vote data other than the caller's own appears in any response — during voting **and after batch closure**.
+- **API tests** (M6): 401 without `DD_API_KEY`; meals CRUD round-trip; **no raw per-person votes in any `/api/v1` or MCP response**; MCP client smoke (list tools, create meal, read back, query stats).
 - **CI**: GitHub Actions — setup-uv, `uv sync`, `alembic upgrade head` on a fresh DB, `ruff check .`, `pytest -q`, on push + PR.
 - **Rule**: the lead re-runs everything; a green self-report is never accepted.
 
@@ -385,7 +419,8 @@ Verify: **two-browser walkthrough** (create lobby → join ×2 → start (roster
 | Vote privacy leaks | Strong invariant (D16): individual votes never rendered to any client, before or after close; no tally in any response; cookie httponly + secure flags; origin/CSRF checks on state-changing requests |
 | Over-target batches create friction | `/keep` multi-select, capped at remaining slots |
 | Backup restores fail silently | WAL-safe backup mechanism (D14); M5 restore verification is a hard acceptance |
-| Scope creep (grocery list, recipe parsing, AI) | Explicit non-goals + stop criteria + REQUESTS channel |
+| API/MCP exposure (internet-facing) | Bearer token (`DD_API_KEY`) on every `/api/v1` + `/mcp` route; HTTPS-only; aggregate-only responses; rate limiting if needed; **no LLM keys in the app** (hard non-goal, D17) |
+| Scope creep (grocery list, in-app AI, recipe parsing) | Explicit non-goals + stop criteria + REQUESTS channel — AI capability is external by design (D17) |
 | Household doesn't adopt it | Success criterion is real usage; stop criteria explicit; MVP is small |
 
 ## 14. Open questions (resolve through use; per Charlie's original note, don't design to death)
@@ -400,6 +435,9 @@ Verify: **two-browser walkthrough** (create lobby → join ×2 → start (roster
 | Favorites threshold | `times_kept` count, no threshold in MVP | When favorites surface (V2) |
 | Should the dice ritual return as a fun pick? | Out of MVP | Charlie's call; POST-V1 "later" list |
 | Lunch `both` subset curation (27 meals) | Curated list in `seed/README.md`, adjustable | Charlie's veto welcome; after real use |
+| Seeded recipe links | **Option B**: leave seed as-is; first real MCP imports (M6) prove the path — Option A (parse at seed time) available | Before/at M6 |
+| API auth shape | Single `DD_API_KEY` (household) | When separate per-tool tokens are needed |
+| Raw votes via API | **No** — aggregates only (privacy invariant) | Only if Charlie's analysis genuinely needs it |
 
 ## 15. Definition of done & stop criteria
 

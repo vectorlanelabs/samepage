@@ -23,3 +23,11 @@ Chronological record of work on Dinner Decider. Oldest at top.
 - **Locked mechanics**: unanimous auto-kept first, majority offered after (capped by remaining slots; over-target resolves unanimous first); accepted majority meals recorded as `kept_by='host'` and count toward targets + `times_kept`; **privacy invariant unchanged** — aggregate counts only, individual votes never exposed; 2-person rosters have no majority (feature engages with 3+ voters).
 - **Docs updated**: CHARTER (core use case, mechanic, D5/D9/D13, DoD), PLAN (header, D5/D9/D13, US5/US10, `batch_meal.kept_by`, §9.4–9.6, routes, tests, risks, open questions, M3), README, ROADMAP, CLAUDE.md, REQUESTS.
 - **Status**: committed & pushed. Awaiting charter approval before M0.
+
+## 2026-08-26 — AI lives outside the app (Charlie, with Claude Design)
+
+- **Decision (D17)**: Dinner Decider never runs AI. It exposes a **token-authenticated JSON API (`/api/v1`, Bearer `DD_API_KEY`) + FastMCP server** (same auth) so Charlie's AI tools (ChatGPT/Claude/Hermes) can import meals/recipes and run discovery/trend analysis via MCP. No LLM keys, no in-app AI, now or later — eliminates the entire in-app AI build.
+- **New milestone M6 — External API & MCP** (part of v1, not M0): meals/taxonomy CRUD, sessions/stats (aggregate-only — no raw per-person votes in any API response), MCP tools over `/mcp`.
+- **Seeded recipe links**: default is **Option B** — leave the seed as-is; the 4 linked recipes become the first real MCP imports at M6, proving the path end-to-end. Option A (parse at seed time) available.
+- **Docs updated**: CHARTER (mechanic, non-goals, D17, M6, DoD), PLAN (header, scope, D17, layout, §7.1, §8.1 API surface, M6, tests, risks, open questions), POST-V1 (v2 rewritten as external intelligence; recipe-use UI moved to v1.5), ROADMAP, README, CLAUDE.md, REQUESTS.
+- **Status**: committed & pushed. Awaiting charter approval before M0.

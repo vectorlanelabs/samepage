@@ -29,15 +29,16 @@ The output is the week's meal plan — which then feeds grocery planning done el
 - **Private voting.** Individual votes are **never exposed in the normal UI, before or after a batch closes** — only aggregate outcomes are shown (meals everyone agreed on, no-match state, kept meals). Raw votes stay server-side for future learning.
 - **Pre-seeded library.** The legacy spreadsheet's meals (and the recipe links it has) ship with the app. No import feature.
 - **Favorites emerge from data.** Every kept meal is recorded (`times_kept`), so favorites can be determined from successful matches over time.
-- **A real backend** (FastAPI + SQLite, **VPS-hosted** on Charlie's Hostinger VPS behind HTTPS) — required for private simultaneous voting, durable family data, and future AI key security. Rationale in plan §7, deployment in §7.1.
+- **AI lives outside the app.** Dinner Decider never runs AI — it exposes a token-authenticated **JSON API + MCP server** so Charlie's AI tools (ChatGPT/Claude/Hermes) can import meals/recipes, look for trends, and drive discovery. No LLM keys in the codebase, now or later.
+- **A real backend** (FastAPI + SQLite, **VPS-hosted** on Charlie's Hostinger VPS behind HTTPS) — required for private simultaneous voting, durable family data, and a safe external API surface for AI tools. Rationale in plan §7, deployment in §7.1.
 
 ## Non-goals (v1 MVP)
 
 - **Grocery list / shopping list** — out of scope by explicit direction (the decision feed is the product).
-- **Recipe ingestion** — no URL scraping, no photo parsing. (A future AI step will parse recipe images/links into recipes — see `docs/POST-V1.md`.)
+- **Recipe parsing/ingestion** — no URL scraping, no photo parsing, **no in-app AI of any kind, now or later**: recipe parsing (photo/link → recipe) and discovery/trend analysis are done *externally* by Charlie's AI tools through the app's API/MCP (D17).
 - **No import UI/CLI** — data is pre-seeded; the spreadsheet is a one-time source, not a user flow.
 - **No dice-roll ritual** in the MVP flow.
-- **No AI of any kind** in MVP (tags/categories exist as hooks for later discovery).
+- **No AI features built into the app** — the app provides data + mutation APIs; intelligence is external (see D17). Tags/categories exist as hooks for that external discovery.
 - **No accounts / authentication / multi-household hosting** (identity = name + PIN).
 - **No preference learning** beyond raw kept-meal records and stored votes.
 - **No mobile apps**, no push notifications, no realtime sync beyond simple page refresh/polling.
@@ -62,6 +63,7 @@ The output is the week's meal plan — which then feeds grocery planning done el
 | D14 | **Deployment** | **VPS-hosted** (Hostinger) behind HTTPS (Caddy auto-TLS); single household passphrase (`DD_ACCESS_KEY`, once per device) as the access gate — no accounts, PINs unchanged; **backups via the SQLite backup API / `VACUUM INTO` (WAL-safe — never a raw copy of a live `.db`), with restore verified in M5**; provider snapshots. Reviewable. |
 | D15 | **Migrations** | **Alembic from M0**; every schema change after initial creation ships as a migration (`create_all` is dev/test only). The library is durable family data with a long growth path. |
 | D16 | **Administration & security** | `Person.is_admin` gates admin actions (managing people, changing PINs, archiving/unarchiving meals, maintenance ops). Secure cookie flags (`Secure`, `HttpOnly`, `SameSite`) + CSRF/origin checks on state-changing requests; PIN-verify attempt limiting. **People are deactivated, never deleted** — history and referential integrity preserved. |
+| D17 | **External API & MCP — AI lives outside the app** | The app exposes a token-authenticated JSON API (`/api/v1`, Bearer `DD_API_KEY`) plus an **MCP server** (FastMCP, same auth) — meal/recipe create/update/archive, library queries, session/history/aggregate stats — so Charlie's AI tools can import meals/recipes and run discovery/trend analysis. **No in-app AI, no LLM keys — now or later.** Raw per-person votes stay server-side; the API exposes aggregates only. Reviewable. |
 
 ## Milestones (v1 MVP)
 
@@ -75,6 +77,7 @@ See `docs/PLAN-v1-mvp.md` §11 for task detail.
 | M3 | Planning sessions & voting: lobby/roster freeze, targets, batches, yes/no voting, keeps, completion | [ ] | Core loop; two-browser walkthrough |
 | M4 | History & favorites signal | [ ] | |
 | M5 | Hardening, polish, deployment docs, backup restore check | [ ] | Definition-of-done check |
+| M6 | External API + MCP server (for Charlie's AI tools; **no in-app AI**) | [ ] | Proves recipe import + trend queries via MCP |
 
 ## Definition of done (v1 MVP)
 
@@ -85,6 +88,7 @@ From household devices **anywhere** (the app is on the VPS behind HTTPS — phon
 - Kept meals are recorded (`times_kept`, `last_kept_at`), and past sessions are viewable in history.
 - Meals have title, type, category, tags, and recipe (link where the spreadsheet had one).
 - Meals can be added, edited, and archived manually.
+- The app exposes an **authenticated API + MCP server**; an AI tool can create a meal/recipe and query session/keep history through it (D17).
 
 ## Stop criteria
 

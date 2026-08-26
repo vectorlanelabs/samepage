@@ -19,6 +19,7 @@
 - **Meal photos**: upload flow (MVP has no photos at all).
 - **Library export/backup**: JSON export of meals + recipes, and better backup docs — the library is the family recipe keeper, so data portability is hygiene.
 - **Lunch library starter set**: _resolved in the v1 seed — a curated 27-meal `both` subset populates the lunch track from install; this item now only covers a bigger/later curated expansion._
+- **Recipe-use experience** (review #9): the UI that makes stored recipes usable — **clean cooking view** (large-type ingredients and steps), **print-friendly layout/stylesheet** (first-class printing), and household notes/substitutions. Intake itself is external (MCP); the use experience is in-app.
 - **Better library filtering**: multi-tag, type, "kept N+ times" filters.
 - **More keep rules**: e.g. "everyone yes OR at least N yes with no hard-no" — only if the unanimous rule stalls in practice (tracked, not improvised).
 
@@ -26,22 +27,21 @@
 
 ---
 
-## v2 — AI-assisted recipe intake & discovery
+## v2 — External intelligence via API & MCP (no in-app AI)
 
-**What:** Two AI jobs, both serving the meal pool — the app never gets a "personality" (README principle: precision over novelty).
+**What:** AI capability is exercised **entirely outside the app**, through its token-authenticated API + MCP server (D17). The app stays a data-rich, AI-free product; Charlie's AI tools (ChatGPT/Claude/Hermes) do the thinking.
 
-**Trigger:** v1.5 in steady use with meaningful kept-meal/vote data, and Charlie greenlights AI spend. This is the most likely place to overbuild — the charter's non-goal discipline applies hardest here.
+**Trigger:** M6 shipped (API/MCP live in v1), plus meaningful kept-meal/vote data. **No LLM integration work will ever be built into the app** — if a capability can be exercised through the API/MCP, it is, by definition, external.
 
-**Stub scope:**
-- **Recipe intake (AI)**: parse a **photo of a recipe or a link to one online** into a structured recipe (title, ingredients, instructions, servings, timing) — Charlie's stated direction. Stores a clean household copy + original source.
-- **Recipe-use experience** (review #9): recipe intake ships *with* the experience that makes recipes usable — structured recipe record, original source preserved, a **clean cooking view** (large-type ingredients and steps), **print-friendly layout/stylesheet** (first-class printing, not an accidental browser printout), and household notes/substitutions. Ingestion without the use experience leaves the feature incomplete.
-- **Recipe discovery (AI)**: suggest meals the household has a meaningful chance of accepting, each suggestion self-explaining from actual evidence (kept meals, yes/no votes, tags, categories). Ten plausible suggestions beat ten bizarre ones.
-- **Favorites surfacing**: derive favorites from `times_kept` + recency (the MVP already records successful matches).
-- **Preference inference**: ingredient/texture/cuisine patterns from real votes — hypotheses, inspectable and correctable.
-- **Recipe adaptation**: near-matches made acceptable (e.g. "household tends to reject cooked onions — make it with onion powder") — explicit, never silent.
-- **Probationary pool**: new/AI-suggested meals enter a probation pool before becoming regular candidates.
+**Stub scope (all executed from AI tools via MCP, not built into the app):**
+- **Recipe parsing** (photo or link → structured recipe): done by Charlie's AI tools through the MCP tools (`create/update meal`, recipe fields). The **4 seeded recipe links are the first real proof** (M6, Option B). LLM keys live in Charlie's tools, never in the codebase.
+- **Discovery & trend analysis**: MCP queries over `/api/v1/stats` and library data — `kept_by` mix, `times_kept`, yes-rates, categories/tags, recency — to surface "meals worth retrying", "haven't had lately", and candidate new dinners.
+- **Favorites surfacing**: derived externally from `times_kept`/`kept_by`/recency, presented by Charlie's tools.
+- **Preference inference**: external analysis over aggregate vote/keep data — hypotheses, inspectable and correctable (corrections applied via MCP updates, e.g. retagging).
+- **Recipe adaptation**: external suggestions for near-matches; applied explicitly via MCP updates (never silent).
+- **Probationary pool**: an app-side flag/tag on new meals, exercised via MCP.
 
-**Dependencies:** v1.5 library, accumulated votes/keeps, LLM provider + budget decision (deferred to planning time). **AI provider keys live server-side only — never in client code** (architecture, plan §7).
+**Dependencies:** M6 API/MCP (v1), recipe-use experience UI (v1.5), accumulated data. **No LLM provider, no budget line, no keys — the app never touches AI.**
 
 ---
 

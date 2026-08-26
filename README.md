@@ -23,13 +23,14 @@ The output is the week's meal plan, which then feeds grocery planning done elsew
 - Weekly planning sessions: lunch/dinner targets → iterative yes/no batches → unanimous-yes keeps (host may accept majority-yes meals) until the week is planned
 - Kept-meal records and session history
 - Manual meal add/edit/archive
+- **External API + MCP server** (token-authenticated) — your AI tools import meals/recipes and query history/trends; **AI never runs inside the app**
 
 The meal library is expected to become the family's recipe keeper over time — it's durable data, backed up on the server.
 
 ## What's after v1
 
-- **v1.5** — recency-weighted batches, stale-meal suggestions, per-person constraints, planned-week view, meal photos, looser keep rules if needed
-- **v2** — AI-assisted recipe intake (photo or link → structured recipe) with a clean cooking view and printing, plus evidence-based recipe discovery
+- **v1.5** — recency-weighted batches, stale-meal suggestions, per-person constraints, planned-week view, meal photos, recipe-use experience (cooking view, printing), looser keep rules if needed
+- **v2** — external intelligence: recipe parsing (photo or link → recipe), discovery, and trend analysis run in **your AI tools** through the app's API/MCP — no AI code or LLM keys in the product
 - **Later** — grocery-list generation, pantry mode, multi-household hosting, mobile apps, integrations
 
 Full intent statements: [`docs/POST-V1.md`](docs/POST-V1.md).
