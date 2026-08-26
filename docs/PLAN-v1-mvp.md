@@ -443,4 +443,4 @@ Verify: connect an MCP client (e.g. `mcp` CLI / Charlie's AI tool) → list tool
 
 DoD: **CHARTER.md §"Definition of done"** — weekly sessions with pre-seeded library, private yes/no batches, unanimous keeps until targets met, kept records + history, meal CRUD/archive. Stop criteria: **CHARTER.md §"Stop criteria"** — budget (25 cycles), non-adoption after a fair trial (2–3 sessions), chronically stalled sessions, or Charlie's call.
 
-**Approval gate:** this plan and the charter are pending Charlie's sign-off. M0 does not start until approval.
+**Approval gate:** this plan and the charter were **approved by Charlie on 2026-08-26**. M0 has started.

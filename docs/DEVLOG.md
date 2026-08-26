@@ -31,3 +31,11 @@ Chronological record of work on Dinner Decider. Oldest at top.
 - **Seeded recipe links**: default is **Option B** — leave the seed as-is; the 4 linked recipes become the first real MCP imports at M6, proving the path end-to-end. Option A (parse at seed time) available.
 - **Docs updated**: CHARTER (mechanic, non-goals, D17, M6, DoD), PLAN (header, scope, D17, layout, §7.1, §8.1 API surface, M6, tests, risks, open questions), POST-V1 (v2 rewritten as external intelligence; recipe-use UI moved to v1.5), ROADMAP, README, CLAUDE.md, REQUESTS.
 - **Status**: committed & pushed. Awaiting charter approval before M0.
+
+## 2026-08-26 — Charter approved; M0 cycle 1 starts
+
+- Charlie **fully approved the charter** and stepped away; the autonomous dev loop is now running. No further questions will be asked — REQUESTS.md is the only channel.
+- **Design handoff ingested** (`Design Handoff/`): high-fidelity reference (10 screens, all v1 views) + `Dinner Decider.dc.html` prototype + design tokens (Fredoka/Nunito Sans, oklch palette: purple primary 300, terracotta dinner 25, green lunch 140; radii 999/24/16/12; shadows; desktop-first responsive with breakpoints; sidebar → top bar below 900px). Production = FastAPI+Jinja2+HTMX recreation; the prototype's client-side state is NOT copied. Fidelity: colors/type/spacing/copy final.
+- **M0 scope locked** (plan §11): pyproject/uv scaffold, settings (DD_DB_PATH/SECRET/ACCESS_KEY/API_KEY/PORT/ENV), full §6 models, Alembic initial migration, FastAPI skeleton + session/origin-check middleware, design-system base template + home screen, CI. Design system rides in T0.4 (base template + static).
+- **Safety net scheduled**: hourly resume-the-loop cron (repo is the memory; TUI delivery is local-only).
+- **Status**: M0 dispatched to implementer (deepseek-v4-flash). Next: independent verify → adversarial review (strong-model override) → land.

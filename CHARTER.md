@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Pending Charlie's approval** (Plan 1 committed 2026-08-26; implementation not started) |
+| **Status** | **Approved by Charlie 2026-08-26 — M0 in progress** (Plan 1; autonomous dev loop running) |
 | **Repo** | `vectorlanelabs/dinnerdecider` |
 | **Type** | Household web app — web-first, VPS-hosted |
 | **Budget** | 25 directed cycles for v1 MVP (or milestone-list completion, whichever comes first) |
@@ -99,4 +99,4 @@ From household devices **anywhere** (the app is on the VPS behind HTTPS — phon
 
 ## Approval
 
-This charter is **pending Charlie's sign-off**. Implementation cycles (M0+) begin only after approval. Every locked decision is reviewable — feedback welcome before M0.
+This charter was **approved by Charlie on 2026-08-26** ("charter fully approved"; design handoff in `Design Handoff/`). Implementation cycles (M0+) are authorized and running autonomously. Every locked decision remains reviewable — feedback lands via `REQUESTS.md`.
