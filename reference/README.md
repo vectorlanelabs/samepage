@@ -4,7 +4,7 @@
 
 The household's existing meal-decision spreadsheet — *"8 tabs, 20 dinner options per tab; roll a D8 and a D20 and use the resulting indexed meal."*
 
-This file is the **read-only migration source** for Dinner Decider's import pipeline (see `docs/PLAN-v1-mvp.md` §10). Do not edit it here — once the app has a meal library, that becomes the editable home for meals.
+This file is the **read-only source** for Dinner Decider's seed data (see `docs/PLAN-v1-mvp.md` §10). Do not edit it here — once the app has a meal library, that becomes the editable home for meals.
 
 ### Structure
 

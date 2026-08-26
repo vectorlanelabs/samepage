@@ -30,8 +30,13 @@
 ## Seed decisions (locked)
 
 - **155 meals**, 8 categories (`Tab 1`–`Tab 8`; Tab 8 has 15 — faithful to the source).
-- **Times Rolled column is ignored** (Charlie's direction) — not carried into the seed.
-- **All seeded meals are `type: "dinner"`** — faithful to the source (a dinner-decider spreadsheet). Lunch candidates come from the household adding/retagging meals; see `REQUESTS.md`.
+- **Times Rolled column is ignored** — not carried into the seed.
+- **Type mapping** (plan review #4): most meals are `dinner`; a curated **27-meal lunch-capable subset is `both`** so the lunch track has a pool from a fresh install. The curated list (lunch/brunch items, sandwiches, soups, simple kids' meals, leftovers/catch-alls):
+
+  `Hot Dogs · Pancakes · bacon and eggs · Frozen pizza · nachos · baked potato bar · Hot Pockets · taco soup · chicken nuggets · quesadillas · chicken noodle soup · deli sandwich bar · pizza rolls · baked potato soup · french toast · Eggs in a basket · Breakfast burritos · Homemade mcgriddles · ramen (but fancy) · BLTs · grilled cheese · Leftovers · Broccoli Cheese Soup · fish sticks and mac and cheese · BBQ Sandwiches · pigs in a blanket · Pepperoni rolls`
+
+  Adjustable: edit the `CURATED_BOTH` list in `scripts/build_seed.py` (or this JSON) and regenerate. Household can always retag in-app.
+
 - **Embedded URLs stripped from meal names** → `source_url` (4 meals: TikTok, cookincanuck, allrecipes, damndelicious).
 - **Takeout auto-tag**: the 10 known restaurant entries carry `["takeout"]`.
 - **Dedupe**: loader dedupes by normalized name (`casefold`, whitespace-collapsed); "Chicken parm" appears twice in the spreadsheet → the loader keeps the first, logs the skip. To keep both, rename one in this JSON.

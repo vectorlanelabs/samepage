@@ -6,7 +6,7 @@
     {
       "name": "bacon and eggs",
       "category": "Tab 1",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -55,7 +55,7 @@
     {
       "name": "Hot Dogs",
       "category": "Tab 1",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -97,7 +97,7 @@
     {
       "name": "Pancakes",
       "category": "Tab 1",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -146,7 +146,7 @@
     {
       "name": "baked potato bar",
       "category": "Tab 2",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -204,7 +204,7 @@
     {
       "name": "Frozen pizza",
       "category": "Tab 2",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -218,7 +218,7 @@
     {
       "name": "Hot Pockets",
       "category": "Tab 2",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -239,7 +239,7 @@
     {
       "name": "nachos",
       "category": "Tab 2",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -274,7 +274,7 @@
     {
       "name": "taco soup",
       "category": "Tab 2",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -323,21 +323,21 @@
     {
       "name": "chicken noodle soup",
       "category": "Tab 3",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
     {
       "name": "chicken nuggets",
       "category": "Tab 3",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
     {
       "name": "deli sandwich bar",
       "category": "Tab 3",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -365,7 +365,7 @@
     {
       "name": "quesadillas",
       "category": "Tab 3",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -430,7 +430,7 @@
     {
       "name": "baked potato soup",
       "category": "Tab 4",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -544,7 +544,7 @@
     {
       "name": "pizza rolls",
       "category": "Tab 4",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -586,7 +586,7 @@
     {
       "name": "Breakfast burritos",
       "category": "Tab 5",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -651,21 +651,21 @@
     {
       "name": "Eggs in a basket",
       "category": "Tab 5",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
     {
       "name": "french toast",
       "category": "Tab 5",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
     {
       "name": "Homemade mcgriddles",
       "category": "Tab 5",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -679,7 +679,7 @@
     {
       "name": "ramen (but fancy)",
       "category": "Tab 5",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -714,7 +714,7 @@
     {
       "name": "BLTs",
       "category": "Tab 6",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -777,7 +777,7 @@
     {
       "name": "grilled cheese",
       "category": "Tab 6",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -870,7 +870,7 @@
     {
       "name": "Broccoli Cheese Soup",
       "category": "Tab 7",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -905,7 +905,7 @@
     {
       "name": "fish sticks and mac and cheese",
       "category": "Tab 7",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -926,7 +926,7 @@
     {
       "name": "Leftovers",
       "category": "Tab 7",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -998,7 +998,7 @@
     {
       "name": "BBQ Sandwiches",
       "category": "Tab 8",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
@@ -1065,14 +1065,14 @@
     {
       "name": "Pepperoni rolls",
       "category": "Tab 8",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },
     {
       "name": "pigs in a blanket",
       "category": "Tab 8",
-      "type": "dinner",
+      "type": "both",
       "tags": [],
       "source_url": null
     },

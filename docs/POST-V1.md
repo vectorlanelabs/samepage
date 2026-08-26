@@ -18,7 +18,7 @@
 - **Re-run last week**: start a new session preloaded with last week's targets and settings.
 - **Meal photos**: upload flow (MVP has no photos at all).
 - **Library export/backup**: JSON export of meals + recipes, and better backup docs — the library is the family recipe keeper, so data portability is hygiene.
-- **Lunch library starter set**: a curated lunch/lunch-dinner set so the lunch track starts populated.
+- **Lunch library starter set**: _resolved in the v1 seed — a curated 27-meal `both` subset populates the lunch track from install; this item now only covers a bigger/later curated expansion._
 - **Better library filtering**: multi-tag, type, "kept N+ times" filters.
 - **More keep rules**: e.g. "everyone yes OR at least N yes with no hard-no" — only if the unanimous rule stalls in practice (tracked, not improvised).
 
@@ -34,6 +34,7 @@
 
 **Stub scope:**
 - **Recipe intake (AI)**: parse a **photo of a recipe or a link to one online** into a structured recipe (title, ingredients, instructions, servings, timing) — Charlie's stated direction. Stores a clean household copy + original source.
+- **Recipe-use experience** (review #9): recipe intake ships *with* the experience that makes recipes usable — structured recipe record, original source preserved, a **clean cooking view** (large-type ingredients and steps), **print-friendly layout/stylesheet** (first-class printing, not an accidental browser printout), and household notes/substitutions. Ingestion without the use experience leaves the feature incomplete.
 - **Recipe discovery (AI)**: suggest meals the household has a meaningful chance of accepting, each suggestion self-explaining from actual evidence (kept meals, yes/no votes, tags, categories). Ten plausible suggestions beat ten bizarre ones.
 - **Favorites surfacing**: derive favorites from `times_kept` + recency (the MVP already records successful matches).
 - **Preference inference**: ingredient/texture/cuisine patterns from real votes — hypotheses, inspectable and correctable.
@@ -50,7 +51,7 @@ One-liners on purpose — each gets a PLAN doc only if/when it becomes real:
 
 - **Grocery list generation from the planned week** — explicitly out of MVP scope (the decision feed is the product); the natural extension since planning exists to feed grocery shopping.
 - **Pantry mode**: "meals using ingredients on hand" as a session filter.
-- **Hosted deployment + multi-household + real accounts**: only if remote participation becomes useful.
+- **Multi-household hosting + real accounts + public/self-service deployment**: only if remote participation beyond the household becomes useful (v1 is already VPS-hosted).
 - **Mobile apps**: native or PWA — responsive web probably suffices for a long time.
 - **Meal planning calendar / recurring weekly rhythm** beyond single sessions.
 - **Integrations**: grocery delivery, kitchen tablets / smart displays.
