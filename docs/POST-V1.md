@@ -4,44 +4,42 @@
 
 ---
 
-## v1.5 — Recipes & a richer library
+## v1.5 — Planning refinements & a richer library
 
-**What:** Make the library a real recipe keeper and make the rounds smarter without any AI.
+**What:** Make the weekly planning loop smarter and the library richer — still no AI.
 
-**Trigger:** MVP in consistent household use for ~1 month, or Charlie asks for any item.
+**Trigger:** MVP in consistent household use for ~1 month (a few real weekly sessions), or Charlie asks for any item.
 
 **Stub scope:**
-- **Recipe intake**: paste a recipe URL → extract title/image/ingredients/instructions/servings/timing; paste arbitrary recipe text → normalize into structure; store clean household copy + original source URL.
-- **Clean cooking view**: large-type ingredients and steps, no life story, keep-screen-awake where the platform allows.
-- **First-class printing**: printable layout that fits cleanly on paper — not an accidental browser printout.
-- **Meal photos**: upload flow (MVP is URL-only).
-- **Better filtering/categories**: richer category UX, multi-tag filters.
-- **"Haven't had this lately" weighting**: recency-weighted random choice (not just the not-recently sort).
-- **Automatic stale-meal suggestions**: repeatedly-rejected / never-selected / duplicates surfaced for keep-archive-merge-update — always recommendations, never silent deletion.
-- **Hard-no constraints**: per-person "never suggest this" surfaced in rounds (data model already leaves room — enum + constraint table).
-- **More common-ground rules**: no-hard-no + ≥N yes; allow one abstention; parents pick among children's accepted meals.
-- **Web import UI**: replace/augment the CLI import.
-- **Probationary pool** for newly added meals (see open question in the MVP plan).
+- **Recency weighting**: batch assembly favors meals not kept recently (`last_kept_at`), so the pool rotates.
+- **Stale-meal suggestions**: meals never kept after many appearances surfaced for archive/retag — recommendations, never silent deletion.
+- **Per-person hard constraints**: "never suggest this meal to this person" (person-level), surfaced as pre-filtered options — the binary vote stays binary.
+- **Planned-week view**: calendar-style view of the week's kept meals (the session already produces the plan; this renders it).
+- **Re-run last week**: start a new session preloaded with last week's targets and settings.
+- **Meal photos**: upload flow (MVP has no photos at all).
+- **Lunch library starter set**: a curated lunch/lunch-dinner set so the lunch track starts populated.
+- **Better library filtering**: multi-tag, type, "kept N+ times" filters.
+- **More keep rules**: e.g. "everyone yes OR at least N yes with no hard-no" — only if the unanimous rule stalls in practice (tracked, not improvised).
 
-**Dependencies:** MVP data model (vote enum extensible), no AI needed.
+**Dependencies:** MVP data model only. No AI.
 
 ---
 
-## v2 — Learning & AI
+## v2 — AI-assisted recipe intake & discovery
 
-**What:** The app starts learning from actual behavior — **precision over novelty** (README: ten bizarre generated recipes nobody will eat are worse than one plausible new dinner).
+**What:** Two AI jobs, both serving the meal pool — the app never gets a "personality" (README principle: precision over novelty).
 
-**Trigger:** v1.5 in steady use with meaningful voting data volume, and Charlie greenlights AI spend. This is the most likely place for the project to overbuild — the charter's non-goal discipline applies here hardest.
+**Trigger:** v1.5 in steady use with meaningful kept-meal/vote data, and Charlie greenlights AI spend. This is the most likely place to overbuild — the charter's non-goal discipline applies hardest here.
 
 **Stub scope:**
-- **Preference modeling**: evidence from yes/not-tonight/no/hard-no votes, whether the meal was actually cooked, repeat acceptance, repeated household-wide rejection, recency semantics (rejecting something eaten yesterday ≠ rejecting it six months later). Hypotheses, not truths; inspectable and correctable.
-- **AI-assisted recipe discovery**: suggest meals the household has a meaningful chance of accepting, each suggestion self-explaining (e.g. "you regularly accept chicken, rice bowls, mild Mexican flavors, and meals without cooked peppers…").
-- **AI-assisted recipe normalization**: messy pasted recipes / screenshots / poorly structured pages → clean recipe records.
-- **Inferred household taste patterns**: ingredients, textures, cuisines, sauces, spice tolerance, prep methods, combos that work/fail — correctable.
-- **Suggested recipe adaptations**: near-matches made acceptable (e.g. "the household tends to reject cooked onions; make this with onion powder instead") — explicit, never silently altering the source.
-- **Probationary pool** for AI-suggested recipes.
+- **Recipe intake (AI)**: parse a **photo of a recipe or a link to one online** into a structured recipe (title, ingredients, instructions, servings, timing) — Charlie's stated direction. Stores a clean household copy + original source.
+- **Recipe discovery (AI)**: suggest meals the household has a meaningful chance of accepting, each suggestion self-explaining from actual evidence (kept meals, yes/no votes, tags, categories). Ten plausible suggestions beat ten bizarre ones.
+- **Favorites surfacing**: derive favorites from `times_kept` + recency (the MVP already records successful matches).
+- **Preference inference**: ingredient/texture/cuisine patterns from real votes — hypotheses, inspectable and correctable.
+- **Recipe adaptation**: near-matches made acceptable (e.g. "household tends to reject cooked onions — make it with onion powder") — explicit, never silent.
+- **Probationary pool**: new/AI-suggested meals enter a probation pool before becoming regular candidates.
 
-**Dependencies:** v1.5 recipe model, accumulated votes, LLM provider + budget decision (deferred to when this is planned).
+**Dependencies:** v1.5 library, accumulated votes/keeps, LLM provider + budget decision (deferred to planning time).
 
 ---
 
@@ -49,16 +47,16 @@
 
 One-liners on purpose — each gets a PLAN doc only if/when it becomes real:
 
-- **Pantry mode**: "meals using ingredients on hand" pool mode (needs an ingredients/pantry model).
+- **Grocery list generation from the planned week** — explicitly out of MVP scope (the decision feed is the product); the natural extension since planning exists to feed grocery shopping.
+- **Pantry mode**: "meals using ingredients on hand" as a session filter.
 - **Hosted deployment + multi-household + real accounts**: only if remote participation becomes useful.
 - **Mobile apps**: native or PWA — responsive web probably suffices for a long time.
-- **Meal planning / calendar / weekly view**: beyond "tonight".
-- **Grocery list export** from planned meals.
-- **Photo / document recipe intake**: images, screenshots, PDFs, scanned recipe cards.
+- **Meal planning calendar / recurring weekly rhythm** beyond single sessions.
 - **Integrations**: grocery delivery, kitchen tablets / smart displays.
-- **"Used to work, fell out of favor" detection**: meals whose acceptance decayed over time.
+- **"Used to work, fell out of favor" detection**: meals whose keeps decayed over time.
 - **Archived-meal reconsideration**: periodically re-offer archived meals.
-- **Multi-household data portability / export.**
+- **The dice ritual, resurrected**: optional D20-flavored pick among kept meals, for fun (the original spreadsheet ritual — Charlie's call if it comes back).
+- **Data export / portability.**
 
 ---
 

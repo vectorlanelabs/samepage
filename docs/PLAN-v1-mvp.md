@@ -1,116 +1,121 @@
 # Dinner Decider — v1 MVP Implementation Plan
 
-> Status: **committed 2026-08-26, awaiting charter approval** · Owner: Bartowski (lead) · Scope source: `README.md` · Charter: `CHARTER.md`
+> Status: **committed 2026-08-26 (corrected per Charlie's direction), awaiting charter approval** · Owner: Bartowski (lead) · Concept source: `README.md` (superseded in parts) · Charter: `CHARTER.md`
 >
-> This document is the reference for implementation. Every design decision in §3 is **locked unless marked reviewable** — the implementer follows this spec, it does not make product decisions.
+> This document is the reference for implementation. Decisions in §3 are **locked unless marked reviewable** — the implementer follows this spec; it does not make product decisions.
 
 ---
 
 ## 1. Goal
 
-Build the first useful version of Dinner Decider: a household web app that replaces the D8/D20 spreadsheet ritual with private common-ground voting plus an optional dice roll, and that records what the household actually eats. **The v1 needs no AI** (README "Suggested first version").
+Build the first useful version of Dinner Decider: a household web app for **weekly meal planning**. The household sets how many dinners and lunches the week needs; the app runs iterative batches of 15–20 meal options with private yes/no votes, keeps only the meals everyone said yes to, and repeats until the week's plan is complete. The meal library ships **pre-seeded** from the legacy spreadsheet. **No AI, no dice, no import feature, no grocery list** in v1.
 
 ## 2. Scope
 
-**In (the README's 10 V1 items, verbatim):**
+**In (corrected 2026-08-26):**
 
-1. Household profiles
-2. Meal library
-3. Import existing spreadsheet
-4. Start dinner round
-5. Private yes / not-tonight / no voting
-6. Common-ground results
-7. Random choice from accepted meals
-8. Record what was chosen
-9. Basic voting history
-10. Archive meals manually
+1. Household profiles (people + PINs, no accounts)
+2. Meal library — meals have **title, type (lunch/dinner/both), category, tags, recipe (link/text)**
+3. **Pre-seeded** meal library from the legacy spreadsheet (including the recipe links it contains)
+4. Planning session: set **lunch and dinner targets** for the week
+5. Iterative voting batches: **15–20 meal options, same list for every participant**, private **yes/no** votes
+6. Results: meals where **everyone said yes** are kept; another batch is presented until targets are met
+7. Record of **successful matches** (`times_kept`, `last_kept_at`, raw votes) → the seeds of favorites
+8. Session history
+9. Manual meal add/edit/archive
 
-**Out (post-MVP — `docs/POST-V1.md`):** recipe ingestion (URL/paste/photo), printing, meal photo upload, preference learning, AI, pantry mode, accounts/multi-household, mobile apps. These are hard non-goals; touching them in MVP is scope creep.
+**Out (explicit):** grocery/shopping list (feeds it, doesn't build it), recipe ingestion/parsing (future AI step), import UI/CLI, dice-roll ritual, non-binary vote shades, preference learning, accounts/multi-household, mobile apps.
 
 ## 3. Locked decisions (reviewable before M0)
 
 | # | Decision | Choice | Why |
 |---|---|---|---|
-| D1 | **Stack** | Python 3.12+ · uv · FastAPI · SQLAlchemy 2.x · SQLite · Jinja2 templates · HTMX + minimal vanilla JS · uvicorn | One-language, zero frontend build step, single-file DB, runs on any box in the house (Mac, Linux, Pi). Easy to spec precisely for cheap implementers. |
-| D2 | **Identity** | No accounts. `Person` = name + 4-digit PIN. Signed-cookie session stores `person_id` per device. | README: authentication must not be a prerequisite for the household case. PIN preserves vote privacy without an account system. |
-| D3 | **Round codes** | `WORD-####` (e.g. `TACO-1234`), food-themed ~100-word list, easy-to-spell words only | Mirrors Pips' `generateCode()` (`WORD-NUMBER`, e.g. `BONE-1234`); short enough to shout across the house, no ambiguous letters. |
-| D4 | **Vote scale** | `yes` / `not_tonight` / `no` | README's four levels minus hard-no (V1.5). Enum is stored as text so a 4th value can be added without migration pain. |
-| D5 | **Common-ground rule (MVP default)** | A meal survives iff **every participant who submitted ≥1 vote in the round voted `yes` on that meal**. `not_tonight` excludes tonight (stored distinctly, neutral for future learning). | Matches README default ("every participating household member must be willing to eat it"). Simple, explainable, testable. |
-| D6 | **Pool modes (MVP)** | `all` · `category` · `tag` · `favorites` · `not-recently` (sort) · `surprise` (random sample of 10) | Covers the README's mode list minus "ingredients on hand" (needs a pantry model — V1.5+). |
-| D7 | **Import** | CLI script `scripts/import_legacy.py`: `--dry-run` (default) prints a report; `--apply` inserts. Duplicates flagged, never auto-merged. Categories `Tab 1..8` (renamable). Known takeout names auto-tagged `takeout`. | CLI is testable and reviewable; dry-run first honors "recommend actions rather than silently deleting/merging anything". |
-| D8 | **Favorites** | Household-level single list (`favorite(meal_id)`), not per-person | One household, one mental model. Per-person favorites add nothing for MVP. |
-| D9 | **History** | A round is history once `status=decided` (has `decided_meal_id`). Meal `times_cooked` / `last_cooked_at` update on decision. | No separate history table needed. "Record what was chosen" = the decided round row. |
-| D10 | **Sessions** | Starlette `SessionMiddleware`, secret from env `DD_SECRET` or auto-generated on first run (stored in `data/`), session stores `person_id` | No user auth; device-scoped "who am I". |
-| D11 | **Polling, not websockets** | Page refresh / short poll on round pages | A household round has 2–6 people; realtime push is overkill. |
+| D1 | **Stack** | Python 3.12+ · uv · FastAPI · SQLAlchemy 2.x · SQLite · Jinja2 templates · HTMX + minimal vanilla JS · uvicorn | One-language, zero frontend build step, single-file DB, runs on any box in the house. Easy to spec precisely. |
+| D2 | **Identity** | No accounts. `Person` = name + 4-digit PIN. Signed-cookie session stores `person_id` per device. | Privacy of votes without an account system. |
+| D3 | **Session codes** | `WORD-####` (e.g. `TACO-1234`), food-themed ~100-word list, easy-to-spell words only | Mirrors Pips' `generateCode()` (`WORD-NUMBER`); short enough to read aloud across a room. |
+| D4 | **Vote scale** | Binary `yes` / `no` | Charlie's direction. No "not tonight" shades in MVP. |
+| D5 | **Keep rule** | A meal is kept iff **every participant who voted in the batch voted `yes`** on it. Participants who never vote don't block (starter can close; unvoted = no). | "Meals where everyone said yes only." Simple, explainable, testable. |
+| D6 | **Batch assembly** | Batch size **15–20, default 15** (set at session creation). Pool = active meals of the active track (`type == track` or `type == "both"`), **minus any meal already voted on in this session**; shuffled, take `min(batch_size, len(pool))`. | "15–20 yes/no meal options… same list for each person… until the count is achieved." No repeats within a session. |
+| D7 | **Pre-seeding** | `seed/meals.json` (committed; generated from the spreadsheet) + `scripts/seed.py` loader. **No import feature** — the spreadsheet is a one-time source, not a user flow. | Charlie: "No need to import the spreadsheet… I want all of that pre-seeded." |
+| D8 | **Tags & categories** | First-class metadata: category (`Tab 1..8`, renamable) + free tags. Seed auto-tags the 10 known takeout meals. Purpose: organization now, **AI discovery hooks later**. | Charlie: "tags… so that we can pin on ai discovery steps later." |
+| D9 | **Favorites signal** | `meal.times_kept += 1` and `last_kept_at = now` on every keep; all raw votes stored. Favorites are *derived* from successful matches over time — no manual star list in MVP. | Charlie: "keep record of successful matches, so that we can start to determine favorites." |
+| D10 | **Tracks** | Meal type `lunch` / `dinner` / `both`. Session sets `lunch_target` + `dinner_target`. Tracks run **dinner first, then lunch** (both unmet → dinner; next unmet → lunch). A `both` meal counts toward either track. | "Meals are lunch and dinner; before beginning, the target number for each is set." |
+| D11 | **Seed dedupe** | Loader dedupes by `normalized_name` (casefold + collapsed whitespace): first occurrence wins, exact duplicates logged and skipped. | The spreadsheet has "Chicken parm" twice (Tabs 1 & 2) — same meal, not two meals. |
+| D12 | **Polling, not websockets** | Page refresh / short poll on session pages | 2–6 people; realtime push is overkill. |
+| D13 | **Over-target keeps** | If unanimous-yes meals exceed remaining slots, the starter chooses which to keep (multi-select, max = remaining). Kept = counted; dropped = recorded as voted, not kept. | A batch can agree on more than the week needs; the household picks. |
 
 ## 4. Legacy spreadsheet state (evidence, audited 2026-08-26)
 
-The import target. Full audit in `reference/README.md`. Facts the import must handle:
+Full audit: `reference/README.md`. Facts that shaped the seed:
 
-- 8 sheets (Sheet1–Sheet8), header row `Roll Result | Dinner | Times Rolled`, up to 20 meal rows. **Sheet position = D8, row = D20.**
-- ~155 named meals: Sheet1–7 fully populated; **Sheet8 has only 15** (rows 16–20 empty — import must tolerate holes).
-- `Times Rolled` populated on 34 rows (values 1–2, 37 rolls total) — preserve as `meal.legacy_rolls` (historical metadata only).
-- 4 recipe URLs (TikTok & damndelicious in standalone cells; cookincanuck & allrecipes embedded in meal names) → `meal.source_url`; import strips embedded URLs from names.
-- Takeout entries (Chili's, Taco Bell, McDonald's, Chick Fil A, Panda Express, Raising Cane's, Whataburger, Subway, Los Hermanos, "Order Pizza") → auto-tag `takeout` (they are legitimate dinner answers).
-- Catch-alls ("Make do", "Leftovers", "yesterday's chicken") — keep as ordinary meals.
-- **One exact duplicate**: "Chicken parm" (Tab 1 & Tab 2) → dedupe report must catch it. Near-duplicates (Chili / Chili Dogs / Chili Dog Casserole / Chili Cheese Dog Tater Tot Casserole) → fuzzy-flag only, human decides.
-- Two entries have an `(LC)` suffix (likely "low carb") — preserve name verbatim, no parsing.
+- 8 sheets, header `Roll Result | Dinner | Times Rolled`, up to 20 meal rows; sheet position = D8, row = D20.
+- **~155 named meals**; Sheet8 has only 15 (rows 16–20 empty — tolerated).
+- **`Times Rolled` column is ignored** (Charlie's direction) — not carried into the seed.
+- **4 recipe URLs**: 2 standalone cells (TikTok in Sheet2 col E, damndelicious in Sheet8 col D), 2 embedded in meal names (cookincanuck Sheet5, allrecipes Sheet6 — seed strips them into `source_url`).
+- 10 takeout entries → auto-tagged `takeout` (legitimate dinner answers, not noise).
+- Catch-alls ("Make do", "Leftovers", "yesterday's chicken") — ordinary meals.
+- **One exact duplicate**: "Chicken parm" (Tab 1 & 2) → seed dedupe (D11). Near-duplicates (Chili family) kept as-is.
+- Two `(LC)`-suffixed entries — names preserved verbatim.
 
 ## 5. User stories (MVP)
 
 | ID | Story | Acceptance |
 |---|---|---|
-| US1 | As the admin, I import the spreadsheet once and get a meal library with categories | Import report shows counts; meals appear in library; `Chicken parm` flagged duplicate |
-| US2 | As the admin, I add/edit/archive meals and categories | CRUD works; archived meals vanish from pools, visible in library with filter |
-| US3 | As anyone, I start a round by picking a pool mode and get a code | Round created; code shown; pool matches the mode |
-| US4 | As a household member, I join by code, identify with my PIN, and vote privately | I vote on cards; no other voter's choices visible to me |
-| US5 | As the starter, I close voting and see common ground | Only meals everyone (who voted) said yes to appear |
-| US6 | As the starter, I roll the dice or pick a meal | Dinner recorded; history updated; meal counters updated |
-| US7 | As anyone, I browse history of past dinners | Decided rounds listed newest-first with meal, date, mode |
-| US8 | As anyone, I star favorites and can start a round from favorites only | Favorites mode yields only starred meals |
+| US1 | As the admin, I install the app and it already has the household's meals | `uv run scripts/seed.py` → 155 meals, 8 categories, 4 with recipe links, 10 tagged takeout, chicken-parm dup logged |
+| US2 | As the admin, I add/edit/archive meals with title, type, category, tags, recipe | CRUD works; archived meals leave session pools |
+| US3 | As anyone, I start a planning session: set dinners + lunches targets | Session created with code; targets stored |
+| US4 | As a household member, I join by code, identify with my PIN, and vote yes/no on the same batch as everyone else | I see the same 15–20 meals; my votes are private |
+| US5 | As the starter, I see the batch results | Only unanimous-yes meals shown; no tallies; over-target → choose |
+| US6 | As the household, we run batches until the week is planned | Target reached per track; session completes with a week summary |
+| US7 | As anyone, I see past sessions and which meals were kept | History lists sessions with kept meals; meals show `times_kept` |
+| US8 | As the admin, I fix a meal (retag, retype, edit recipe) | Edits reflect in future sessions |
 
 ## 6. Data model (SQLite via SQLAlchemy 2.x declarative)
 
 ```
-person(id PK, name TEXT UNIQUE NOT NULL, pin TEXT NOT NULL,           -- 4-digit
+person(id PK, name TEXT UNIQUE NOT NULL, pin TEXT NOT NULL,        -- 4-digit
        is_active BOOL DEFAULT 1, created_at DATETIME)
 
-category(id PK, name TEXT UNIQUE NOT NULL, sort_order INT,            -- "Tab 1".."Tab 8" from import
-         legacy_sheet_index INT NULL)                                  -- 1..8 for imported; NULL for user-made
+category(id PK, name TEXT UNIQUE NOT NULL, sort_order INT,         -- "Tab 1".."Tab 8" from seed
+         legacy_sheet_index INT NULL)                               -- 1..8; NULL for user-made
 
 tag(id PK, name TEXT UNIQUE NOT NULL)
 
-meal(id PK, name TEXT NOT NULL, normalized_name TEXT NOT NULL,        -- casefold+collapse for dedupe
-     description TEXT, image_url TEXT, source_url TEXT,
-     prep_minutes INT NULL, cook_minutes INT NULL, servings INT NULL,
+meal(id PK, name TEXT NOT NULL, normalized_name TEXT NOT NULL,     -- casefold+collapse, dedupe key
+     type TEXT NOT NULL DEFAULT 'dinner',                          -- lunch|dinner|both (D10)
+     description TEXT, source_url TEXT, recipe_text TEXT,          -- recipe = link and/or text
+     category_id FK -> category,
      is_active BOOL DEFAULT 1, archived_at DATETIME NULL,
-     last_cooked_at DATETIME NULL, times_cooked INT DEFAULT 0,
-     legacy_rolls INT DEFAULT 0, created_at DATETIME, updated_at DATETIME,
-     category_id FK -> category)
+     times_kept INT DEFAULT 0, last_kept_at DATETIME NULL,         -- favorites signal (D9)
+     created_at DATETIME, updated_at DATETIME)
 
 meal_tag(meal_id FK, tag_id FK, PK(meal_id, tag_id))
 
-favorite(meal_id PK FK)                                                -- household-level (D8)
+session(id PK, code TEXT UNIQUE NOT NULL,                          -- WORD-####
+        status TEXT NOT NULL,                                      -- voting|complete|expired
+        created_by_person_id FK -> person,
+        lunch_target INT NOT NULL, dinner_target INT NOT NULL,     -- D10
+        batch_size INT NOT NULL DEFAULT 15,                        -- 15..20 (D6)
+        created_at DATETIME, finished_at DATETIME NULL)
 
-round(id PK, code TEXT UNIQUE NOT NULL,                                -- WORD-####
-      status TEXT NOT NULL,                                            -- lobby|voting|results|decided|expired
-      pool_mode TEXT NOT NULL, created_by_person_id FK -> person,
-      created_at DATETIME, started_at DATETIME, finished_at DATETIME NULL,
-      decided_meal_id FK -> meal NULL)
+session_participant(session_id FK, person_id FK, joined_at DATETIME, PK(session_id, person_id))
 
-round_meal(round_id FK, meal_id FK, sort_order INT, PK(round_id, meal_id))
+batch(id PK, session_id FK, seq INT, track TEXT NOT NULL,          -- lunch|dinner (D10)
+      status TEXT NOT NULL DEFAULT 'open',                         -- open|closed
+      closed_at DATETIME NULL, UNIQUE(session_id, seq))
 
-round_participant(round_id FK, person_id FK, joined_at DATETIME, PK(round_id, person_id))
+batch_meal(batch_id FK, meal_id FK, sort_order INT, kept BOOL DEFAULT 0,
+           PK(batch_id, meal_id))
 
-vote(id PK, round_id FK, person_id FK, meal_id FK,
-     choice TEXT NOT NULL,                                             -- 'yes'|'not_tonight'|'no' (D4)
-     created_at DATETIME, UNIQUE(round_id, person_id, meal_id))        -- one vote per person per meal
+vote(id PK, batch_id FK, person_id FK, meal_id FK,
+     choice TEXT NOT NULL,                                         -- 'yes'|'no' (D4)
+     created_at DATETIME, UNIQUE(batch_id, person_id, meal_id))
 ```
 
 Notes:
-- No hard-no table in MVP; the vote enum is text and extensible (V1.5 adds `hard_no` + per-person constraint table).
-- `normalized_name` = `name.casefold()` with whitespace collapsed — the dedupe key.
-- Round status flow: `voting → results → decided` (see §9). `expired` is lazy (see §9.5).
+- Votes are stored raw (evidence for future learning) but are **never rendered to any client until the batch is closed**.
+- Kept meals: `batch_meal.kept = 1` → `meal.times_kept += 1`, `last_kept_at = now` (transactionally, in the keep step).
+- No `legacy_rolls` anywhere — the Times Rolled column is deliberately ignored.
 
 ## 7. Architecture & app layout
 
@@ -121,124 +126,123 @@ dinnerdecider/
 │   ├── settings.py        # env-driven (DD_DB_PATH, DD_SECRET, DD_PORT)
 │   ├── db.py              # engine, SessionLocal, get_db dependency, init/create-all
 │   ├── models.py          # SQLAlchemy models (§6)
-│   ├── common_ground.py   # pure functions: survivors computation, pool sampling  ← the testable core
-│   ├── codes.py           # round-code generation (WORD-####, collision loop)
+│   ├── session_logic.py   # pure functions: batch assembly, unanimous computation,  ← the testable core
+│   │                      #   over-target keep resolution, track progression
+│   ├── codes.py           # session-code generation (WORD-####, collision loop)
 │   ├── routes/
-│   │   ├── people.py  library.py  rounds.py  history.py
-│   ├── templates/         # Jinja2 (base.html, people/, library/, rounds/, history/)
+│   │   ├── people.py  library.py  sessions.py  history.py
+│   ├── templates/         # Jinja2 (base.html, people/, library/, sessions/, history/)
 │   └── static/            # app.css, app.js (vanilla; HTMX via CDN or vendored)
-├── scripts/import_legacy.py   # spreadsheet import CLI (D7)
-├── tests/                 # pytest: unit (common_ground, codes, import) + route smoke (TestClient)
-├── pyproject.toml         # uv-managed; deps: fastapi, uvicorn, sqlalchemy, jinja2, python-multipart, openpyxl (import), htmx (vendored)
+├── scripts/
+│   ├── seed.py            # loads seed/meals.json into the DB (idempotent, D7/D11)
+│   └── build_seed.py      # dev-time: regenerates seed/meals.json from reference/ (openpyxl, dev-only dep)
+├── seed/meals.json        # pre-seeded library (committed, reviewable) + seed/README.md
+├── tests/                 # pytest: unit (session_logic, codes, seed) + route smoke (TestClient)
+├── pyproject.toml         # uv-managed; runtime deps: fastapi, uvicorn, sqlalchemy, jinja2,
+│                          #   python-multipart; dev deps: pytest, httpx, ruff, openpyxl
 ├── .github/workflows/ci.yml
 ├── CHARTER.md ROADMAP.md CLAUDE.md REQUESTS.md
 ├── docs/                  # PLAN-v1-mvp.md, POST-V1.md, DEVLOG.md
-└── reference/             # legacy spreadsheet (read-only)
+└── reference/             # legacy spreadsheet (read-only source)
 ```
 
 - DB file default `data/dinnerdecider.db` (gitignored), overridable via `DD_DB_PATH`.
-- Templates are server-rendered; voting interactions are `hx-post` calls to the vote endpoint; the D20 roll is a small vanilla-JS animation over server-provided survivors.
+- Templates server-rendered; voting interactions are `hx-post` calls; batch progress via short polling (D12).
 - **No Node, no bundler, no build step.** HTMX vendored as a static file.
 
 ## 8. Routes
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/` | Home: start-round CTA, active round link, library/history/people links |
+| GET | `/` | Home: new session CTA, active session link, library/history/people links |
 | GET/POST | `/people` · `/people/{id}` | Household profiles CRUD (name, PIN, active) |
-| GET | `/library` | Meal library: search, filter by category/tag, archived toggle |
-| GET/POST | `/library/new` · `/library/{id}/edit` | Meal create/edit form |
-| POST | `/library/{id}/archive` · `/unarchive` | Manual archive (item 10) |
-| POST | `/library/{id}/favorite` | Toggle household favorite |
-| GET | `/rounds/new` | Pool-mode picker (mode + category/tag selector) |
-| POST | `/rounds` | Create round → 303 to `/r/{code}` |
-| GET | `/r/{code}` | Round page: join gate → lobby/vote/results/decided by status |
-| POST | `/r/{code}/join` | Join as person (name + PIN) → session |
-| POST | `/r/{code}/vote` | `{meal_id, choice}` — upsert vote |
-| POST | `/r/{code}/close` | Starter closes voting → results (survivors) |
-| POST | `/r/{code}/decide` | `{meal_id}` manual, or `{random: true}` roll → decided |
-| GET | `/history` | Decided rounds, newest first, filter by month |
-| POST | `/rounds/expire-stale` | (ops) mark rounds older than 24h as expired |
+| GET | `/library` | Meal library: search, filter by type/category/tag, archived toggle, `times_kept` visible |
+| GET/POST | `/library/new` · `/library/{id}/edit` | Meal create/edit (title, type, category, tags, recipe link/text) |
+| POST | `/library/{id}/archive` · `/unarchive` | Manual archive (US2) |
+| GET | `/sessions/new` | Session setup: lunch target, dinner target, batch size (15–20) |
+| POST | `/sessions` | Create session → 303 to `/s/{code}` |
+| GET | `/s/{code}` | Session page: join gate → active batch voting / batch results / week summary (status-aware) |
+| POST | `/s/{code}/join` | Join as person (name + PIN) → session |
+| POST | `/s/{code}/vote` | `{batch_id, meal_id, choice}` — upsert vote (US4) |
+| POST | `/s/{code}/close-batch` | Starter forces batch close (unvoted = no) |
+| POST | `/s/{code}/keep` | `{meal_ids: []}` — resolve over-target keeps (D13) |
+| POST | `/s/{code}/next` | Advance: next batch for the track, or next track, or complete |
+| POST | `/s/{code}/finish` | Mark session complete (targets met) |
+| GET | `/history` | Completed sessions, newest first, with kept meals per track |
+| POST | `/sessions/expire-stale` | (ops) mark sessions older than 24h as expired |
 
-## 9. Round lifecycle & common-ground algorithm
+## 9. Session lifecycle (the core algorithm)
 
-### 9.1 Lifecycle
+### 9.1 Setup
 
-```
-[create: pick pool mode] → voting → results → decided
-                               ↑ closed manually (starter) or auto (all joined participants voted)
-```
+`/sessions/new`: starter sets `dinner_target`, `lunch_target`, `batch_size` (15–20, default 15). POST creates the session (`status=voting`, code per D3). The **active track starts as `dinner`** if `dinner_target > 0`, else `lunch` (D10).
 
-- **voting**: participants join (`/join` → PIN → session), see meal cards, vote. Votes are upserts (`UNIQUE(round, person, meal)`).
-- **results**: computed survivors shown; per-meal counts NOT shown (just who's in — privacy: no tally, ever, in any client response).
-- **decided**: starter picks a card or rolls; `round.decided_meal_id`, `finished_at` set; meal `times_cooked += 1`, `last_cooked_at = now`.
-
-### 9.2 Pool sampling (exact)
-
-- `all`: all `is_active` meals ordered by category/name. If > 40, the picker shows a soft warning ("that's N meals — most households do better with a category or tag") but allows proceeding.
-- `category`: `is_active` meals in the chosen category.
-- `tag`: `is_active` meals with the chosen tag.
-- `favorites`: `is_active` meals in `favorite`.
-- `not-recently`: all active meals **sorted** by `last_cooked_at` (NULLs first) — a sort mode, not a filter.
-- `surprise`: `random.sample(active_meals, min(10, len))`, seeded per round (reproducible in tests).
-
-### 9.3 Common-ground computation (the core function)
+### 9.2 Batch assembly (exact)
 
 ```
-participants = [p in round_participants where count(votes by p in round) >= 1]
-for meal in round_meals:
-    votes_on_meal = votes for meal by participants
-    survivors = [meal for meal in round_meals
-                 if len(votes_on_meal) == len(participants)
-                 and all(v.choice == 'yes' for v in votes_on_meal)]
+pool = active meals where (type == track or type == "both")
+       and meal NOT IN (meals already in any batch of this session)
+batch = shuffle(pool)[:min(batch_size, len(pool))]
 ```
 
-- Participants who joined but never voted do **not** block (starter can close with stragglers).
-- `not_tonight` and `no` both exclude tonight; they are stored distinctly (D4/D5).
-- Empty survivors → results page shows "no common ground tonight" + guidance (narrow the pool / pick manually / surprise me) — never a dead end.
+- If `pool` is empty → the track is stuck: show the household a clear message + CTA ("add meals / retag meals as this type / lower the target"), offer to finish the session with the current plan. Never a dead end.
+- Batch `seq` increments per batch; a batch belongs to exactly one track.
 
-### 9.4 Random choice (item 7)
+### 9.3 Voting
 
-D20-flavored roll: server picks uniformly from survivors (`random.choice`); client shows a brief dice animation, then reveals the meal. Manual pick is always available too.
+- Every session participant sees the **same batch** of meal cards (name, category, tags, type, recipe link if present, `times_kept` as "kept N× before").
+- Each participant votes `yes`/`no` per meal (one tap each; can change until batch closes).
+- **Auto-close** when every participant has voted on every meal in the batch. **Manual close** by starter anytime (unvoted meals count as `no`).
+- **Privacy invariant**: no client response during voting contains any vote data other than the caller's own. No tallies, no "x of y voted".
 
-### 9.5 Expiry
+### 9.4 Batch results & keeps (exact)
 
-Rounds in `voting` older than 24h are treated as `expired` (lazy check on access + a cheap cleanup endpoint). Expired rounds are not shown on home; history only ever shows `decided` rounds.
+```
+voters = participants in session who voted at least once in this batch
+unanimous = [meal in batch where every voter voted 'yes' on it]
+remaining_slots = track_target - kept_so_far(track)
+kept = unanimous[:remaining_slots] if len(unanimous) <= remaining_slots
+       else starter chooses via /keep (max remaining_slots)          # D13
+```
 
-## 10. Import pipeline (`scripts/import_legacy.py`)
+- Kept meals: `batch_meal.kept=1`, `meal.times_kept += 1`, `last_kept_at = now`.
+- Unanimous-but-not-kept (over-target rejects) are recorded as voted, not kept.
 
-Spec for the implementer — this is a self-contained, heavily testable slice.
+### 9.5 Progression
 
-- CLI: `--file reference/D20\ Dinner\ Decider.xlsx` (default), `--dry-run` (default), `--apply`, `--json` (machine-readable report).
-- Parse (openpyxl, read-only mode):
-  - iterate sheets in workbook order (index 1..8 → `Tab N`);
-  - skip row 1 (header: A1 == "Roll Result");
-  - skip rows where the meal cell (col B) is empty or whitespace;
-  - name = col B, strip + collapse internal whitespace (preserve case verbatim); if it contains a URL (`https?://\S+`), split the URL off into `source_url` and clean the remainder;
-  - `legacy_rolls` = int(col C) if numeric else 0;
-  - `source_url` = a URL in any trailing cell of the row (col D/E) or split off from the name (see above);
-  - `normalized_name` = `name.casefold()` + collapse.
-- Dedupe report (dry-run and apply):
-  - exact: `normalized_name` already seen in-file or already in DB → list both rows, flag `DUPLICATE`;
-  - fuzzy: difflib `SequenceMatcher.ratio(normalized) ≥ 0.85` → flag `POSSIBLE_DUPLICATE`;
-  - never auto-merge, never auto-skip on fuzzy; exact-dupes already in DB are skipped on `--apply` (reported).
-- Takeout auto-tag: curated casefold set `{"chili's","taco bell","mcdonald's","chick fil a","whataburger","subway","los hermanos","panda express","raising cane's","order pizza"}` → create/find tag `takeout`, link.
-- Output: per-tab counts, total meals, holes found (e.g. Sheet8), URLs captured, takeout tagged, duplicates/possible-duplicates, skipped-on-reapply.
-- `--apply` is idempotent: re-running against a populated DB skips exact normalized-name matches and reports them.
+```
+if track target met → switch to the other track if it still has a target → else complete
+else → next batch (seq + 1) for the same track
+```
+
+### 9.6 Completion
+
+`status=complete`, `finished_at=now`. Final screen = **the week's plan**: kept dinners list + kept lunches list, plus a link to history. This plan output is what feeds grocery planning done elsewhere (out of scope).
+
+### 9.7 Expiry
+
+Sessions in `voting` older than 24h are treated as `expired` (lazy check on access + a cleanup endpoint). History only shows `complete` sessions.
+
+## 10. Seed pipeline (replaces any import feature)
+
+- **`seed/meals.json`** (committed): 155 meals; schema + decisions documented in `seed/README.md`. Reviewable via diff.
+- **`scripts/build_seed.py`** (dev-time, M2): regenerates the JSON from `reference/D20 Dinner Decider.xlsx` — strip embedded URLs → `source_url`, collapse whitespace, `Tab N` categories, takeout auto-tag, `type: "dinner"` for all, Times Rolled ignored. Requires openpyxl (dev dependency only; **not a runtime dependency**).
+- **`scripts/seed.py`** (runtime, M2): loads the JSON into an empty DB — creates categories, meals, tags; dedupes by `normalized_name` (D11), logs skips; idempotent (safe to re-run). Run once during setup (`uv run scripts/seed.py`); README documents it. If the DB already has meals, it reports and does nothing.
+- Seed tests: 155 meals / 8 categories / 4 `source_url` / 10 takeout / chicken-parm dup logged / idempotent re-run.
 
 ## 11. Milestones & tasks
 
-Each milestone is one or more cycles; each task lists acceptance + verification. Verification commands are run by the lead after the implementer reports — never taken on faith.
+Each milestone is one or more cycles; acceptance criteria + verification commands. **The lead re-runs everything — a green self-report is never accepted.**
 
 ### M0 — Foundation (≈1–2 cycles)
 
 | Task | Acceptance |
 |---|---|
-| T0.1 Scaffold: `pyproject.toml` (uv), `.gitignore`, package layout `app/`, `tests/` | Fresh `uv sync` installs cleanly |
-| T0.2 DB layer: `db.py` (engine/session/init), settings | `DD_DB_PATH` respected; DB created on boot |
-| T0.3 Models: all §6 tables | Migration-less create-all; models import clean |
-| T0.4 App skeleton: `main.py`, session middleware (D10), health route, base template, static | `/health` → 200; session cookie round-trips |
-| T0.5 CI: `.github/workflows/ci.yml` (setup-uv, `ruff check .`, `pytest -q`) + ruff config | CI green on push |
+| T0.1 Scaffold: `pyproject.toml` (uv), `.gitignore`, package layout | Fresh `uv sync` installs cleanly |
+| T0.2 DB layer + settings (`DD_DB_PATH`, `DD_SECRET`, `DD_PORT`) | DB created on boot; env overrides work |
+| T0.3 Models: all §6 tables | Create-all works; models import clean |
+| T0.4 App skeleton: `main.py`, session middleware, health route, base template, static | `/health` → 200; session cookie round-trips |
+| T0.5 CI: `astral-sh/setup-uv`, `ruff check .`, `pytest -q` | CI green on push |
 
 Verify: `uv run pytest -q` green · `uv run ruff check .` clean · `uv run uvicorn app.main:app` serves `/` · CI green.
 
@@ -246,90 +250,87 @@ Verify: `uv run pytest -q` green · `uv run ruff check .` clean · `uv run uvico
 
 | Task | Acceptance |
 |---|---|
-| T1.1 Person CRUD routes + templates (list/add/edit PIN/deactivate) | CRUD from UI; inactive people can't join |
-| T1.2 PIN verify → signed session (`person_id`) | Wrong PIN rejected; correct PIN sets session |
-| T1.3 "Who am I" header (current person + switch) | Clear identity on every page |
+| T1.1 Person CRUD routes + templates | CRUD from UI; inactive people can't join |
+| T1.2 PIN verify → signed session | Wrong PIN rejected; correct PIN sets session |
+| T1.3 "Who am I" header | Clear identity on every page |
 
 Verify: unit + route tests for CRUD, PIN gate, session persistence.
 
-### M2 — Meal library + import (≈4–5 cycles)
+### M2 — Meal library + pre-seeded data (≈3–4 cycles)
 
 | Task | Acceptance |
 |---|---|
-| T2.1 Meal CRUD + library UI (list, search, category/tag filter, form, detail) | Full CRUD works |
-| T2.2 Archive/unarchive + favorite toggle (US2, US8 partial) | Archived hidden from pools; favorite flag works |
-| T2.3 Import CLI per §10 (parser, normalize, dedupe, takeout tag, dry-run/apply) | See §10 acceptance |
-| T2.4 Import tests against `reference/` file (structural invariants, not exact-count brittleness) | 8 tabs; ≥150 meals; 4 URLs; `Chicken parm` flagged dup; ≥10 takeout-tagged; re-run idempotent |
+| T2.1 Meal CRUD + library UI (title, type, category, tags, recipe link/text; search + filters) | Full CRUD; `times_kept` visible |
+| T2.2 Archive/unarchive | Archived meals leave session pools (test) |
+| T2.3 `scripts/build_seed.py` + regenerate + commit `seed/meals.json` | Regeneration matches the committed JSON (diff clean) |
+| T2.4 `scripts/seed.py` (idempotent, dedupe, logging) + seed tests | US1 acceptance (§5) |
 
-Verify: real-file import dry-run shows sane report; `--apply` → 155 meals, 8 categories, dupes listed; re-`--apply` skips cleanly.
+Verify: fresh DB → `uv run scripts/seed.py` → 155 meals, 8 categories, 4 URLs, 10 takeout, dup logged; re-run no-ops; seed tests green.
 
-### M3 — Rounds & voting (≈6–8 cycles — the core loop)
-
-| Task | Acceptance |
-|---|---|
-| T3.1 Round creation: picker (D6 modes) → round with code (D3) | Code unique; pool matches mode |
-| T3.2 Join flow: code → person → PIN → participant (US4) | Non-participant blocked from voting |
-| T3.3 Vote UI: meal cards (name, category, tags, image if any, last cooked) + yes/not-tonight/no | One-tap voting; per-card state shown |
-| T3.4 Vote endpoint upsert + **privacy** (no tallies to clients until closed) | Test: client response during voting contains zero other people's votes |
-| T3.5 Close voting (manual + auto) → survivors via §9.3 | Correct survivors for table-driven cases |
-| T3.6 Decide: manual pick + D20 roll (US6) | Recording works; counters update |
-| T3.7 Pool modes wired end-to-end | Each mode yields the right pool |
-
-Verify: **two-browser walkthrough** over LAN (start → join ×2 → vote → close → survivors → roll → history entry); empty-survivors case shows graceful path; privacy test green.
-
-### M4 — History & favorites (≈2 cycles)
+### M3 — Planning sessions & voting (≈6–8 cycles — the core loop)
 
 | Task | Acceptance |
 |---|---|
-| T4.1 History page (decided rounds, newest first, month filter) (US7) | Correct rows incl. meal/date/mode |
-| T4.2 Meal counters (`times_cooked`, `last_cooked_at`) on library | Update after decisions |
-| T4.3 Empty/error states (no meals, no rounds, no survivors, unknown code) | No 500s; friendly messages |
+| T3.1 Session creation: targets + batch size → code | Code unique; targets stored; active track = dinner |
+| T3.2 Join flow: code → person → PIN → participant | Non-participant blocked from voting |
+| T3.3 Batch assembly (§9.2) | Correct pool; no repeats within session; stuck-track path works |
+| T3.4 Vote UI: same cards for everyone; yes/no; change-until-close | One-tap voting; per-card state |
+| T3.5 Vote endpoint upsert + **privacy** (§9.3) | Test: no other person's votes in any voting-phase response |
+| T3.6 Batch close (auto + manual) → unanimous computation → keeps (incl. over-target `/keep`) | Correct keeps for table-driven cases; counters update (D9) |
+| T3.7 Track progression + completion + week summary (§9.5–9.6) | Full session ends with the week's plan |
 
-Verify: history correct after multi-round test; counters correct; 404/error paths tested.
+Verify: **two-browser walkthrough** (start → join ×2 → vote → close → keeps → next batch → … → targets met → summary); stuck-track and over-target cases exercised; privacy test green.
+
+### M4 — History & favorites signal (≈2 cycles)
+
+| Task | Acceptance |
+|---|---|
+| T4.1 History page: completed sessions with kept meals per track (US7) | Correct rows incl. meal/date/targets |
+| T4.2 Library `times_kept` / `last_kept_at` + "most kept" sort | Counters correct after sessions |
+| T4.3 Empty/error states (no meals of a type, no sessions, unknown code) | No 500s; friendly messages |
 
 ### M5 — Hardening, polish, docs (≈2–3 cycles)
 
 | Task | Acceptance |
 |---|---|
-| T5.1 Responsive pass — phones are the critical path (vote screen) | Vote screen usable on 360px-wide viewport |
-| T5.2 README "Run it" (uv sync → uvicorn → import), backup note (copy the .db), troubleshooting | Fresh clone → running in 3 commands |
-| T5.3 Final verification: full suite + ruff + fresh-checkout run + full walkthrough checklist | DoD (§15) all checked |
+| T5.1 Responsive pass — phones are the critical path (vote screen) | Vote screen usable at 360px width |
+| T5.2 README "Run it": uv sync → seed → uvicorn; backup (copy the .db); troubleshooting | Fresh clone → running in 3 commands |
+| T5.3 Final verification: full suite + ruff + fresh-checkout run + walkthrough checklist | DoD (§15) all checked |
 | T5.4 (optional) seed/demo script | Not required for DoD |
 
 ## 12. Testing & CI strategy
 
-- **Unit (pytest)**: `common_ground` survivors (table-driven: all-yes, one no, one not-tonight, skipped participant, empty), pool sampling (surprise determinism via seed, caps), `codes` (format regex + uniqueness), import parser (normalize/dedupe/takeout).
-- **Integration**: import against the real `reference/` file (structural invariants); full round flow via FastAPI `TestClient` (US1–US8 smoke).
+- **Unit (pytest)**: `session_logic` — batch assembly (pool filter, no-repeat, min cap), unanimous computation (all-yes, one no, non-voter, empty), over-target keep resolution, track progression (dinner→lunch→complete, stuck track), codes (format + uniqueness), seed (counts, dedupe, idempotency).
+- **Integration**: full session flow via FastAPI `TestClient` (US1–US8 smoke); seed against a temp DB.
 - **Privacy test** (M3): assert no vote data other than the caller's own appears in any voting-phase response.
-- **CI**: GitHub Actions — `astral-sh/setup-uv`, `uv sync`, `ruff check .`, `pytest -q`, on push + PR.
-- Rule: **the lead re-runs everything; a green self-report is never accepted.**
+- **CI**: GitHub Actions — setup-uv, `uv sync`, `ruff check .`, `pytest -q`, on push + PR.
+- **Rule**: the lead re-runs everything; a green self-report is never accepted.
 
 ## 13. Risks & mitigations
 
 | Risk | Mitigation |
 |---|---|
-| Common ground too often empty (family with one picky eater + hard constraints) | Graceful "no common ground" path; manual pick always available; pool modes to narrow; looser rules are a designed V1.5 feature — tracked, not improvised |
-| 155-meal pool too big to vote on | Pool >40 warning; category/tag/favorites/surprise modes front-and-center |
-| Vote privacy leaks via timing/results | Results strictly server-gated until close; no tally in any response; cookie httponly |
-| Import mess (dupes, casing, holes) | Dry-run report, exact+fuzzy dedupe flags, human decides, idempotent re-run |
-| Scope creep toward AI | Hard non-goals + stop criteria + REQUESTS channel for ideas |
-| Household doesn't adopt it | Success criterion is real usage; stop criteria explicit; MVP is intentionally small |
+| Unanimous-yes keeps too rare → session stalls | Graceful stuck-track/stall paths; over-target keeps; manual finish; pivot to looser keep rules tracked for post-MVP, not improvised |
+| Lunch track empty at seed (all meals are `dinner` type) | Clear CTA + "add/retag lunch meals" path in-app; REQUESTS.md tracks a starter lunch set |
+| Vote privacy leaks | Results strictly server-gated until batch close; no tally in any response; cookie httponly |
+| Over-target batches create friction | `/keep` multi-select, capped at remaining slots |
+| Scope creep (grocery list, recipe parsing, AI) | Explicit non-goals + stop criteria + REQUESTS channel |
+| Household doesn't adopt it | Success criterion is real usage; stop criteria explicit; MVP is small |
 
-## 14. Open questions (resolve through use, not upfront design — per README)
+## 14. Open questions (resolve through use; per Charlie's original note, don't design to death)
 
 | Question | MVP default | When to revisit |
 |---|---|---|
-| How many meals in a round? | Starter's choice; soft warning >40 | After real rounds |
-| Vote whole pool or progressively narrow? | Whole pool | After real rounds |
-| Does `not_tonight` count as rejection long-term? | Neutral (stored distinctly; no learning in MVP) | V1.5 learning design |
-| Hard-no auto-hide? | Out of MVP (D4) | V1.5 |
-| Archived meals re-offered? | Manual unarchive only | V1.5 stale suggestions |
-| Random or manual default? | Both, always | After real rounds |
-| How much dice ritual to keep? | D20-flavored roll on survivors | After real rounds |
-| New-recipe probation pool? | N/A (no ingestion in MVP) | V2 with AI discovery |
+| Batch size 15 vs 20 | 15, settable at session creation | After real sessions |
+| Track order | Dinner first, then lunch | After real sessions |
+| Does a `both` meal count toward either track? | Yes | After real sessions |
+| Over-target keeps | Starter chooses | After real sessions |
+| Favorites threshold | `times_kept` count, no threshold in MVP | When favorites surface (V2) |
+| Should the dice ritual return as a fun pick? | Out of MVP | Charlie's call; POST-V1 "later" list |
+| Lunch meal starter set | None — household adds/retags | REQUESTS.md |
 
 ## 15. Definition of done & stop criteria
 
-DoD: **CHARTER.md §"Definition of done"** — all five household capabilities working from household devices, plus the README success criterion. Stop criteria: **CHARTER.md §"Stop criteria"** — budget (25 cycles), non-adoption after a fair trial, chronically empty common ground, or Charlie's call.
+DoD: **CHARTER.md §"Definition of done"** — weekly sessions with pre-seeded library, private yes/no batches, unanimous keeps until targets met, kept records + history, meal CRUD/archive. Stop criteria: **CHARTER.md §"Stop criteria"** — budget (25 cycles), non-adoption after a fair trial (2–3 sessions), chronically stalled sessions, or Charlie's call.
 
 **Approval gate:** this plan and the charter are pending Charlie's sign-off. M0 does not start until approval.
