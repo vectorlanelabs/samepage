@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Dinner Decider{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">Dinner Decider</div>
+    <nav class="nav">
+      <a class="nav-link" href="/">Home</a>
+      <a class="nav-link" href="/library">Meal Library</a>
+      <a class="nav-link" href="/history">History</a>
+      <a class="nav-link" href="/people">People</a>
+    </nav>
+    <div class="sidebar-spacer"></div>
+    <a class="pill sidebar-cta" href="/sessions/new">Start a session →</a>
+  </aside>
+
+  <div class="topbar">
+    <div class="brand">Dinner Decider</div>
+    <nav class="nav">
+      <a class="nav-link" href="/">Home</a>
+      <a class="nav-link" href="/library">Meal Library</a>
+      <a class="nav-link" href="/history">History</a>
+      <a class="nav-link" href="/people">People</a>
+    </nav>
+    <a class="pill topbar-cta" href="/sessions/new">Start a session →</a>
+  </div>
+
+  <main class="main">
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,229 @@
+/* Dinner Decider — design system (T0.4), high fidelity to the Design Handoff.
+   Tokens are the exact values from `Design Handoff/Dinner Decider.dc.html`. */
+
+:root {
+  --dd-bg: oklch(0.96 0.02 250);
+  --dd-card: #fff;
+  --dd-text: oklch(0.25 0.02 260);
+  --dd-text-muted: oklch(0.55 0.02 260);
+  --dd-primary: oklch(0.7 0.16 300);
+  --dd-primary-strong: oklch(0.4 0.16 300);
+  --dd-primary-soft: oklch(0.94 0.05 300);
+  --dd-lunch: oklch(0.72 0.14 140);
+  --dd-lunch-strong: oklch(0.5 0.12 140);
+  --dd-lunch-soft: oklch(0.95 0.03 140);
+  --dd-dinner: oklch(0.55 0.14 25);
+  --dd-dinner-soft: oklch(0.95 0.03 25);
+  --dd-radius-pill: 999px;
+  --dd-radius-card: 24px;
+  --dd-radius-row: 16px;
+  --dd-radius-input: 12px;
+  --dd-shadow-card: 0 14px 30px rgba(60,50,110,.10);
+  --dd-shadow-stat: 0 8px 20px rgba(60,50,110,.08);
+  --dd-font-display: 'Fredoka', sans-serif;
+  --dd-font-body: 'Nunito Sans', sans-serif;
+  --dd-bp-desktop: 900px;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  font-family: var(--dd-font-body);
+  color: var(--dd-text);
+  background: var(--dd-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ---------- Shell ---------- */
+
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ---------- Sidebar (desktop) ---------- */
+
+.sidebar {
+  width: 240px;
+  flex: none;
+  background: var(--dd-card);
+  padding: 32px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-right: 1px solid oklch(0.93 0.01 260);
+}
+
+.brand {
+  font-family: var(--dd-font-display);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--dd-text);
+  margin-bottom: 20px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nav-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-family: var(--dd-font-body);
+  font-weight: 700;
+  font-size: 13px;
+  color: oklch(0.4 0.02 260);
+  cursor: pointer;
+}
+
+.nav-link:hover {
+  background: var(--dd-primary-soft);
+  color: var(--dd-primary-strong);
+}
+
+.sidebar-spacer { flex: 1; }
+
+/* ---------- Top bar (mobile only) ---------- */
+
+.topbar { display: none; }
+
+/* ---------- Pills / buttons ---------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: var(--dd-radius-pill);
+  background: var(--dd-primary);
+  color: #fff;
+  font-family: var(--dd-font-display);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 13px 26px;
+}
+
+.pill:hover { background: var(--dd-primary-strong); }
+
+/* ---------- Main content ---------- */
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.content {
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  padding: 32px;
+}
+
+/* ---------- Home ---------- */
+
+.hero-card {
+  background: var(--dd-card);
+  border-radius: var(--dd-radius-card);
+  padding: 40px;
+  box-shadow: var(--dd-shadow-card);
+}
+
+.hero-title {
+  font-family: var(--dd-font-display);
+  font-weight: 600;
+  font-size: 32px;
+  line-height: 1.15;
+  color: var(--dd-text);
+  margin: 0;
+}
+
+.hero-cta { margin-top: 20px; }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.stat-card {
+  display: block;
+  text-align: left;
+  border: none;
+  border-radius: 20px;
+  background: var(--dd-card);
+  padding: 20px;
+  cursor: pointer;
+  box-shadow: var(--dd-shadow-stat);
+}
+
+.stat-card:hover { box-shadow: var(--dd-shadow-card); }
+
+.stat-label {
+  font-family: var(--dd-font-body);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--dd-text);
+}
+
+.stat-count {
+  font-family: var(--dd-font-body);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--dd-text-muted);
+  margin-top: 6px;
+}
+
+/* ---------- Mobile (<900px) ---------- */
+
+@media (max-width: 899px) { /* --dd-bp-desktop: 900px */
+  .sidebar { display: none; }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--dd-card);
+    padding: 14px 16px;
+    border-bottom: 1px solid oklch(0.93 0.01 260);
+  }
+
+  .topbar .brand { margin-bottom: 0; margin-right: 6px; }
+
+  .topbar .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: 1;
+    gap: 6px;
+  }
+
+  .topbar .nav-link {
+    width: auto;
+    padding: 8px 14px;
+    border-radius: var(--dd-radius-pill);
+    font-size: 12px;
+  }
+
+  .topbar .pill {
+    padding: 9px 14px;
+    font-size: 12px;
+  }
+
+  .main { min-width: 0; }
+
+  .content { padding: 20px 16px; }
+
+  .stat-grid { grid-template-columns: 1fr; }
+}

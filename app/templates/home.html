@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Home · Dinner Decider{% endblock %}
+{% block content %}
+<section class="hero-card">
+  <h1 class="hero-title">What's for dinner?</h1>
+  <a class="pill hero-cta" href="/sessions/new">Start a session →</a>
+</section>
+<section class="stat-grid">
+  <a class="stat-card" href="/library">
+    <div class="stat-label">📖 Meal Library</div>
+    <div class="stat-count">{{ active_meal_count }} meals</div>
+  </a>
+  <a class="stat-card" href="/history">
+    <div class="stat-label">🗓 History</div>
+    <div class="stat-count">{{ history_count }} weeks planned</div>
+  </a>
+  <a class="stat-card" href="/people">
+    <div class="stat-label">👥 People</div>
+    <div class="stat-count">{{ active_people_count }} active</div>
+  </a>
+</section>
+{% endblock %}
