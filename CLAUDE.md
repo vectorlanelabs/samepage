@@ -30,11 +30,12 @@ The app exists to **replace** the spreadsheet-and-dice ritual — it was never a
 7. **State transitions are idempotent** — double-submit close/keep/next/finish must apply exactly once.
 8. **One slice, one commit**, conventional messages (`feat:`, `fix:`, `test:`, `chore:`).
 9. Follow the lead's delegation contract exactly: stated files, do-NOT list, verification commands with expected outputs, honest-failure escape hatch.
+10. **NEVER create, push, or retry a CI workflow.** CI is out-of-scope for this project and is NOT owned by the implementer or the dev-loop. Do not add, modify, or push any `.github/workflows/` file, do not enable Actions, and do not push extra commits to retry a CI failure. CI does not start until Charlie specifies a hosting/deploy target and explicitly approves it. If anything references CI, flag it in REQUESTS.md and move on — never chase a green CI. (Charlie's GitHub is a free account; retrying failed CI burns Actions minutes and risks locking him out.)
 
 ## Files you own / never touch
 
-- **Own**: `app/` (incl. `api.py`, `mcp.py`), `tests/`, `scripts/` (seed.py, build_seed.py), `alembic/`, `pyproject.toml`, `.github/`, deployment files (Dockerfile / compose / Caddyfile when they land in M5).
-- **Never touch**: `CHARTER.md`, `ROADMAP.md`, `docs/` (PLAN-v1-mvp.md, POST-V1.md, ORIGINAL-CONCEPT.md, INITIAL-PLAN-REVIEW.md, DEVLOG.md), `REQUESTS.md`, `CLAUDE.md`, `reference/` (read-only source data), `seed/meals.json` (lead-owned data — regenerate via `scripts/build_seed.py`, never hand-edit).
+- **Own**: `app/` (incl. `api.py`, `mcp.py`), `tests/`, `scripts/` (seed.py, build_seed.py), `alembic/`, `pyproject.toml`, deployment files (Dockerfile / compose / Caddyfile when they land in M5). **Note: `.github/` is NOT owned — CI/workflows are out-of-scope (see Non-negotiables #10). Do not create or edit any `.github/` content.**
+- **Never touch**: `CHARTER.md`, `ROADMAP.md`, `docs/` (PLAN-v1-mvp.md, POST-V1.md, ORIGINAL-CONCEPT.md, INITIAL-PLAN-REVIEW.md, DEVLOG.md), `REQUESTS.md`, `CLAUDE.md`, `.github/`, `reference/` (read-only source data), `seed/meals.json` (lead-owned data — regenerate via `scripts/build_seed.py`, never hand-edit).
 - Commit messages and branch hygiene are the lead's job. Don't push; the lead lands slices.
 
 ## Reporting format (after every slice)

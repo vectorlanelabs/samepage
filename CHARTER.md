@@ -71,7 +71,7 @@ See `docs/PLAN-v1-mvp.md` §11 for task detail.
 
 | ID | Milestone | Status |
 |---|---|---|
-| M0 | Foundation: scaffolding, FastAPI skeleton, SQLite models, **Alembic migrations**, session, CI | [ ] | First cycle after charter approval |
+| M0 | Foundation: scaffolding, FastAPI skeleton, SQLite models, **Alembic migrations**, session | [ ] | First cycle after charter approval. **CI is explicitly DEFERRED (removed from M0): no CI/workflow until Charlie specifies a hosting/deploy target and explicitly approves. Do not create or push any CI config.** |
 | M1 | Household profiles: people (hashed PINs, admin flag), deactivate-not-delete | [ ] | |
 | M2 | Meal library CRUD + pre-seeded data (seed loader + seed tests) | [ ] | `seed/meals.json` already committed |
 | M3 | Planning sessions & voting: lobby/roster freeze, targets, batches, yes/no voting, keeps, completion | [ ] | Core loop; two-browser walkthrough |
