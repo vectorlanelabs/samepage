@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Approved by Charlie 2026-08-26 — M0 in progress** (Plan 1; autonomous dev loop running) |
+| **Status** | **Approved by Charlie 2026-08-26 — M0 complete, M1 next** (autonomous dev loop running) |
 | **Repo** | `vectorlanelabs/dinnerdecider` |
 | **Type** | Household web app — web-first, VPS-hosted |
 | **Budget** | 25 directed cycles for v1 MVP (or milestone-list completion, whichever comes first) |

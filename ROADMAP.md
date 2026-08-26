@@ -8,7 +8,7 @@ Product shape: **weekly planning sessions** — replacing the spreadsheet-and-di
 
 | ID | Milestone | Status | Notes |
 |---|---|---|---|
-| M0 | Foundation: scaffolding, FastAPI skeleton, SQLite models, **Alembic migrations**, session, security middleware, CI | [~] | In progress — cycle 1 (2026-08-26) |
+| M0 | Foundation: scaffolding, FastAPI skeleton, SQLite models, **Alembic migrations**, session, security middleware, CI | [x] | Landed 2026-08-26 (`0a786dc`); 22 tests; review fixes applied |
 | M1 | Household profiles: people (hashed PINs, admin flag), deactivate-not-delete | [ ] | |
 | M2 | Meal library CRUD + pre-seeded data (seed loader + tests) | [ ] | `seed/meals.json` already committed |
 | M3 | Planning sessions & voting: lobby/roster freeze, targets, batches, yes/no voting, keeps, completion | [ ] | Core loop; two-browser walkthrough |

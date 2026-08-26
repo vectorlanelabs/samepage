@@ -39,3 +39,28 @@ Chronological record of work on Dinner Decider. Oldest at top.
 - **M0 scope locked** (plan §11): pyproject/uv scaffold, settings (DD_DB_PATH/SECRET/ACCESS_KEY/API_KEY/PORT/ENV), full §6 models, Alembic initial migration, FastAPI skeleton + session/origin-check middleware, design-system base template + home screen, CI. Design system rides in T0.4 (base template + static).
 - **Safety net scheduled**: hourly resume-the-loop cron (repo is the memory; TUI delivery is local-only).
 - **Status**: M0 dispatched to implementer (deepseek-v4-flash). Next: independent verify → adversarial review (strong-model override) → land.
+
+## 2026-08-26 — M0 landed (cycle 1 complete)
+
+**Shipped** (`0a786dc`, one slice): uv/uv.lock project, `app/` (settings, db, models — all 9 §6 tables, security middleware, main, routes/home), design-system shell (sidebar/topbar, exact handoff tokens, home screen with live counts), Alembic 0001, vendored HTMX, 22 tests, CI.
+
+**Process**: implementer (deepseek-v4-flash) → lead re-verified everything (14→22 tests, live smoke, WAL/FK, revert-and-run spot check on the origin middleware — test fails when middleware disabled) → Oscar review on gpt-5.6-luna (BLOCKING, 5 findings, all live-reproduced) → fix slice 1 → re-review (MAJOR, 2 remaining) → fix slice 2 → landed.
+
+**Full findings disposition (nothing left behind):**
+| Finding | Sev | Disposition |
+|---|---|---|
+| Fresh boot didn't create DB (home 500) | blocking | **fixed** — lifespan runs `alembic upgrade head`, fail-fast; live 200 + DB exists; `test_fresh_boot` |
+| Origin check failed open (null/malformed/non-http) | major | **fixed** — fail-closed (403 on null/ftp/malformed; absent allowed by design, documented); live 403s; probe-app tests w/ mutation asserts |
+| `data/secret.key` world-readable (0644) | major | **fixed** — created 0600 (O_EXCL), chmod self-heal on load; live `stat` 600 |
+| Migration-created DB 0644 until first engine connect (re-review) | major | **fixed** — `_run_migrations` chmods target 0600 post-upgrade (log-only on failure); regression assert |
+| Enum fields unconstrained | minor | **fixed** — 6 CHECK constraints in models + amended (uncommitted) 0001; raw-insert IntegrityError test |
+| Origin "matching" test vacuous (405, no mutation) | minor | **fixed** — probe app with real POST /probe + mutation-recorded assertions (6 cases) |
+| Existing `data/` dir not tightened (755) (re-review) | minor | **fixed** — `_ensure_private_dir` helper (mkdir 0700 + chmod existing 0700); tests |
+| Raw sqlite3 connections don't enforce FK | — | **rejected** — standard SQLite semantics; the app's supported path enforces FK+WAL on every app connection |
+| `itsdangerous` dep added beyond M0 spec | — | **accepted** (lead) — required by Starlette SessionMiddleware (unconditional import); transparently commented |
+| StarletteDeprecationWarning (httpx→httpx2) | nit | **deferred** — cosmetic; revisit when fastapi/httpx move |
+| Third Oscar pass on final perms micro-slice | — | **conscious skip** (logged) — lead-verified live + direct mode-assert regression tests; same finding class already reviewed |
+
+**CI note**: workflow registered/active but the commit that adds a workflow file doesn't trigger it (GitHub quirk) — the run fires on the next push; verifying on the state-file push.
+
+**Next**: M1 — household profiles (hashed PINs, admin flag, deactivate-not-delete, people UI per handoff screen 10).
