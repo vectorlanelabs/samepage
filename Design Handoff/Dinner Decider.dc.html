@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Nunito Sans',sans-serif}</style>
+</helmet>
+
+<div style="position:fixed;top:14px;right:14px;display:flex;gap:4px;background:#fff;border-radius:999px;padding:4px;box-shadow:0 8px 20px rgba(60,50,110,.18);z-index:50;">
+<button onClick="{{ setDesktopView }}" style="{{ desktopToggleStyle }}">🖥 Desktop</button>
+<button onClick="{{ setMobileView }}" style="{{ mobileToggleStyle }}">📱 Mobile</button>
+</div>
+
+<div style="display:flex;flex-direction:{{ outerDirection }};min-height:100vh;background:oklch(0.96 0.02 250);">
+
+<div style="{{ sidebarStyle }}">
+<div style="{{ brandWrapStyle }}">
+<div style="font:600 17px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">Dinner Decider</div>
+</div>
+<div style="{{ navWrapStyle }}">
+<sc-for list="{{ navItems }}" as="nav" hint-placeholder-count="4">
+<button onClick="{{ nav.click }}" style="{{ nav.style }}">{{ nav.label }}</button>
+</sc-for>
+</div>
+<div style="{{ sidebarSpacerStyle }}"></div>
+<button onClick="{{ goStart }}" style="{{ sidebarCtaStyle }}">Start a session →</button>
+</div>
+
+<div style="flex:1;min-width:0;{{ mainPadStyle }}box-sizing:border-box;">
+<div style="width:min({{ contentMaxWidth }},100%);box-sizing:border-box;margin:0 auto;">
+
+<!-- ============ HOME ============ -->
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+<div style="background:#fff;border-radius:24px;padding:40px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<div style="font:600 32px/1.15 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">What's for dinner?</div>
+<button onClick="{{ goStart }}" style="margin-top:20px;padding:14px 26px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Start a session →</button>
+</div>
+<div style="display:grid;grid-template-columns:{{ gridColsHome }};gap:16px;margin-top:16px;">
+<button onClick="{{ goManage }}" style="text-align:left;border:none;border-radius:20px;background:#fff;padding:20px;cursor:pointer;box-shadow:0 8px 20px rgba(60,50,110,.08);">
+<div style="font:700 15px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">📖 Meal Library</div>
+<div style="font:700 12px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">{{ activeMealCount }} meals</div>
+</button>
+<button onClick="{{ goHistory }}" style="text-align:left;border:none;border-radius:20px;background:#fff;padding:20px;cursor:pointer;box-shadow:0 8px 20px rgba(60,50,110,.08);">
+<div style="font:700 15px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">🗓 History</div>
+<div style="font:700 12px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">{{ historyCount }} weeks planned</div>
+</button>
+<button onClick="{{ goPeople }}" style="text-align:left;border:none;border-radius:20px;background:#fff;padding:20px;cursor:pointer;box-shadow:0 8px 20px rgba(60,50,110,.08);">
+<div style="font:700 15px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">👥 People</div>
+<div style="font:700 12px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">{{ activePeopleCount }} active</div>
+</button>
+</div>
+</sc-if>
+
+<!-- ============ SESSION SETUP ============ -->
+<sc-if value="{{ isStart }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<div style="font:600 26px/1.15 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">Let's plan the week!</div>
+<div style="margin-top:14px;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;background:oklch(0.94 0.05 300);border-radius:999px;">
+<span style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.5 0.14 300);">JOIN CODE</span>
+<span style="font:700 17px 'Fredoka',sans-serif;color:oklch(0.4 0.16 300);">TACO-4471</span>
+</div>
+
+<div style="display:grid;grid-template-columns:{{ gridColsStart }};gap:28px;margin-top:22px;">
+<div>
+<div style="display:flex;gap:10px;">
+<div style="flex:1;background:oklch(0.94 0.03 25);border-radius:18px;padding:12px 14px;">
+<div style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.45 0.05 25);">Dinners this week</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+<button onClick="{{ decDinner }}" style="width:30px;height:30px;border-radius:999px;border:none;background:#fff;color:oklch(0.55 0.14 25);font:700 16px 'Fredoka',sans-serif;cursor:pointer;">−</button>
+<span style="font:700 22px 'Fredoka',sans-serif;color:oklch(0.55 0.14 25);flex:1;text-align:center;">{{ dinnerTarget }}</span>
+<button onClick="{{ incDinner }}" style="width:30px;height:30px;border-radius:999px;border:none;background:#fff;color:oklch(0.55 0.14 25);font:700 16px 'Fredoka',sans-serif;cursor:pointer;">+</button>
+</div>
+</div>
+<div style="flex:1;background:oklch(0.94 0.03 140);border-radius:18px;padding:12px 14px;">
+<div style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.4 0.05 140);">Lunches this week</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+<button onClick="{{ decLunch }}" style="width:30px;height:30px;border-radius:999px;border:none;background:#fff;color:oklch(0.5 0.12 140);font:700 16px 'Fredoka',sans-serif;cursor:pointer;">−</button>
+<span style="font:700 22px 'Fredoka',sans-serif;color:oklch(0.5 0.12 140);flex:1;text-align:center;">{{ lunchTarget }}</span>
+<button onClick="{{ incLunch }}" style="width:30px;height:30px;border-radius:999px;border:none;background:#fff;color:oklch(0.5 0.12 140);font:700 16px 'Fredoka',sans-serif;cursor:pointer;">+</button>
+</div>
+</div>
+</div>
+<sc-if value="{{ lunchTargetZero }}" hint-placeholder-val="{{ false }}">
+<div style="font:600 11px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:8px;">0 lunches = a dinner-only week</div>
+</sc-if>
+</div>
+
+<div>
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.5 0.02 260);">Who's in the lobby</div>
+<div style="font:600 10.5px 'Nunito Sans',sans-serif;color:oklch(0.6 0.02 260);margin-top:2px;">Roster freezes the moment voting starts.</div>
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+<sc-for list="{{ people }}" as="person" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:oklch(0.97 0.015 260);border-radius:16px;">
+<span style="width:34px;height:34px;flex:none;border-radius:999px;color:#fff;display:flex;align-items:center;justify-content:center;font:700 13px 'Fredoka',sans-serif;{{ person.avatarStyle }}">{{ person.initial }}</span>
+<span style="font:700 14px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);flex:1;">{{ person.name }}</span>
+<sc-if value="{{ showLunchToggle }}" hint-placeholder-val="{{ true }}">
+<button onClick="{{ person.toggle }}" style="{{ person.toggleStyle }}">{{ person.trackLabel }}</button>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+
+<button onClick="{{ startVoting }}" style="margin-top:24px;padding:14px 28px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Start voting →</button>
+</div>
+</sc-if>
+
+<!-- ============ VOTE ============ -->
+<sc-if value="{{ isVote }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<div style="display:flex;align-items:center;justify-content:space-between;">
+<div style="font:600 22px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">{{ trackLabel }} · Batch {{ batchNumber }}</div>
+<div style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.55 0.16 300);background:oklch(0.94 0.05 300);padding:4px 10px;border-radius:999px;flex:none;">{{ batchTotal }} meals</div>
+</div>
+
+<div style="display:flex;gap:6px;margin-top:16px;align-items:center;flex-wrap:wrap;">
+<sc-for list="{{ switchers }}" as="sw" hint-placeholder-count="5">
+<button onClick="{{ sw.click }}" style="{{ sw.avatarButtonStyle }}">{{ sw.initial }}</button>
+</sc-for>
+<span style="margin-left:10px;font:700 13px 'Nunito Sans',sans-serif;color:oklch(0.3 0.02 260);">Voting as {{ currentPerson.name }}</span>
+</div>
+<div style="font:600 10.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:4px;">Nobody else can see this device's picks. Votes are pre-filled for this preview — click any Yes/No to change one.</div>
+
+<div style="display:grid;grid-template-columns:{{ gridColsVote }};gap:12px;margin-top:16px;">
+<sc-for list="{{ batchCards }}" as="card" hint-placeholder-count="12">
+<div style="background:oklch(0.97 0.015 260);border-radius:18px;padding:14px;">
+<div style="font:700 14px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ card.name }}</div>
+<div style="display:flex;gap:6px;margin-top:10px;">
+<button onClick="{{ card.voteYes }}" style="{{ card.yesStyle }}">Yes</button>
+<button onClick="{{ card.voteNo }}" style="{{ card.noStyle }}">No</button>
+</div>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;align-items:center;gap:16px;margin-top:20px;">
+<sc-if value="{{ allDone }}" hint-placeholder-val="{{ false }}">
+<button onClick="{{ reveal }}" style="padding:14px 26px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Close batch →</button>
+</sc-if>
+<sc-if value="{{ notAllDone }}" hint-placeholder-val="{{ true }}">
+<div style="padding:14px 22px;border-radius:999px;background:oklch(0.94 0.01 260);color:oklch(0.5 0.02 260);font:700 13px 'Nunito Sans',sans-serif;">{{ pendingLabel }}</div>
+</sc-if>
+<button onClick="{{ resetSession }}" style="border:none;background:none;color:oklch(0.6 0.02 260);font:600 12px 'Nunito Sans',sans-serif;cursor:pointer;text-decoration:underline;margin-left:auto;">Cancel session</button>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ REVEAL ============ -->
+<sc-if value="{{ isReveal }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+
+<sc-if value="{{ revealPending }}" hint-placeholder-val="{{ true }}">
+<span style="font:600 21px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">Batch results</span>
+<div style="font:600 12.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:4px;">As host, you decide anything that isn't unanimous.</div>
+
+<sc-if value="{{ hasAutoKept }}" hint-placeholder-val="{{ false }}">
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.5 0.12 140);margin-top:18px;">Unanimous — kept automatically</div>
+<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+<sc-for list="{{ autoKeptMeals }}" as="m" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:8px;background:oklch(0.95 0.03 140);border-radius:14px;padding:10px 12px;">
+<span style="width:20px;height:20px;flex:none;border-radius:999px;background:oklch(0.72 0.14 140);color:#fff;display:flex;align-items:center;justify-content:center;font:700 11px sans-serif;">✓</span>
+<span style="font:700 13px 'Nunito Sans',sans-serif;color:oklch(0.3 0.05 140);">{{ m.name }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ needsChoice }}" hint-placeholder-val="{{ false }}">
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.5 0.12 140);margin-top:18px;">Unanimous — more than you need, pick {{ remainingSlots }}</div>
+<div style="font:600 11px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:2px;">{{ chosenCountLabel }}</div>
+<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+<sc-for list="{{ unanimousChoices }}" as="m" hint-placeholder-count="3">
+<button onClick="{{ m.toggle }}" style="{{ m.rowStyle }}">
+<span>{{ m.name }}</span><span>{{ m.mark }}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasMajority }}" hint-placeholder-val="{{ false }}">
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.14 300);margin-top:18px;">Majority — your call, {{ majoritySlotsLabel }}</div>
+<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+<sc-for list="{{ majorityChoices }}" as="m" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:8px;background:oklch(0.97 0.015 260);border-radius:14px;padding:10px 12px;">
+<span style="flex:1;font:700 13px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ m.name }}</span>
+<span style="font:700 10.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);">{{ m.countLabel }}</span>
+<button onClick="{{ m.toggle }}" style="{{ m.btnStyle }}">{{ m.btnLabel }}</button>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasNotKept }}" hint-placeholder-val="{{ false }}">
+<div style="font:600 11.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:14px;">{{ revealNotKeptCount }} didn't make it this batch.</div>
+</sc-if>
+
+<button onClick="{{ confirmReveal }}" style="margin-top:20px;padding:14px 26px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Confirm keeps →</button>
+</sc-if>
+
+<sc-if value="{{ revealFinalized }}" hint-placeholder-val="{{ false }}">
+<span style="font:600 21px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">{{ revealHeadline }}</span>
+<div style="font:600 13px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:4px;">{{ keptSoFar }} of {{ keptTarget }} {{ revealTrackLabel }} planned</div>
+<div style="height:10px;background:oklch(0.93 0.02 260);border-radius:999px;margin-top:10px;overflow:hidden;">
+<div style="height:100%;border-radius:999px;background:linear-gradient(90deg,oklch(0.72 0.14 140),oklch(0.72 0.14 250));{{ revealBarStyle }}"></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
+<sc-for list="{{ revealKeptFinal }}" as="name" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:10px;background:oklch(0.95 0.03 140);border-radius:16px;padding:11px 12px;">
+<span style="width:24px;height:24px;flex:none;border-radius:999px;background:oklch(0.72 0.14 140);color:#fff;display:flex;align-items:center;justify-content:center;font:700 12px sans-serif;">✓</span>
+<span style="font:700 13.5px 'Nunito Sans',sans-serif;color:oklch(0.3 0.05 140);">{{ name }}</span>
+</div>
+</sc-for>
+</div>
+<button onClick="{{ continueAfterReveal }}" style="margin-top:18px;padding:14px 26px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">{{ continueLabel }}</button>
+</sc-if>
+
+</div>
+</sc-if>
+
+<!-- ============ DONE ============ -->
+<sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<span style="font:600 24px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">This week's plan</span>
+<div style="display:grid;grid-template-columns:{{ doneCols }};gap:24px;margin-top:18px;">
+<div>
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.14 25);">Dinners</div>
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+<sc-for list="{{ keptDinners }}" as="name" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:10px;background:oklch(0.95 0.03 25);border-radius:16px;padding:11px 12px;">
+<span style="width:24px;height:24px;flex:none;border-radius:999px;background:oklch(0.72 0.14 25);color:#fff;display:flex;align-items:center;justify-content:center;font:700 12px sans-serif;">✓</span>
+<span style="font:700 13.5px 'Nunito Sans',sans-serif;color:oklch(0.35 0.06 25);">{{ name }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<sc-if value="{{ hasLunches }}" hint-placeholder-val="{{ false }}">
+<div>
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.5 0.12 140);">Lunches</div>
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+<sc-for list="{{ keptLunches }}" as="name" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:10px;background:oklch(0.95 0.03 140);border-radius:16px;padding:11px 12px;">
+<span style="width:24px;height:24px;flex:none;border-radius:999px;background:oklch(0.72 0.14 140);color:#fff;display:flex;align-items:center;justify-content:center;font:700 12px sans-serif;">✓</span>
+<span style="font:700 13.5px 'Nunito Sans',sans-serif;color:oklch(0.3 0.05 140);">{{ name }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+</div>
+<button onClick="{{ finishToHistory }}" style="margin-top:22px;padding:14px 26px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Save to history &amp; start fresh</button>
+</div>
+</sc-if>
+
+<!-- ============ LIBRARY ============ -->
+<sc-if value="{{ isManage }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<div style="display:flex;align-items:center;justify-content:space-between;">
+<span style="font:600 22px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">Meal Library</span>
+<button onClick="{{ openNewMeal }}" style="padding:11px 18px;border:none;border-radius:999px;background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);font:700 13px 'Fredoka',sans-serif;cursor:pointer;">+ Add a meal</button>
+</div>
+<div style="font:600 11.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">{{ activeCount }} active · {{ archivedCount }} archived.</div>
+
+<div style="display:flex;gap:10px;margin-top:16px;align-items:flex-start;flex-wrap:wrap;">
+<input value="{{ librarySearch }}" onChange="{{ handleSearchChange }}" placeholder="Search meals…" style="flex:1 1 200px;min-width:160px;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+<div style="display:flex;gap:6px;flex-wrap:wrap;">
+<sc-for list="{{ typeFilters }}" as="tf" hint-placeholder-count="4">
+<button onClick="{{ tf.click }}" style="{{ tf.style }}">{{ tf.label }}</button>
+</sc-for>
+</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;">
+<button onClick="{{ setFilterActive }}" style="{{ filterActiveStyle }}">Active</button>
+<button onClick="{{ setFilterArchived }}" style="{{ filterArchivedStyle }}">Archived</button>
+<button onClick="{{ setFilterAll }}" style="{{ filterAllStyle }}">All</button>
+</div>
+</div>
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:14px;">Tags</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+<sc-for list="{{ tagFilters }}" as="tg" hint-placeholder-count="6">
+<button onClick="{{ tg.click }}" style="{{ tg.style }}">{{ tg.label }}</button>
+</sc-for>
+</div>
+
+<div style="display:grid;grid-template-columns:{{ gridColsLibrary }};gap:10px;margin-top:16px;">
+<sc-for list="{{ meals }}" as="meal" hint-placeholder-count="10">
+<div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;background:oklch(0.97 0.015 260);border-radius:16px;{{ meal.rowStyle }}">
+<div style="display:flex;align-items:center;gap:8px;">
+<span onClick="{{ meal.editClick }}" style="font:700 14px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);flex:1;cursor:pointer;">{{ meal.name }}</span>
+<button onClick="{{ meal.cycleType }}" style="{{ meal.typeStyle }}">{{ meal.typeLabel }}</button>
+</div>
+<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+<sc-for list="{{ meal.tagChips }}" as="tag" hint-placeholder-count="2">
+<span style="font:700 9.5px 'Nunito Sans',sans-serif;color:oklch(0.5 0.02 260);background:#fff;border-radius:999px;padding:2px 8px;">{{ tag }}</span>
+</sc-for>
+<sc-if value="{{ meal.hasKept }}" hint-placeholder-val="{{ false }}">
+<span style="font:700 9.5px 'Nunito Sans',sans-serif;color:oklch(0.5 0.12 140);margin-left:auto;">{{ meal.keptLabel }}</span>
+</sc-if>
+</div>
+<div style="display:flex;gap:12px;">
+<button onClick="{{ meal.editClick }}" style="border:none;background:none;color:oklch(0.55 0.14 300);font:700 11px 'Nunito Sans',sans-serif;cursor:pointer;">Edit</button>
+<sc-if value="{{ meal.hasRecipe }}" hint-placeholder-val="{{ false }}">
+<button onClick="{{ meal.viewRecipeClick }}" style="border:none;background:none;color:oklch(0.5 0.12 140);font:700 11px 'Nunito Sans',sans-serif;cursor:pointer;">Recipe →</button>
+</sc-if>
+<button onClick="{{ meal.toggleArchive }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 11px 'Nunito Sans',sans-serif;cursor:pointer;margin-left:auto;">{{ meal.archiveLabel }}</button>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ MEAL EDIT ============ -->
+<sc-if value="{{ isMealEdit }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<div style="display:flex;align-items:center;gap:10px;">
+<button onClick="{{ cancelMealEdit }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;">← Back</button>
+<span style="font:600 20px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">{{ editTitle }}</span>
+</div>
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:18px;">Name</div>
+<input value="{{ draftName }}" onChange="{{ handleDraftNameChange }}" placeholder="e.g. Sunday roast chicken" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:16px;">Track</div>
+<button onClick="{{ cycleDraftType }}" style="{{ draftTypeStyle }}margin-top:6px;">{{ draftTypeLabel }}</button>
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:16px;">Tags</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+<sc-for list="{{ draftTagChips }}" as="tag" hint-placeholder-count="6">
+<button onClick="{{ tag.toggle }}" style="{{ tag.style }}">{{ tag.name }}</button>
+</sc-for>
+</div>
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:16px;">Ingredients (one per line)</div>
+<textarea value="{{ draftIngredientsText }}" onChange="{{ handleIngredientsChange }}" placeholder="e.g. 1 lb chicken thighs&#10;2 cups rice&#10;1 onion, diced" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:500 13px 'Nunito Sans',sans-serif;min-height:100px;resize:vertical;"></textarea>
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:16px;">Instructions</div>
+<textarea value="{{ draftInstructions }}" onChange="{{ handleInstructionsChange }}" placeholder="The steps, the way we actually make it…" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:500 13px 'Nunito Sans',sans-serif;min-height:110px;resize:vertical;"></textarea>
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:16px;">Original source (optional)</div>
+<input value="{{ draftSourceUrl }}" onChange="{{ handleSourceUrlChange }}" placeholder="https://… — where this was originally found" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+
+<button onClick="{{ saveMealDraft }}" style="margin-top:18px;padding:14px 26px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Save meal</button>
+
+<sc-if value="{{ isEditingExisting }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:16px;margin-top:14px;">
+<sc-if value="{{ existingHasRecipe }}" hint-placeholder-val="{{ false }}">
+<button onClick="{{ viewRecipeFromEdit }}" style="border:none;background:none;color:oklch(0.5 0.12 140);font:700 12px 'Nunito Sans',sans-serif;cursor:pointer;">View recipe →</button>
+</sc-if>
+<button onClick="{{ toggleArchiveFromEdit }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 12px 'Nunito Sans',sans-serif;cursor:pointer;">{{ editingArchiveLabel }}</button>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<!-- ============ RECIPE VIEW ============ -->
+<sc-if value="{{ isRecipeView }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:40px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<button onClick="{{ backFromRecipe }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;">← Back to library</button>
+<div style="font:600 30px/1.2 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);margin-top:14px;">{{ recipeName }}</div>
+<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+<span style="{{ recipeTypeStyle }}">{{ recipeTypeLabel }}</span>
+<sc-for list="{{ recipeTagChips }}" as="tag" hint-placeholder-count="2">
+<span style="font:700 10px 'Nunito Sans',sans-serif;color:oklch(0.5 0.02 260);background:oklch(0.95 0.015 260);border-radius:999px;padding:4px 10px;">{{ tag }}</span>
+</sc-for>
+</div>
+<sc-if value="{{ recipeHasKept }}" hint-placeholder-val="{{ false }}">
+<div style="font:600 12px 'Nunito Sans',sans-serif;color:oklch(0.5 0.12 140);margin-top:10px;">{{ recipeKeptLabel }}</div>
+</sc-if>
+
+<sc-if value="{{ recipeHasIngredients }}" hint-placeholder-val="{{ false }}">
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:22px;">Ingredients</div>
+<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;max-width:420px;">
+<sc-for list="{{ recipeIngredients }}" as="ing" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:10px;">
+<span style="width:6px;height:6px;flex:none;border-radius:999px;background:oklch(0.7 0.16 300);"></span>
+<span style="font:500 15px 'Nunito Sans',sans-serif;color:oklch(0.28 0.02 260);">{{ ing }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{ recipeHasInstructions }}" hint-placeholder-val="{{ false }}">
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:22px;">Instructions</div>
+<div style="margin-top:8px;font:500 17px/1.7 'Nunito Sans',sans-serif;color:oklch(0.28 0.02 260);white-space:pre-wrap;max-width:560px;">{{ recipeInstructions }}</div>
+</sc-if>
+<sc-if value="{{ recipeHasUrl }}" hint-placeholder-val="{{ false }}">
+<a href="{{ recipeUrl }}" target="_blank" style="display:inline-block;margin-top:14px;font:700 12px 'Nunito Sans',sans-serif;color:oklch(0.5 0.12 140);text-decoration:underline;">Originally sourced from this recipe ↗</a>
+</sc-if>
+<sc-if value="{{ recipeEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:20px;font:600 13px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);">No recipe saved yet — the household's own version can be added from this meal's edit screen, not just a link out.</div>
+</sc-if>
+<div style="margin-top:24px;font:600 10.5px 'Nunito Sans',sans-serif;color:oklch(0.65 0.02 260);">A clean full-page cooking view &amp; printing arrive with recipe intake (v2).</div>
+</div>
+</sc-if>
+
+<!-- ============ HISTORY ============ -->
+<sc-if value="{{ isHistory }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<span style="font:600 22px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">History</span>
+<div style="font:600 11.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">{{ historyCount }} weeks planned so far.</div>
+<div style="display:grid;grid-template-columns:{{ gridColsHistory }};gap:14px;margin-top:16px;">
+<sc-for list="{{ historyRows }}" as="wk" hint-placeholder-count="2">
+<div style="background:oklch(0.97 0.015 260);border-radius:18px;padding:16px;">
+<div style="font:700 13px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);">{{ wk.date }}</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+<sc-for list="{{ wk.dinnerChips }}" as="d" hint-placeholder-count="3">
+<span style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.35 0.06 25);background:oklch(0.95 0.03 25);border-radius:999px;padding:5px 10px;">{{ d }}</span>
+</sc-for>
+<sc-for list="{{ wk.lunchChips }}" as="l" hint-placeholder-count="1">
+<span style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.3 0.05 140);background:oklch(0.95 0.03 140);border-radius:999px;padding:5px 10px;">{{ l }}</span>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ PEOPLE ============ -->
+<sc-if value="{{ isPeopleScreen }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<span style="font:600 22px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">People</span>
+<div style="font:600 11.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">Name + PIN, no accounts. Deactivated, never deleted.</div>
+
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
+<sc-for list="{{ peopleRows }}" as="p" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:oklch(0.97 0.015 260);border-radius:16px;{{ p.rowStyle }}">
+<span style="width:38px;height:38px;flex:none;border-radius:999px;color:#fff;display:flex;align-items:center;justify-content:center;font:700 14px 'Fredoka',sans-serif;{{ p.avatarStyle }}">{{ p.initial }}</span>
+<div style="flex:1;">
+<div style="font:700 14px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ p.name }}</div>
+<div style="font:600 10.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);">{{ p.trackLabel }} · PIN ••••</div>
+</div>
+<button onClick="{{ p.toggleAdmin }}" style="{{ p.adminStyle }}">{{ p.adminLabel }}</button>
+<button onClick="{{ p.toggleActive }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 11px 'Nunito Sans',sans-serif;cursor:pointer;">{{ p.activeLabel }}</button>
+</div>
+</sc-for>
+</div>
+
+<div style="margin-top:18px;padding:14px;background:oklch(0.97 0.015 260);border-radius:18px;display:flex;gap:10px;align-items:center;">
+<input value="{{ newPersonName }}" onChange="{{ handlePersonNameChange }}" placeholder="Name" style="flex:1;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+<button onClick="{{ addPerson }}" style="flex:none;padding:11px 20px;border:none;border-radius:12px;background:oklch(0.7 0.16 300);color:#fff;font:700 13px 'Fredoka',sans-serif;cursor:pointer;">Add person</button>
+</div>
+</div>
+</sc-if>
+
+</div>
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const SEED_MEALS = [
+  {id:1,name:'Chicken Parm',type:'dinner',tags:['company-worthy'],sourceUrl:'',ingredients:[],instructions:'',timesKept:8},
+  {id:2,name:'Spaghetti Bolognese',type:'dinner',tags:[],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:3,name:'Beef Stir Fry',type:'dinner',tags:['quick','healthy-ish'],sourceUrl:'',ingredients:[],instructions:'',timesKept:2},
+  {id:4,name:'Sheet Pan Fajitas',type:'dinner',tags:['quick','one-pot'],sourceUrl:'',ingredients:[],instructions:'',timesKept:1},
+  {id:5,name:'Meatloaf',type:'dinner',tags:[],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:6,name:'Salmon and Rice',type:'dinner',tags:['healthy-ish'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:7,name:'Pork Chops',type:'dinner',tags:[],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:8,name:'Chili',type:'dinner',tags:['slow-cooker','freezer-friendly'],sourceUrl:'',ingredients:['ground beef','kidney beans','diced tomatoes','onion','chili powder','cumin'],instructions:'Brown the beef, add beans, tomatoes, and the spice mix, then simmer 45 minutes. We always double it for freezer meals.',timesKept:9},
+  {id:9,name:"Shepherd's Pie",type:'dinner',tags:['freezer-friendly'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:10,name:'Lasagna',type:'dinner',tags:['freezer-friendly','company-worthy'],sourceUrl:'https://example-recipes.com/family-lasagna',ingredients:['no-boil lasagna noodles','ricotta','egg','parmesan','meat sauce','mozzarella'],instructions:'Layer noodles, ricotta mixed with egg and parmesan, meat sauce, and mozzarella — three layers each. Bake covered at 375°F for 45 minutes, then uncovered 15 more. Rest 10 minutes before cutting.',timesKept:4},
+  {id:11,name:'Chicken Alfredo',type:'dinner',tags:[],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:12,name:'Stuffed Peppers',type:'dinner',tags:['healthy-ish'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:13,name:'Pot Roast',type:'dinner',tags:['slow-cooker'],sourceUrl:'',ingredients:[],instructions:'',timesKept:2},
+  {id:14,name:'Teriyaki Chicken Bowls',type:'dinner',tags:['quick','healthy-ish'],sourceUrl:'https://example-recipes.com/teriyaki-bowls',ingredients:['chicken thighs','soy sauce','brown sugar','garlic','ginger','rice','broccoli'],instructions:'Sear diced chicken thighs, add teriyaki sauce (soy, brown sugar, garlic, ginger), and simmer 8 minutes until glazed. Serve over rice with steamed broccoli.',timesKept:3},
+  {id:15,name:'Hot Dogs',type:'both',tags:['kid-favorite','quick'],sourceUrl:'',ingredients:[],instructions:'',timesKept:1},
+  {id:16,name:'Pancakes',type:'both',tags:['kid-favorite'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:17,name:'Bacon and Eggs',type:'both',tags:['quick'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:18,name:'Frozen Pizza',type:'both',tags:['quick','kid-favorite'],sourceUrl:'',ingredients:[],instructions:'',timesKept:5},
+  {id:19,name:'Nachos',type:'both',tags:['quick','kid-favorite'],sourceUrl:'',ingredients:[],instructions:'',timesKept:1},
+  {id:20,name:'Baked Potato Bar',type:'both',tags:[],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:21,name:'Hot Pockets',type:'both',tags:['quick'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:22,name:'Taco Soup',type:'both',tags:['slow-cooker'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:23,name:'Chicken Nuggets',type:'both',tags:['kid-favorite','quick'],sourceUrl:'',ingredients:[],instructions:'',timesKept:2},
+  {id:24,name:'Quesadillas',type:'both',tags:['quick','kid-favorite'],sourceUrl:'',ingredients:[],instructions:'',timesKept:3},
+  {id:25,name:'Chicken Noodle Soup',type:'both',tags:['freezer-friendly'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:26,name:'Deli Sandwich Bar',type:'both',tags:['quick'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:27,name:'Pizza Rolls',type:'both',tags:['kid-favorite'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:28,name:'Baked Potato Soup',type:'both',tags:[],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:29,name:'French Toast',type:'both',tags:['kid-favorite'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:30,name:'BLTs',type:'both',tags:['quick'],sourceUrl:'',ingredients:[],instructions:'',timesKept:0},
+  {id:31,name:'Grilled Cheese',type:'both',tags:['quick','kid-favorite'],sourceUrl:'',ingredients:[],instructions:'',timesKept:3},
+  {id:32,name:'BBQ Sandwiches',type:'both',tags:['slow-cooker','freezer-friendly'],sourceUrl:'',ingredients:['pork shoulder','bbq sauce','buns'],instructions:'Slow-cooker pulled pork all day, shred, toss in sauce, toast the buns. A house favorite.',timesKept:6},
+];
+const TYPE_HUE = { dinner: 25, lunch: 140, both: 300 };
+const TYPE_LABEL = { dinner: 'Dinner', lunch: 'Lunch', both: 'Both' };
+const TAG_OPTIONS = ['kid-favorite','quick','slow-cooker','freezer-friendly','healthy-ish','one-pot','company-worthy','spicy'];
+const PEOPLE_HUES = [20,90,150,220,300,60,320,180];
+const WIDTHS = { home:'920px', start:'880px', vote:'920px', reveal:'640px', done:'760px', manage:'920px', mealEdit:'640px', recipeView:'700px', history:'860px', people:'780px' };
+function nextType(t) { return t === 'dinner' ? 'lunch' : t === 'lunch' ? 'both' : 'dinner'; }
+
+class Component extends DCLogic {
+  state = {
+    screen: 'home',
+    viewMode: 'desktop',
+    dinnerTarget: 5,
+    lunchTarget: 2,
+    people: [
+      {id:1,name:'Mom',initial:'M',hue:20,dinner:true,lunch:true,isAdmin:true,isActive:true},
+      {id:2,name:'Dad',initial:'D',hue:90,dinner:true,lunch:true,isAdmin:false,isActive:true},
+      {id:3,name:'Ava',initial:'A',hue:150,dinner:true,lunch:false,isAdmin:false,isActive:true},
+      {id:4,name:'Max',initial:'X',hue:220,dinner:true,lunch:false,isAdmin:false,isActive:true},
+      {id:5,name:'Jax',initial:'J',hue:300,dinner:true,lunch:true,isAdmin:false,isActive:true},
+    ],
+    nextPersonId: 6,
+    newPersonName: '',
+    activeTrack: 'dinner',
+    currentPersonId: 1,
+    usedIds: { dinner: [], lunch: [] },
+    batchMeals: { dinner: [], lunch: [] },
+    batchNumber: { dinner: 0, lunch: 0 },
+    votes: { dinner: {}, lunch: {} },
+    keptDinners: [],
+    keptLunches: [],
+    revealData: null,
+    meals: SEED_MEALS.map(m => ({ ...m, archived: false })),
+    nextMealId: 33,
+    mealFilter: 'active',
+    librarySearch: '',
+    libraryType: 'all',
+    libraryTags: [],
+    editingMealId: undefined,
+    draftName: '', draftType: 'dinner', draftTags: [], draftSourceUrl: '', draftIngredientsText: '', draftInstructions: '',
+    viewingMealId: null,
+    history: [
+      { id: 1, date: 'Week of Aug 18', dinners: ['Chicken Parm', 'Chili', 'Grilled Cheese'], lunches: ['Quesadillas'] },
+      { id: 2, date: 'Week of Aug 11', dinners: ['BBQ Sandwiches', 'Frozen Pizza', 'Nachos'], lunches: [] },
+    ],
+  };
+
+  setViewMode(m) { this.setState({ viewMode: m }); }
+  goHome() { this.setState({ screen: 'home' }); }
+  goStart() { this.setState({ screen: 'start' }); }
+  goManage() { this.setState({ screen: 'manage' }); }
+  goHistory() { this.setState({ screen: 'history' }); }
+  goPeople() { this.setState({ screen: 'people' }); }
+
+  togglePersonTrack(id) { this.setState(s => ({ people: s.people.map(p => p.id === id ? { ...p, lunch: !p.lunch } : p) })); }
+  changeDinnerTarget(delta) { this.setState(s => ({ dinnerTarget: Math.max(1, Math.min(15, s.dinnerTarget + delta)) })); }
+  changeLunchTarget(delta) { this.setState(s => ({ lunchTarget: Math.max(0, Math.min(15, s.lunchTarget + delta)) })); }
+
+  buildBatch(track, s) {
+    const used = s.usedIds[track];
+    return s.meals.filter(m => !m.archived && !used.includes(m.id) && (m.type === track || m.type === 'both')).slice(0, 15);
+  }
+  seedVote(mealId, personId, batchNum) {
+    const h = (mealId * 13 + personId * 7 + batchNum * 5) % 10;
+    return h < 9 ? 'yes' : 'no';
+  }
+  prefill(batch, participants, batchNum) {
+    const result = {};
+    const forcedYesIds = new Set(batch.slice(0, Math.min(4, batch.length)).map(m => m.id));
+    const forcedMajorityId = batch.length > 4 ? batch[4].id : null;
+    participants.forEach((p, i) => {
+      const pv = {};
+      batch.forEach(m => {
+        if (forcedYesIds.has(m.id)) pv[m.id] = 'yes';
+        else if (m.id === forcedMajorityId) pv[m.id] = i === 0 ? 'no' : 'yes';
+        else pv[m.id] = this.seedVote(m.id, p.id, batchNum);
+      });
+      result[p.id] = pv;
+    });
+    return result;
+  }
+
+  startVoting() {
+    this.setState(s => {
+      const batch = this.buildBatch('dinner', s);
+      const participants = s.people.filter(p => p.dinner && p.isActive);
+      const firstPerson = participants[0];
+      return {
+        screen: 'vote', activeTrack: 'dinner',
+        batchMeals: { ...s.batchMeals, dinner: batch },
+        batchNumber: { ...s.batchNumber, dinner: 1 },
+        currentPersonId: firstPerson ? firstPerson.id : s.currentPersonId,
+        votes: { dinner: this.prefill(batch, participants, 1), lunch: {} },
+        usedIds: { dinner: [], lunch: [] },
+        keptDinners: [], keptLunches: [],
+      };
+    });
+  }
+  switchPerson(id) { this.setState({ currentPersonId: id }); }
+  vote(mealId, val) {
+    const track = this.state.activeTrack;
+    const pid = this.state.currentPersonId;
+    this.setState(s => {
+      const trackVotes = { ...s.votes[track] };
+      const personVotes = { ...(trackVotes[pid] || {}) };
+      personVotes[mealId] = val;
+      trackVotes[pid] = personVotes;
+      return { votes: { ...s.votes, [track]: trackVotes } };
+    });
+  }
+
+  reveal() {
+    const s = this.state;
+    const track = s.activeTrack;
+    const batch = s.batchMeals[track];
+    const participants = s.people.filter(p => p[track] && p.isActive);
+    const unanimous = []; const majority = []; let notKept = 0;
+    batch.forEach(m => {
+      let yes = 0, no = 0;
+      participants.forEach(p => { (s.votes[track]?.[p.id]?.[m.id]) === 'yes' ? yes++ : no++; });
+      if (yes === participants.length) unanimous.push({ id: m.id, name: m.name });
+      else if (yes > no) majority.push({ id: m.id, name: m.name, yes, no, total: participants.length });
+      else notKept++;
+    });
+    const keptListKey = track === 'dinner' ? 'keptDinners' : 'keptLunches';
+    const target = track === 'dinner' ? s.dinnerTarget : s.lunchTarget;
+    const remainingSlots = Math.max(0, target - s[keptListKey].length);
+    const needsChoice = unanimous.length > remainingSlots;
+    this.setState({
+      screen: 'reveal',
+      revealData: {
+        track, batchIds: batch.map(m => m.id), unanimous, majority, notKept, remainingSlots, needsChoice,
+        chosenUnanimousIds: needsChoice ? [] : unanimous.map(m => m.id),
+        acceptedMajorityIds: [], finalized: false,
+      },
+    });
+  }
+  toggleChosenUnanimous(id) {
+    this.setState(s => {
+      const rd = s.revealData; const set = new Set(rd.chosenUnanimousIds);
+      if (set.has(id)) set.delete(id); else { if (set.size >= rd.remainingSlots) return {}; set.add(id); }
+      return { revealData: { ...rd, chosenUnanimousIds: [...set] } };
+    });
+  }
+  toggleAcceptedMajority(id) {
+    this.setState(s => {
+      const rd = s.revealData;
+      const chosenCount = rd.needsChoice ? rd.chosenUnanimousIds.length : rd.unanimous.length;
+      const capRemaining = rd.remainingSlots - chosenCount;
+      const set = new Set(rd.acceptedMajorityIds);
+      if (set.has(id)) set.delete(id); else { if (set.size >= capRemaining) return {}; set.add(id); }
+      return { revealData: { ...rd, acceptedMajorityIds: [...set] } };
+    });
+  }
+  confirmReveal() {
+    const s = this.state; const rd = s.revealData;
+    const keptNames = [];
+    rd.unanimous.forEach(m => { if (!rd.needsChoice || rd.chosenUnanimousIds.includes(m.id)) keptNames.push(m.name); });
+    rd.majority.forEach(m => { if (rd.acceptedMajorityIds.includes(m.id)) keptNames.push(m.name); });
+    const keptListKey = rd.track === 'dinner' ? 'keptDinners' : 'keptLunches';
+    const newUsed = [...s.usedIds[rd.track], ...rd.batchIds];
+    const newKeptList = [...s[keptListKey], ...keptNames];
+    const target = rd.track === 'dinner' ? s.dinnerTarget : s.lunchTarget;
+    const poolLeft = s.meals.filter(m => !m.archived && !newUsed.includes(m.id) && (m.type === rd.track || m.type === 'both')).length;
+    const exhausted = poolLeft === 0;
+    const trackDone = newKeptList.length >= target || exhausted;
+    this.setState({
+      usedIds: { ...s.usedIds, [rd.track]: newUsed },
+      [keptListKey]: newKeptList,
+      revealData: { ...rd, finalized: true, trackDone, keptNames },
+    });
+  }
+  continueAfterReveal() {
+    const s = this.state; const rd = s.revealData;
+    if (rd.trackDone) {
+      if (rd.track === 'dinner' && s.lunchTarget > 0) {
+        const batch = this.buildBatch('lunch', s);
+        const participants = s.people.filter(p => p.lunch && p.isActive);
+        const firstLunch = participants[0];
+        this.setState({
+          activeTrack: 'lunch',
+          batchMeals: { ...s.batchMeals, lunch: batch },
+          batchNumber: { ...s.batchNumber, lunch: 1 },
+          currentPersonId: firstLunch ? firstLunch.id : s.currentPersonId,
+          votes: { ...s.votes, lunch: this.prefill(batch, participants, 1) },
+          screen: 'vote', revealData: null,
+        });
+      } else {
+        this.setState({ screen: 'done', revealData: null });
+      }
+    } else {
+      const track = rd.track;
+      const batch = this.buildBatch(track, s);
+      const participants = s.people.filter(p => p[track] && p.isActive);
+      const batchNum = s.batchNumber[track] + 1;
+      this.setState({
+        batchMeals: { ...s.batchMeals, [track]: batch },
+        batchNumber: { ...s.batchNumber, [track]: batchNum },
+        votes: { ...s.votes, [track]: { ...s.votes[track], ...this.prefill(batch, participants, batchNum) } },
+        screen: 'vote', revealData: null,
+      });
+    }
+  }
+  resetSession() {
+    this.setState({
+      screen: 'home', activeTrack: 'dinner', currentPersonId: 1,
+      usedIds: { dinner: [], lunch: [] }, batchMeals: { dinner: [], lunch: [] }, batchNumber: { dinner: 0, lunch: 0 },
+      votes: { dinner: {}, lunch: {} }, keptDinners: [], keptLunches: [], revealData: null,
+    });
+  }
+  finishToHistory() {
+    this.setState(s => ({
+      history: [{ id: Date.now(), date: 'This week', dinners: s.keptDinners, lunches: s.keptLunches }, ...s.history],
+    }));
+    this.resetSession();
+  }
+
+  setMealFilter(f) { this.setState({ mealFilter: f }); }
+  setLibraryType(t) { this.setState({ libraryType: t }); }
+  toggleLibraryTag(tag) { this.setState(s => ({ libraryTags: s.libraryTags.includes(tag) ? s.libraryTags.filter(t => t !== tag) : [...s.libraryTags, tag] })); }
+  setSearch(v) { this.setState({ librarySearch: v }); }
+  cycleMealType(id) { this.setState(s => ({ meals: s.meals.map(m => m.id === id ? { ...m, type: nextType(m.type) } : m) })); }
+  toggleArchive(id) { this.setState(s => ({ meals: s.meals.map(m => m.id === id ? { ...m, archived: !m.archived } : m) })); }
+
+  openNewMeal() { this.setState({ screen: 'mealEdit', editingMealId: undefined, draftName: '', draftType: 'dinner', draftTags: [], draftSourceUrl: '', draftIngredientsText: '', draftInstructions: '' }); }
+  openEditMeal(id) {
+    const m = this.state.meals.find(x => x.id === id);
+    this.setState({ screen: 'mealEdit', editingMealId: id, draftName: m.name, draftType: m.type, draftTags: [...m.tags], draftSourceUrl: m.sourceUrl || '', draftIngredientsText: (m.ingredients || []).join('\n'), draftInstructions: m.instructions || '' });
+  }
+  cancelMealEdit() { this.setState({ screen: 'manage' }); }
+  setDraftName(v) { this.setState({ draftName: v }); }
+  cycleDraftType() { this.setState(s => ({ draftType: nextType(s.draftType) })); }
+  toggleDraftTag(tag) { this.setState(s => ({ draftTags: s.draftTags.includes(tag) ? s.draftTags.filter(t => t !== tag) : [...s.draftTags, tag] })); }
+  setDraftSourceUrl(v) { this.setState({ draftSourceUrl: v }); }
+  setDraftIngredientsText(v) { this.setState({ draftIngredientsText: v }); }
+  setDraftInstructions(v) { this.setState({ draftInstructions: v }); }
+  saveMealDraft() {
+    const s = this.state;
+    if (!s.draftName.trim()) return;
+    const ingredients = s.draftIngredientsText.split('\n').map(x => x.trim()).filter(Boolean);
+    if (s.editingMealId === undefined) {
+      this.setState(s2 => ({
+        meals: [...s2.meals, { id: s2.nextMealId, name: s2.draftName.trim(), type: s2.draftType, tags: s2.draftTags, sourceUrl: s2.draftSourceUrl.trim(), ingredients, instructions: s2.draftInstructions, archived: false, timesKept: 0 }],
+        nextMealId: s2.nextMealId + 1, screen: 'manage',
+      }));
+    } else {
+      this.setState(s2 => ({
+        meals: s2.meals.map(m => m.id === s2.editingMealId ? { ...m, name: s2.draftName.trim(), type: s2.draftType, tags: s2.draftTags, sourceUrl: s2.draftSourceUrl.trim(), ingredients, instructions: s2.draftInstructions } : m),
+        screen: 'manage',
+      }));
+    }
+  }
+  toggleArchiveFromEdit() { if (this.state.editingMealId !== undefined) { this.toggleArchive(this.state.editingMealId); this.setState({ screen: 'manage' }); } }
+  openRecipeView(id) { this.setState({ screen: 'recipeView', viewingMealId: id }); }
+  viewRecipeFromEdit() { if (this.state.editingMealId !== undefined) this.openRecipeView(this.state.editingMealId); }
+  backFromRecipe() { this.setState({ screen: 'manage' }); }
+
+  setNewPersonName(v) { this.setState({ newPersonName: v }); }
+  addPerson() {
+    const name = this.state.newPersonName.trim();
+    if (!name) return;
+    this.setState(s => ({
+      people: [...s.people, { id: s.nextPersonId, name, initial: name[0].toUpperCase(), hue: PEOPLE_HUES[s.nextPersonId % PEOPLE_HUES.length], dinner: true, lunch: false, isAdmin: false, isActive: true }],
+      nextPersonId: s.nextPersonId + 1, newPersonName: '',
+    }));
+  }
+  toggleAdmin(id) { this.setState(s => ({ people: s.people.map(p => p.id === id ? { ...p, isAdmin: !p.isAdmin } : p) })); }
+  toggleActive(id) { this.setState(s => ({ people: s.people.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p) })); }
+
+  renderVals() {
+    const s = this.state;
+    const track = s.activeTrack;
+    const participants = s.people.filter(p => p[track] && p.isActive);
+    const currentPerson = s.people.find(p => p.id === s.currentPersonId) || participants[0] || s.people[0];
+    const batch = s.batchMeals[track] || [];
+    const votesForTrack = s.votes[track] || {};
+    const myVotes = votesForTrack[currentPerson.id] || {};
+
+    const mobile = s.viewMode === 'mobile';
+    const navDefs = [
+      { key: 'home', label: 'Home', click: () => this.goHome() },
+      { key: 'manage', label: 'Meal Library', click: () => this.goManage() },
+      { key: 'history', label: 'History', click: () => this.goHistory() },
+      { key: 'people', label: 'People', click: () => this.goPeople() },
+    ];
+    const navItems = navDefs.map(n => {
+      const activeColor = s.screen === n.key ? 'background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);' : 'background:none;color:oklch(0.4 0.02 260);';
+      return {
+        label: n.label, click: n.click,
+        style: mobile
+          ? "flex:none;border:none;border-radius:999px;padding:8px 14px;font:700 12px 'Nunito Sans',sans-serif;cursor:pointer;white-space:nowrap;" + activeColor
+          : "display:block;width:100%;box-sizing:border-box;text-align:left;border:none;border-radius:10px;padding:11px 12px;font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;" + activeColor,
+      };
+    });
+    const toggleBtnStyle = active => "border:none;border-radius:999px;padding:8px 14px;font:700 12px 'Nunito Sans',sans-serif;cursor:pointer;" +
+      (active ? 'background:oklch(0.7 0.16 300);color:#fff;' : 'background:none;color:oklch(0.5 0.02 260);');
+
+    const batchCards = batch.map(m => {
+      const v = myVotes[m.id];
+      const base = "flex:1;padding:8px 0;border-radius:999px;border:none;font:700 12px 'Fredoka',sans-serif;cursor:pointer;";
+      const yesStyle = base + (v === 'yes' ? 'background:oklch(0.6 0.16 140);color:#fff;' : 'background:oklch(0.92 0.02 140);color:oklch(0.4 0.08 140);');
+      const noStyle = base + (v === 'no' ? 'background:oklch(0.55 0.14 25);color:#fff;' : 'background:oklch(0.94 0.01 260);color:oklch(0.5 0.02 260);');
+      return { id: m.id, name: m.name, yesStyle, noStyle, voteYes: () => this.vote(m.id, 'yes'), voteNo: () => this.vote(m.id, 'no') };
+    });
+    const switchers = participants.map(p => {
+      const pv = votesForTrack[p.id] || {};
+      const done = batch.length > 0 && batch.every(m => pv[m.id]);
+      const isCurrent = p.id === currentPerson.id;
+      const avatarButtonStyle = "width:36px;height:36px;flex:none;border-radius:999px;font:700 13px 'Fredoka',sans-serif;cursor:pointer;" +
+        (isCurrent ? `border:3px solid oklch(0.25 0.02 260);background:oklch(0.72 0.14 ${p.hue});color:#fff;` :
+          `border:2px solid oklch(0.9 0.01 260);background:${done ? `oklch(0.9 0.06 ${p.hue})` : '#fff'};color:oklch(0.5 0.02 260);`);
+      return { id: p.id, initial: p.initial, avatarButtonStyle, click: () => this.switchPerson(p.id) };
+    });
+    const pendingNames = participants.filter(p => { const pv = votesForTrack[p.id] || {}; return !(batch.length > 0 && batch.every(m => pv[m.id])); }).map(p => p.name);
+    const allDone = pendingNames.length === 0 && batch.length > 0;
+    const keptTarget = track === 'dinner' ? s.dinnerTarget : s.lunchTarget;
+    const keptSoFar = track === 'dinner' ? s.keptDinners.length : s.keptLunches.length;
+
+    const people = s.people.filter(p => p.isActive).map(p => ({
+      id: p.id, name: p.name, initial: p.initial,
+      avatarStyle: `background:oklch(0.72 0.14 ${p.hue});`,
+      trackLabel: p.lunch ? 'Dinner + Lunch' : 'Dinner only',
+      toggleStyle: "flex:none;border:none;border-radius:999px;padding:6px 10px;font:700 10.5px 'Nunito Sans',sans-serif;cursor:pointer;" +
+        (p.lunch ? 'background:oklch(0.9 0.06 140);color:oklch(0.35 0.08 140);' : 'background:oklch(0.93 0.01 260);color:oklch(0.5 0.02 260);'),
+      toggle: () => this.togglePersonTrack(p.id),
+    }));
+
+    const rd = s.revealData;
+    let revealVals = {};
+    if (rd) {
+      const autoKeptMeals = !rd.needsChoice ? rd.unanimous : [];
+      const unanimousChoices = rd.needsChoice ? rd.unanimous.map(m => {
+        const checked = rd.chosenUnanimousIds.includes(m.id);
+        return {
+          id: m.id, name: m.name, mark: checked ? '✓' : '',
+          toggle: () => this.toggleChosenUnanimous(m.id),
+          rowStyle: "width:100%;display:flex;justify-content:space-between;align-items:center;border:none;border-radius:14px;padding:10px 12px;font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;" +
+            (checked ? 'background:oklch(0.9 0.06 140);color:oklch(0.3 0.08 140);' : 'background:oklch(0.97 0.015 260);color:oklch(0.4 0.02 260);'),
+        };
+      }) : [];
+      const chosenCount = rd.needsChoice ? rd.chosenUnanimousIds.length : rd.unanimous.length;
+      const majoritySlots = Math.max(0, rd.remainingSlots - chosenCount);
+      const majorityChoices = rd.majority.map(m => {
+        const accepted = rd.acceptedMajorityIds.includes(m.id);
+        return {
+          id: m.id, name: m.name, countLabel: `${m.yes}/${m.total} yes`,
+          toggle: () => this.toggleAcceptedMajority(m.id),
+          btnLabel: accepted ? 'Accepted ✓' : 'Accept',
+          btnStyle: "flex:none;border:none;border-radius:999px;padding:6px 12px;font:700 11px 'Fredoka',sans-serif;cursor:pointer;" +
+            (accepted ? 'background:oklch(0.6 0.16 300);color:#fff;' : 'background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);'),
+        };
+      });
+      revealVals = {
+        revealPending: !rd.finalized,
+        hasAutoKept: autoKeptMeals.length > 0, autoKeptMeals,
+        needsChoice: rd.needsChoice, unanimousChoices,
+        chosenCountLabel: `${chosenCount} of ${rd.remainingSlots} chosen`, remainingSlots: rd.remainingSlots,
+        hasMajority: rd.majority.length > 0, majorityChoices,
+        majoritySlotsLabel: majoritySlots > 0 ? `${majoritySlots} slot${majoritySlots === 1 ? '' : 's'} left` : 'no slots left',
+        hasNotKept: rd.notKept > 0, revealNotKeptCount: rd.notKept,
+        confirmReveal: () => this.confirmReveal(),
+        revealFinalized: !!rd.finalized,
+        revealHeadline: rd.finalized && rd.keptNames.length > 0 ? 'Kept for the week' : 'No matches this batch.',
+        revealTrackLabel: rd.track === 'dinner' ? 'dinners' : 'lunches',
+        revealKeptFinal: rd.finalized ? rd.keptNames : [],
+        revealBarStyle: `width:${keptTarget ? Math.min(100, Math.round(100 * keptSoFar / keptTarget)) : 0}%;`,
+        continueLabel: rd.finalized ? (rd.trackDone ? (rd.track === 'dinner' && s.lunchTarget > 0 ? 'Start lunch voting →' : 'See the plan →') : 'Next batch →') : '',
+        continueAfterReveal: () => this.continueAfterReveal(),
+      };
+    }
+
+    const filterBtnStyle = active => "flex:1;border:none;border-radius:999px;padding:8px 14px;font:700 11.5px 'Nunito Sans',sans-serif;cursor:pointer;white-space:nowrap;" +
+      (active ? 'background:oklch(0.7 0.16 300);color:#fff;' : 'background:oklch(0.94 0.01 260);color:oklch(0.5 0.02 260);');
+    const chipStyle = active => "flex:none;border:none;border-radius:999px;padding:6px 12px;font:700 11px 'Nunito Sans',sans-serif;cursor:pointer;" +
+      (active ? 'background:oklch(0.7 0.16 300);color:#fff;' : 'background:oklch(0.94 0.01 260);color:oklch(0.5 0.02 260);');
+
+    const typeFilters = ['all', 'dinner', 'lunch', 'both'].map(t => ({
+      key: t, label: t === 'all' ? 'All' : TYPE_LABEL[t], click: () => this.setLibraryType(t), style: filterBtnStyle(s.libraryType === t),
+    }));
+    const tagFilters = TAG_OPTIONS.map(t => ({ key: t, label: t, click: () => this.toggleLibraryTag(t), style: chipStyle(s.libraryTags.includes(t)) }));
+
+    const visibleMeals = s.meals.filter(m => {
+      if (s.mealFilter === 'active' && m.archived) return false;
+      if (s.mealFilter === 'archived' && !m.archived) return false;
+      if (s.libraryType !== 'all' && m.type !== s.libraryType) return false;
+      if (s.libraryTags.length && !s.libraryTags.some(t => m.tags.includes(t))) return false;
+      if (s.librarySearch && !m.name.toLowerCase().includes(s.librarySearch.toLowerCase())) return false;
+      return true;
+    });
+    const meals = visibleMeals.map(m => ({
+      id: m.id, name: m.name,
+      rowStyle: m.archived ? 'opacity:.55;' : '',
+      typeLabel: TYPE_LABEL[m.type],
+      typeStyle: `flex:none;border:none;border-radius:999px;padding:6px 10px;font:700 10.5px 'Nunito Sans',sans-serif;cursor:pointer;background:oklch(0.92 0.05 ${TYPE_HUE[m.type]});color:oklch(0.4 0.1 ${TYPE_HUE[m.type]});`,
+      cycleType: () => this.cycleMealType(m.id),
+      tagChips: m.tags,
+      hasKept: m.timesKept > 0, keptLabel: `Kept ${m.timesKept}×`,
+      hasRecipe: !!(m.sourceUrl || m.instructions || (m.ingredients && m.ingredients.length)), viewRecipeClick: () => this.openRecipeView(m.id),
+      editClick: () => this.openEditMeal(m.id),
+      archiveLabel: m.archived ? 'Restore' : 'Archive', toggleArchive: () => this.toggleArchive(m.id),
+    }));
+
+    const editingMeal = s.editingMealId !== undefined ? s.meals.find(m => m.id === s.editingMealId) : null;
+    const draftTagChips = TAG_OPTIONS.map(t => ({ name: t, style: chipStyle(s.draftTags.includes(t)), toggle: () => this.toggleDraftTag(t) }));
+
+    const vm = s.viewingMealId !== null ? s.meals.find(m => m.id === s.viewingMealId) : null;
+
+    const historyRows = s.history.map(h => ({ date: h.date, dinnerChips: h.dinners, lunchChips: h.lunches }));
+
+    const peopleRows = s.people.map(p => ({
+      id: p.id, name: p.name, initial: p.initial,
+      avatarStyle: `background:oklch(0.72 0.14 ${p.hue});`,
+      trackLabel: p.lunch ? 'Dinner + Lunch' : 'Dinner only',
+      rowStyle: p.isActive ? '' : 'opacity:.5;',
+      adminLabel: p.isAdmin ? '★ Admin' : 'Make admin',
+      adminStyle: "flex:none;border:none;background:none;font:700 11px 'Nunito Sans',sans-serif;cursor:pointer;" + (p.isAdmin ? 'color:oklch(0.55 0.14 300);' : 'color:oklch(0.6 0.02 260);'),
+      toggleAdmin: () => this.toggleAdmin(p.id),
+      activeLabel: p.isActive ? 'Deactivate' : 'Reactivate',
+      toggleActive: () => this.toggleActive(p.id),
+    }));
+
+    return {
+      isHome: s.screen === 'home', isStart: s.screen === 'start', isVote: s.screen === 'vote', isReveal: s.screen === 'reveal',
+      isDone: s.screen === 'done', isManage: s.screen === 'manage', isMealEdit: s.screen === 'mealEdit',
+      isRecipeView: s.screen === 'recipeView', isHistory: s.screen === 'history', isPeopleScreen: s.screen === 'people',
+      navItems,
+      setDesktopView: () => this.setViewMode('desktop'), setMobileView: () => this.setViewMode('mobile'),
+      desktopToggleStyle: toggleBtnStyle(!mobile), mobileToggleStyle: toggleBtnStyle(mobile),
+      outerDirection: mobile ? 'column' : 'row',
+      sidebarStyle: mobile
+        ? 'width:100%;flex:none;background:#fff;padding:14px 16px;display:flex;flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid oklch(0.93 0.01 260);box-sizing:border-box;'
+        : 'width:240px;flex:none;background:#fff;padding:32px 22px;display:flex;flex-direction:column;gap:6px;border-right:1px solid oklch(0.93 0.01 260);box-sizing:border-box;',
+      brandWrapStyle: mobile ? 'display:flex;flex-direction:column;margin-right:6px;' : 'display:flex;flex-direction:column;margin-bottom:20px;',
+      navWrapStyle: mobile ? 'display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;flex:1;' : 'display:flex;flex-direction:column;gap:6px;',
+      sidebarSpacerStyle: mobile ? 'display:none;' : 'flex:1;',
+      sidebarCtaStyle: mobile
+        ? "flex:none;padding:9px 14px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:700 12px 'Fredoka',sans-serif;cursor:pointer;"
+        : "padding:13px;border:none;border-radius:12px;background:oklch(0.7 0.16 300);color:#fff;font:700 13px 'Fredoka',sans-serif;cursor:pointer;",
+      mainPadStyle: mobile ? 'padding:20px 16px;' : 'padding:48px;',
+      contentMaxWidth: mobile ? '480px' : (WIDTHS[s.screen] || '800px'),
+      gridColsHome: mobile ? '1fr' : 'repeat(3,1fr)',
+      gridColsStart: mobile ? '1fr' : '1fr 1fr',
+      gridColsVote: mobile ? '1fr 1fr' : 'repeat(3,1fr)',
+      gridColsLibrary: mobile ? '1fr' : '1fr 1fr',
+      gridColsHistory: mobile ? '1fr' : '1fr 1fr',
+      activeMealCount: s.meals.filter(m => !m.archived).length, historyCount: s.history.length, activePeopleCount: s.people.filter(p => p.isActive).length,
+      goStart: () => this.goStart(), goManage: () => this.goManage(), goHistory: () => this.goHistory(), goPeople: () => this.goPeople(),
+
+      dinnerTarget: s.dinnerTarget, lunchTarget: s.lunchTarget, lunchTargetZero: s.lunchTarget === 0,
+      incDinner: () => this.changeDinnerTarget(1), decDinner: () => this.changeDinnerTarget(-1),
+      incLunch: () => this.changeLunchTarget(1), decLunch: () => this.changeLunchTarget(-1),
+      showLunchToggle: s.lunchTarget > 0,
+      people, startVoting: () => this.startVoting(),
+
+      trackLabel: track === 'dinner' ? 'Dinner' : 'Lunch', batchNumber: s.batchNumber[track], batchTotal: batch.length,
+      currentPerson, switchers, batchCards,
+      pendingLabel: pendingNames.length ? ('Waiting on ' + pendingNames.join(', ')) : '',
+      allDone, notAllDone: !allDone, reveal: () => this.reveal(), resetSession: () => this.resetSession(),
+
+      ...revealVals, keptSoFar, keptTarget,
+
+      keptDinners: s.keptDinners, keptLunches: s.keptLunches, hasLunches: s.lunchTarget > 0,
+      doneCols: mobile ? '1fr' : (s.lunchTarget > 0 ? '1fr 1fr' : '1fr'),
+      finishToHistory: () => this.finishToHistory(),
+
+      activeCount: s.meals.filter(m => !m.archived).length, archivedCount: s.meals.filter(m => m.archived).length,
+      librarySearch: s.librarySearch, handleSearchChange: e => this.setSearch(e.target.value),
+      typeFilters, tagFilters,
+      filterActiveStyle: filterBtnStyle(s.mealFilter === 'active'), filterArchivedStyle: filterBtnStyle(s.mealFilter === 'archived'), filterAllStyle: filterBtnStyle(s.mealFilter === 'all'),
+      setFilterActive: () => this.setMealFilter('active'), setFilterArchived: () => this.setMealFilter('archived'), setFilterAll: () => this.setMealFilter('all'),
+      openNewMeal: () => this.openNewMeal(), meals,
+
+      editTitle: editingMeal ? 'Edit meal' : 'Add a meal', isEditingExisting: !!editingMeal,
+      draftName: s.draftName, handleDraftNameChange: e => this.setDraftName(e.target.value),
+      draftTypeLabel: TYPE_LABEL[s.draftType],
+      draftTypeStyle: `display:inline-block;border:none;border-radius:12px;padding:10px 16px;font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;background:oklch(0.92 0.05 ${TYPE_HUE[s.draftType]});color:oklch(0.4 0.1 ${TYPE_HUE[s.draftType]});`,
+      cycleDraftType: () => this.cycleDraftType(), draftTagChips,
+      draftSourceUrl: s.draftSourceUrl, handleSourceUrlChange: e => this.setDraftSourceUrl(e.target.value),
+      draftIngredientsText: s.draftIngredientsText, handleIngredientsChange: e => this.setDraftIngredientsText(e.target.value),
+      draftInstructions: s.draftInstructions, handleInstructionsChange: e => this.setDraftInstructions(e.target.value),
+      saveMealDraft: () => this.saveMealDraft(), cancelMealEdit: () => this.cancelMealEdit(),
+      existingHasRecipe: !!(editingMeal && (editingMeal.sourceUrl || editingMeal.instructions || (editingMeal.ingredients && editingMeal.ingredients.length))),
+      viewRecipeFromEdit: () => this.viewRecipeFromEdit(),
+      editingArchiveLabel: editingMeal && editingMeal.archived ? 'Restore meal' : 'Archive meal', toggleArchiveFromEdit: () => this.toggleArchiveFromEdit(),
+
+      recipeName: vm ? vm.name : '', recipeTypeLabel: vm ? TYPE_LABEL[vm.type] : '',
+      recipeTypeStyle: vm ? `font:700 10px 'Nunito Sans',sans-serif;color:oklch(0.4 0.1 ${TYPE_HUE[vm.type]});background:oklch(0.92 0.05 ${TYPE_HUE[vm.type]});border-radius:999px;padding:4px 10px;` : '',
+      recipeTagChips: vm ? vm.tags : [], recipeHasKept: !!(vm && vm.timesKept > 0), recipeKeptLabel: vm ? `Kept ${vm.timesKept}× before` : '',
+      recipeHasUrl: !!(vm && vm.sourceUrl), recipeUrl: vm ? vm.sourceUrl : '',
+      recipeHasIngredients: !!(vm && vm.ingredients && vm.ingredients.length), recipeIngredients: vm ? vm.ingredients : [],
+      recipeHasInstructions: !!(vm && vm.instructions), recipeInstructions: vm ? vm.instructions : '',
+      recipeEmpty: !!(vm && !vm.sourceUrl && !vm.instructions && !(vm.ingredients && vm.ingredients.length)),
+      backFromRecipe: () => this.backFromRecipe(),
+
+      historyRows,
+
+      peopleRows, newPersonName: s.newPersonName, handlePersonNameChange: e => this.setNewPersonName(e.target.value), addPerson: () => this.addPerson(),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
