@@ -71,3 +71,21 @@ def client(engine):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def post(client):
+    """POST helper: client.post with a same-origin Origin header by default.
+
+    The origin-check middleware is fail-closed (absent Origin → 403), so
+    every mutating test request goes through here. ``**kwargs`` (e.g.
+    ``follow_redirects=False``) are forwarded to client.post.
+    """
+
+    def _post(url, data=None, headers=None, **kwargs):
+        h = {"Origin": "http://testserver"}
+        if headers:
+            h.update(headers)
+        return client.post(url, data=data, headers=h, **kwargs)
+
+    return _post

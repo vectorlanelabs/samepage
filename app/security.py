@@ -1,4 +1,14 @@
-"""Security middleware (D16): session cookies + origin/CSRF check."""
+"""Security middleware (D16): session cookies + origin/CSRF check.
+
+Origin policy (fail-closed): every state-changing (mutating) request must
+carry a present ``Origin`` header whose scheme is http(s) and whose netloc
+matches the Host, or it is rejected with 403. Absent Origin is rejected too
+(``CSRF origin required``) — non-browser clients like curl and scripts must
+send an explicit same-origin Origin. The one exemption: the token-
+authenticated surfaces (M6) — any path under ``/api/``, and exactly ``/mcp``
+or ``/mcp/...`` — are authenticated by Bearer token, so Origin is
+CSRF-irrelevant and absent Origins are allowed there.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +21,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.settings import settings
 
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+# /api/ prefix (M6): Bearer auth makes Origin irrelevant. /mcp is matched
+# with exact-boundary logic in origin_check (below), not via this tuple.
+_ORIGIN_EXEMPT_PREFIXES = ("/api/",)
 
 
 def setup_middleware(app: FastAPI) -> None:
@@ -25,15 +38,24 @@ def setup_middleware(app: FastAPI) -> None:
 
     @app.middleware("http")
     async def origin_check(request: Request, call_next):
-        """Reject state-changing requests whose Origin doesn't match the Host.
+        """Reject state-changing requests without a same-origin Origin header.
 
-        Absent Origin (curl, same-site tests, non-browser clients) is allowed;
-        a present-but-mismatched Origin is rejected with 403 (CSRF defense).
+        Fail-closed: absent Origin is 403 (``CSRF origin required``) except
+        on token-authenticated paths — under ``/api/``, or exactly ``/mcp``
+        or ``/mcp/...`` (Bearer-token auth, CSRF-irrelevant); present-but-
+        mismatched / null / non-http(s) / malformed Origin is 403
+        (``CSRF origin mismatch``).
         """
         if request.method in _MUTATING_METHODS:
             origin = request.headers.get("origin")
             if origin is None:
-                return await call_next(request)  # non-browser clients; browsers send Origin on state-changing requests
+                path = request.url.path
+                is_exempt = path.startswith(_ORIGIN_EXEMPT_PREFIXES) or (
+                    path == "/mcp" or path.startswith("/mcp/")
+                )
+                if is_exempt:
+                    return await call_next(request)  # token-authenticated (M6)
+                return JSONResponse({"detail": "CSRF origin required"}, status_code=403)
             parsed = urlparse(origin)
             scheme_ok = parsed.scheme in ("http", "https")
             host = request.headers.get("host", "")
