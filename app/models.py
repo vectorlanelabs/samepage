@@ -69,6 +69,7 @@ class Meal(Base):
     normalized_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
     type: Mapped[str] = mapped_column(String, nullable=False, default="dinner")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ingredients: Mapped[str | None] = mapped_column(Text, nullable=True)  # one per line
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     recipe_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     category_id: Mapped[int | None] = mapped_column(ForeignKey("category.id"), nullable=True)

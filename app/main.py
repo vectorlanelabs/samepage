@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from alembic import command
-from app.routes import auth, home, people
+from app.routes import auth, home, library, people
 from app.security import setup_middleware
 from app.settings import REPO_ROOT, settings
 
@@ -76,3 +76,4 @@ def health() -> dict:
 app.include_router(home.router)
 app.include_router(auth.router)
 app.include_router(people.router)
+app.include_router(library.router)
