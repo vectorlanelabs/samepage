@@ -1,7 +1,21 @@
-# Handoff: Dinner Decider — Full App Design
+# Handoff: SamePage — Full App Design (Meal Planner module)
 
 ## Overview
-A household weekly-meal-planning web app: set dinner/lunch targets, run iterative 15-meal yes/no voting batches until targets are met, keep unanimous (and host-accepted majority) meals, and maintain a meal library with tags, ingredients, and instructions. This bundle covers every screen of the v1 product described in the repo's `CHARTER.md` and `docs/PLAN-v1-mvp.md`, designed as a **desktop-first responsive web app** (not a native mobile app — see the in-app Desktop/Mobile toggle).
+**SamePage** is a multi-tenant consensus-voting platform for families and friend groups: groups (one owner, any number of admins) own **collections** — Meal Planner is the first and only buildable one today, with more (things-to-do, games) intended later but explicitly not designed yet. Meal Planner is the household weekly-meal-planning experience: set dinner/lunch targets, run iterative 15-option yes/no voting batches until targets are met, keep unanimous (and host-accepted majority) options, and maintain a meal library with tags, ingredients, and instructions. This bundle covers every screen designed so far, as a **desktop-first responsive web app** (not native mobile — see the in-app Desktop/Mobile toggle).
+
+`docs/PLAN-v2-samepage.md`, referenced as the source of truth for identity/permission rules (owner vs. admin, guest-join rules), does **not exist in the `vectorlanelabs/dinnerdecider` repo** as of this handoff — confirmed via a full-tree search. The account, group, and collection screens below were designed from rules given directly by the product owner in chat, not from that doc. Flag this gap to whoever owns that plan doc before implementation starts.
+
+## New in this pass (SamePage rebrand)
+- **Rebrand**: wordmark is now "SamePage" with "Meal Planner" (or the current group name, outside the module) as a secondary sidebar line.
+- **Auth**: email + password sign-in/sign-up screens. The old name+PIN login is fully removed — there is no PIN concept.
+- **Groups**: create group, switch between groups, manage members (owner starred/non-removable, admins invited by email, admins removable).
+- **Collections**: top-level "your collections" grid, scoped to the current group. Meal Planner collections are real/clickable; other types (Things To Do, Game Night) render as disabled "Coming soon" placeholders — intentionally not built out.
+- **Session join**: zero-login guest join (name-only) and a logged-in variant (name pre-filled, "join as someone else" escape hatch). A demo toggle switches between the two for review purposes only — remove it in production; the real app determines this from actual auth state.
+- **Voting chrome genericized**: the batch screen's meal-count chip now reads "N options" rather than "N meals" — the voting/reveal UI is intended to be reused by future non-meal collection types. Only the Meal Planner module's own screens (Home, Library, Recipe, Done/week-summary) keep meal-specific language, since those are Meal Planner-specific by design.
+- **Reporting**: first-pass per-item and per-tag rejection-rate view (static/seeded data, not wired to real vote history).
+
+## About the Design Files
+The file in this bundle (`Dinner Decider.dc.html` — filename retained for continuity, content is the full SamePage app) is a **design reference built as a self-contained interactive HTML prototype** — it simulates the full UX with client-side state (no real backend, no persistence, no real auth). It is not production code to copy directly.
 
 ## About the Design Files
 The file in this bundle (`Dinner Decider.dc.html`) is a **design reference built as a self-contained interactive HTML prototype** — it simulates the full UX with client-side state (no real backend, no persistence, no auth). It is not production code to copy directly. The task is to **recreate this design in the target stack specified in `docs/PLAN-v1-mvp.md`** (FastAPI + SQLAlchemy + SQLite + Jinja2 + HTMX, per decision D1) — server-rendered templates with `hx-post` interactions and polling, not a client-side SPA. Reuse the exact visual language (colors, type, spacing, component shapes) documented below; do not reuse the prototype's client-side state approach.
@@ -12,6 +26,15 @@ The file in this bundle (`Dinner Decider.dc.html`) is a **design reference built
 **High-fidelity.** Colors, typography, spacing, and copy are final. Interaction logic (batch voting, unanimous/majority resolution, track progression) is a faithful simulation of `docs/PLAN-v1-mvp.md` §9 and should be implemented server-side exactly as specified there — the prototype is the UX reference, the plan doc is the behavioral spec of record when the two could be read differently.
 
 ## Screens / Views
+
+0. **Auth (sign in / sign up)** — standalone, no sidebar. Email + password; sign-up adds a Name field. Toggle link swaps modes. Secondary CTA to the guest session-join screen.
+0a. **Session join (guest / logged-in)** — standalone, no sidebar. Shows the session code + name; guest variant has an editable name field with no account requirement, logged-in variant shows the pre-filled name read-only with an "join as someone else" escape hatch. The Guest/Logged-in switch on this screen in the prototype is a review-only demo toggle, not a real app control.
+0b. **Collections** — shell screen, grid of the current group's collections (Meal Planner card is clickable → module Home; other types show disabled "Coming soon" cards), "+ New collection" CTA.
+0c. **Collection create** — name field + type picker (Meal Planner selectable; other types disabled/dashed).
+0d. **Groups** — list of the account's groups with role badge (Owner/Admin), member count, "Manage members" and "Switch"/"Current" actions; "+ Create group" CTA.
+0e. **Group create** — name field; creator becomes owner.
+0f. **Group members** — owner (starred, not removable) + admins (removable) for the current group; invite-by-email form adds a pending "Invited" row.
+0g. **Reporting** — first-pass "By item" and "By tag" rejection-rate lists with a small bar per row.
 
 1. **Home** — dashboard: hero heading + "Start a session" CTA, plus 3 stat cards (Meal Library / History / People) linking out. Grid: `repeat(3,1fr)` desktop, `1fr` mobile.
 2. **Session setup** — dinner/lunch target steppers (+/− pill controls), join-code display (`WORD-####` per D3), roster list of people with a per-person "Dinner only / Dinner + Lunch" toggle chip. Two-column grid desktop (targets | roster), stacked on mobile.
@@ -24,7 +47,7 @@ The file in this bundle (`Dinner Decider.dc.html`) is a **design reference built
 9. **History** — 2-col (desktop) / 1-col (mobile) grid of past sessions, each showing its dinner/lunch kept-meal chips.
 10. **People** — roster list (avatar, name, track label, PIN placeholder), per-person "Make admin/★ Admin" and "Deactivate/Reactivate" toggles (people are deactivated, never deleted — D16), add-person form.
 
-All screens share a persistent left sidebar (desktop) / top bar (mobile) with Home / Meal Library / History / People navigation plus a "Start a session" shortcut, and a fixed top-right Desktop/Mobile view toggle used only for this design review — remove it from production; production should be responsive via real CSS breakpoints instead.
+Meal Planner module screens (1–10) share a persistent left sidebar (desktop) / top bar (mobile) with a top-level nav (Collections / Group / Reporting) plus, only while inside the module, a second "Meal Planner" nav group (Home / Meal Library / History / People) and a "Start a session" shortcut. Auth and session-join (0, 0a) render standalone with no sidebar. A fixed top-right Desktop/Mobile view toggle is used only for this design review — remove it from production; production should be responsive via real CSS breakpoints instead.
 
 ## Interactions & Behavior
 - **Vote card**: click Yes/No to set this device's current-person vote; selected state fills the button (green Yes / terracotta No).

@@ -1,6 +1,11 @@
-# Dinner Decider — Implementer Constraints (CLAUDE.md)
+# SamePage — Implementer Constraints (CLAUDE.md)
 
-**Read first, in order:** `docs/PLAN-v1-mvp.md` (the plan — binding spec) → `CHARTER.md` (scope & non-goals). These files are the contract. When in doubt, the plan wins over guesswork; when the plan is silent, ask — never invent product decisions.
+> **⚠ Pivot in progress (2026-08-28):** renamed from Dinner Decider. `docs/PLAN-v2-samepage.md` is now the
+> binding spec — it supersedes this file's and `docs/PLAN-v1-mvp.md`'s identity (D2) and meal-specific
+> (D10) decisions. M3 onward is unapproved until that doc is signed off. Everything below still applies to
+> the M0–M2 code as it stands (env var prefix is `SP_*`, not `DD_*` — updated throughout this file).
+
+**Read first, in order:** `docs/PLAN-v2-samepage.md` (current plan — binding spec) → `docs/PLAN-v1-mvp.md` (superseded, historical) → `CHARTER.md` (scope & non-goals, partially superseded — see its own banner). These files are the contract. When in doubt, the plan wins over guesswork; when the plan is silent, ask — never invent product decisions.
 
 ## Stack (locked — do not change without Charlie's word)
 
@@ -11,13 +16,13 @@
 
 The app exists to **replace** the spreadsheet-and-dice ritual — it was never a dice-roll app; the D8/D20 mechanic is the pain point, not the product.
 
-- **No in-app AI, ever.** The app exposes a token-authenticated JSON API (`/api/v1`, Bearer `DD_API_KEY`) + an MCP server; recipe parsing, discovery, and trend analysis happen in Charlie's AI tools (D17). **No LLM keys in this codebase.**
+- **No in-app AI, ever.** The app exposes a token-authenticated JSON API (`/api/v1`, Bearer `SP_API_KEY`) + an MCP server; recipe parsing, discovery, and trend analysis happen in Charlie's AI tools (D17). **No LLM keys in this codebase.**
 
 - The product is a **weekly planning session**: set lunch/dinner targets → iterative batches of 15 meals → private **binary yes/no** votes → **unanimous-yes meals kept automatically; majority-yes meals (yes > no, ties excluded) offered to the host to accept** → repeat until targets met.
 - Majority acceptance is a **host-only** action at batch results, shown with aggregate counts only (never who voted which way), recorded as `kept_by='host'`.
 - **No dice roll. No "not tonight" / vote shades. No import feature or import UI.** The library is pre-seeded from `seed/meals.json`.
 - Meals have title, type (lunch/dinner/both), category, tags, recipe (link/text). `times_kept`/`last_kept_at` are the favorites signal.
-- **Deployment is VPS-hosted** (Charlie's Hostinger VPS, behind HTTPS via Caddy) — the app is internet-facing; no LAN/local-only assumptions. Deployment specifics: plan §7.1. Env: `DD_SECRET`, `DD_ACCESS_KEY` (household access gate, once per device), `DD_DB_PATH`, `DD_PORT`.
+- **Deployment is VPS-hosted** (Charlie's Hostinger VPS, behind HTTPS via Caddy) — the app is internet-facing; no LAN/local-only assumptions. Deployment specifics: plan §7.1. Env: `SP_SECRET`, `SP_ACCESS_KEY` (household access gate, once per device), `SP_DB_PATH`, `SP_PORT`.
 
 ## Non-negotiables
 
@@ -26,7 +31,7 @@ The app exists to **replace** the spreadsheet-and-dice ritual — it was never a
 3. **Never auto-delete data.** Archive/reversible only. People are **deactivated, never deleted** (no DELETE endpoint for people). The seed loader dedupes and logs; it never mutates the spreadsheet or the committed seed JSON.
 4. **Vote privacy is security** (strong invariant): individual votes are **never exposed in the normal UI, before or after batch closure** — clients see only aggregate outcomes. This is the one invariant that gets you pulled from a slice.
 5. **Schema changes ship as Alembic migrations** (D15) — `create_all` is dev/test only. **PINs are stored hashed** (PBKDF2, per-person salt) — no plaintext PINs anywhere.
-6. **The app is public on the internet** — nothing user-visible may leak secrets (no secrets in HTML/JS, no debug output in prod, no client-side credentials); secure cookie flags (`Secure`, `HttpOnly`, `SameSite`) and origin/CSRF checks on every state-changing request; admin-only routes enforced server-side (`is_admin`). **Every `/api/v1` and `/mcp` route requires the Bearer token** (`DD_API_KEY`); API/MCP responses are **aggregate-only — never raw per-person votes**. No LLM keys anywhere in this repo.
+6. **The app is public on the internet** — nothing user-visible may leak secrets (no secrets in HTML/JS, no debug output in prod, no client-side credentials); secure cookie flags (`Secure`, `HttpOnly`, `SameSite`) and origin/CSRF checks on every state-changing request; admin-only routes enforced server-side (`is_admin`). **Every `/api/v1` and `/mcp` route requires the Bearer token** (`SP_API_KEY`); API/MCP responses are **aggregate-only — never raw per-person votes**. No LLM keys anywhere in this repo.
 7. **State transitions are idempotent** — double-submit close/keep/next/finish must apply exactly once.
 8. **One slice, one commit**, conventional messages (`feat:`, `fix:`, `test:`, `chore:`).
 9. Follow the lead's delegation contract exactly: stated files, do-NOT list, verification commands with expected outputs, honest-failure escape hatch.

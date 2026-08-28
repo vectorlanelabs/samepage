@@ -18,26 +18,268 @@
 <button onClick="{{ setMobileView }}" style="{{ mobileToggleStyle }}">📱 Mobile</button>
 </div>
 
+<!-- ============ STANDALONE: AUTH ============ -->
+<sc-if value="{{ isAuth }}" hint-placeholder-val="{{ false }}">
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:oklch(0.96 0.02 250);box-sizing:border-box;padding:24px;">
+<div style="width:100%;max-width:420px;background:#fff;border-radius:24px;padding:36px;box-shadow:0 14px 30px rgba(60,50,110,.10);box-sizing:border-box;">
+<div style="font:700 20px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">SamePage</div>
+<div style="font:600 22px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);margin-top:14px;">{{ authHeading }}</div>
+
+<sc-if value="{{ authIsSignup }}" hint-placeholder-val="{{ false }}">
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:18px;">Name</div>
+<input value="{{ authName }}" onChange="{{ handleAuthNameChange }}" placeholder="Your name" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+</sc-if>
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:16px;">Email</div>
+<input value="{{ authEmail }}" onChange="{{ handleAuthEmailChange }}" placeholder="you@example.com" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:16px;">Password</div>
+<input type="password" value="{{ authPassword }}" onChange="{{ handleAuthPasswordChange }}" placeholder="••••••••" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+
+<button onClick="{{ submitAuth }}" style="margin-top:20px;width:100%;padding:14px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">{{ authCta }}</button>
+
+<div style="text-align:center;margin-top:14px;">
+<button onClick="{{ toggleAuthMode }}" style="border:none;background:none;color:oklch(0.55 0.14 300);font:700 12px 'Nunito Sans',sans-serif;cursor:pointer;text-decoration:underline;">{{ authToggleLabel }}</button>
+</div>
+
+<div style="display:flex;align-items:center;gap:10px;margin:18px 0;">
+<div style="flex:1;height:1px;background:oklch(0.9 0.01 260);"></div>
+<span style="font:700 10.5px 'Nunito Sans',sans-serif;color:oklch(0.6 0.02 260);">or</span>
+<div style="flex:1;height:1px;background:oklch(0.9 0.01 260);"></div>
+</div>
+<button onClick="{{ goSessionJoin }}" style="width:100%;padding:12px;border:none;border-radius:999px;background:oklch(0.97 0.015 260);color:oklch(0.4 0.02 260);font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;">Join a session as a guest</button>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ STANDALONE: SESSION JOIN ============ -->
+<sc-if value="{{ isSessionJoin }}" hint-placeholder-val="{{ false }}">
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:oklch(0.96 0.02 250);box-sizing:border-box;padding:24px;">
+<div style="width:100%;max-width:440px;background:#fff;border-radius:24px;padding:36px;box-shadow:0 14px 30px rgba(60,50,110,.10);box-sizing:border-box;">
+<div style="display:inline-flex;gap:4px;background:oklch(0.97 0.015 260);border-radius:999px;padding:4px;">
+<button onClick="{{ setJoinGuest }}" style="{{ joinGuestToggleStyle }}">Guest preview</button>
+<button onClick="{{ setJoinLoggedIn }}" style="{{ joinLoggedInToggleStyle }}">Logged-in preview</button>
+</div>
+
+<div style="font:600 24px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);margin-top:18px;">Join a session</div>
+<div style="margin-top:12px;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;background:oklch(0.94 0.05 300);border-radius:999px;">
+<span style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.5 0.14 300);">SESSION</span>
+<span style="font:700 15px 'Fredoka',sans-serif;color:oklch(0.4 0.16 300);">TACO-4471 · Weekly Meals</span>
+</div>
+
+<sc-if value="{{ joinIsLoggedIn }}" hint-placeholder-val="{{ false }}">
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:18px;">You're joining as</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:8px;padding:12px 14px;background:oklch(0.97 0.015 260);border-radius:14px;">
+<span style="width:32px;height:32px;flex:none;border-radius:999px;background:oklch(0.72 0.14 20);color:#fff;display:flex;align-items:center;justify-content:center;font:700 13px 'Fredoka',sans-serif;">{{ joinLoggedInitial }}</span>
+<span style="font:700 14px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ joinLoggedName }}</span>
+</div>
+<button onClick="{{ setJoinGuest }}" style="border:none;background:none;color:oklch(0.55 0.14 300);font:700 11.5px 'Nunito Sans',sans-serif;cursor:pointer;margin-top:8px;text-decoration:underline;">Join as someone else instead</button>
+</sc-if>
+<sc-if value="{{ joinIsGuest }}" hint-placeholder-val="{{ true }}">
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:18px;">Your name</div>
+<input value="{{ joinGuestName }}" onChange="{{ handleJoinGuestNameChange }}" placeholder="Enter your name" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+<div style="font:600 10.5px 'Nunito Sans',sans-serif;color:oklch(0.6 0.02 260);margin-top:6px;">No account needed — this name is just how the group sees your votes.</div>
+</sc-if>
+
+<button onClick="{{ submitJoin }}" style="margin-top:20px;width:100%;padding:14px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Join session →</button>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ SHELL ============ -->
+<sc-if value="{{ isShellMode }}" hint-placeholder-val="{{ true }}">
 <div style="display:flex;flex-direction:{{ outerDirection }};min-height:100vh;background:oklch(0.96 0.02 250);">
 
 <div style="{{ sidebarStyle }}">
 <div style="{{ brandWrapStyle }}">
-<div style="font:600 17px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">Dinner Decider</div>
+<div style="font:700 17px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">SamePage</div>
+<div style="font:600 11px 'Nunito Sans',sans-serif;color:oklch(0.6 0.14 300);">{{ sidebarSubtitle }}</div>
 </div>
 <div style="{{ navWrapStyle }}">
-<sc-for list="{{ navItems }}" as="nav" hint-placeholder-count="4">
+<sc-for list="{{ navItemsTop }}" as="nav" hint-placeholder-count="3">
 <button onClick="{{ nav.click }}" style="{{ nav.style }}">{{ nav.label }}</button>
 </sc-for>
+<sc-if value="{{ isInModule }}" hint-placeholder-val="{{ false }}">
+<div style="{{ moduleDividerStyle }}">Meal Planner</div>
+<sc-for list="{{ navItemsModule }}" as="nav" hint-placeholder-count="4">
+<button onClick="{{ nav.click }}" style="{{ nav.style }}">{{ nav.label }}</button>
+</sc-for>
+</sc-if>
 </div>
 <div style="{{ sidebarSpacerStyle }}"></div>
+<sc-if value="{{ isInModule }}" hint-placeholder-val="{{ false }}">
 <button onClick="{{ goStart }}" style="{{ sidebarCtaStyle }}">Start a session →</button>
+</sc-if>
+<div style="{{ previewLinksStyle }}">
+<button onClick="{{ goAuthLogin }}" style="{{ previewLinkStyle }}">Sign in / Sign up</button>
+<button onClick="{{ goSessionJoin }}" style="{{ previewLinkStyle }}">Guest join screen</button>
+</div>
 </div>
 
 <div style="flex:1;min-width:0;{{ mainPadStyle }}box-sizing:border-box;">
 <div style="width:min({{ contentMaxWidth }},100%);box-sizing:border-box;margin:0 auto;">
 
+<!-- ============ COLLECTIONS ============ -->
+<sc-if value="{{ isCollections }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+<span style="font:600 26px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">Collections</span>
+<button onClick="{{ goCollectionCreate }}" style="flex:none;padding:11px 18px;border:none;border-radius:999px;background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);font:700 13px 'Fredoka',sans-serif;cursor:pointer;">+ New collection</button>
+</div>
+<div style="font:600 12px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:4px;">{{ currentGroupName }}</div>
+
+<div style="display:grid;grid-template-columns:{{ gridColsCollections }};gap:14px;margin-top:20px;">
+<sc-for list="{{ collectionCards }}" as="c" hint-placeholder-count="2">
+<button onClick="{{ c.click }}" style="{{ c.style }}">
+<div style="font:700 16px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ c.name }}</div>
+<div style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.55 0.14 300);margin-top:6px;">{{ c.typeLabel }}</div>
+<div style="font:600 11.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:10px;">{{ c.detail }}</div>
+</button>
+</sc-for>
+<sc-for list="{{ comingSoonCards }}" as="c" hint-placeholder-count="2">
+<div style="border:1.5px dashed oklch(0.85 0.01 260);border-radius:20px;padding:20px;opacity:.6;">
+<div style="font:700 16px 'Nunito Sans',sans-serif;color:oklch(0.4 0.02 260);">{{ c.name }}</div>
+<div style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">Coming soon</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<!-- ============ COLLECTION CREATE ============ -->
+<sc-if value="{{ isCollectionCreate }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<div style="display:flex;align-items:center;gap:10px;">
+<button onClick="{{ goCollections }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;">← Back</button>
+<span style="font:600 20px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">New collection</span>
+</div>
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:18px;">Name</div>
+<input value="{{ newCollectionName }}" onChange="{{ handleNewCollectionNameChange }}" placeholder="e.g. Weekly Meals" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:16px;">Type</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px;">
+<button onClick="{{ selectMealPlannerType }}" style="{{ typeCardMealPlannerStyle }}">Meal Planner</button>
+<div style="border:1.5px dashed oklch(0.85 0.01 260);border-radius:14px;padding:14px;text-align:center;opacity:.55;font:700 12px 'Nunito Sans',sans-serif;color:oklch(0.5 0.02 260);">Things To Do<br><span style="font:600 10px 'Nunito Sans',sans-serif;">Coming soon</span></div>
+<div style="border:1.5px dashed oklch(0.85 0.01 260);border-radius:14px;padding:14px;text-align:center;opacity:.55;font:700 12px 'Nunito Sans',sans-serif;color:oklch(0.5 0.02 260);">Game Night<br><span style="font:600 10px 'Nunito Sans',sans-serif;">Coming soon</span></div>
+</div>
+
+<button onClick="{{ createCollection }}" style="margin-top:20px;padding:14px 26px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Create collection</button>
+</div>
+</sc-if>
+
+<!-- ============ GROUPS ============ -->
+<sc-if value="{{ isGroups }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<div style="display:flex;align-items:center;justify-content:space-between;">
+<span style="font:600 22px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">Your groups</span>
+<button onClick="{{ goGroupCreate }}" style="padding:11px 18px;border:none;border-radius:999px;background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);font:700 13px 'Fredoka',sans-serif;cursor:pointer;">+ Create group</button>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px;margin-top:18px;">
+<sc-for list="{{ groupsRows }}" as="g" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:oklch(0.97 0.015 260);border-radius:16px;">
+<div style="flex:1;">
+<div style="display:flex;align-items:center;gap:8px;">
+<span style="font:700 15px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ g.name }}</span>
+<span style="{{ g.roleBadgeStyle }}">{{ g.roleLabel }}</span>
+</div>
+<div style="font:600 11.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:4px;">{{ g.memberLabel }}</div>
+</div>
+<button onClick="{{ g.manageClick }}" style="border:none;background:none;color:oklch(0.55 0.14 300);font:700 12px 'Nunito Sans',sans-serif;cursor:pointer;">Manage members</button>
+<button onClick="{{ g.switchClick }}" style="{{ g.switchStyle }}">{{ g.switchLabel }}</button>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ GROUP CREATE ============ -->
+<sc-if value="{{ isGroupCreate }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<div style="display:flex;align-items:center;gap:10px;">
+<button onClick="{{ goGroups }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;">← Back</button>
+<span style="font:600 20px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">Create a group</span>
+</div>
+<div style="font:700 10.5px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);margin-top:18px;">Group name</div>
+<input value="{{ newGroupName }}" onChange="{{ handleNewGroupNameChange }}" placeholder="e.g. The Smith Family" style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+<div style="font:600 10.5px 'Nunito Sans',sans-serif;color:oklch(0.6 0.02 260);margin-top:8px;">You'll be the owner. You can add admins once it's created.</div>
+<button onClick="{{ createGroup }}" style="margin-top:18px;padding:14px 26px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Create group</button>
+</div>
+</sc-if>
+
+<!-- ============ GROUP MEMBERS ============ -->
+<sc-if value="{{ isGroupMembers }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<div style="display:flex;align-items:center;gap:10px;">
+<button onClick="{{ goGroups }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;">← Back</button>
+<span style="font:600 20px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">{{ currentGroupName }} members</span>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:18px;">
+<sc-for list="{{ groupMembersRows }}" as="m" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:oklch(0.97 0.015 260);border-radius:16px;">
+<div style="flex:1;">
+<div style="font:700 14px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ m.name }}</div>
+<div style="font:600 10.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);">{{ m.email }}</div>
+</div>
+<span style="{{ m.badgeStyle }}">{{ m.badgeLabel }}</span>
+<sc-if value="{{ m.canRemove }}" hint-placeholder-val="{{ false }}">
+<button onClick="{{ m.removeClick }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 11px 'Nunito Sans',sans-serif;cursor:pointer;">Remove</button>
+</sc-if>
+</div>
+</sc-for>
+</div>
+
+<div style="margin-top:18px;padding:14px;background:oklch(0.97 0.015 260);border-radius:18px;display:flex;gap:10px;align-items:center;">
+<input value="{{ inviteEmail }}" onChange="{{ handleInviteEmailChange }}" placeholder="Email address" style="flex:1;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px 'Nunito Sans',sans-serif;">
+<button onClick="{{ inviteAdmin }}" style="flex:none;padding:11px 20px;border:none;border-radius:12px;background:oklch(0.7 0.16 300);color:#fff;font:700 13px 'Fredoka',sans-serif;cursor:pointer;">Invite as admin</button>
+</div>
+</div>
+</sc-if>
+
+<!-- ============ REPORTING ============ -->
+<sc-if value="{{ isReporting }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
+<span style="font:600 22px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">Reporting</span>
+<div style="font:600 11.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">Outcome trends across every session in this collection.</div>
+
+<div style="display:grid;grid-template-columns:{{ gridColsReporting }};gap:24px;margin-top:20px;">
+<div>
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);">By item</div>
+<div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+<sc-for list="{{ reportItemRows }}" as="r" hint-placeholder-count="4">
+<div style="background:oklch(0.97 0.015 260);border-radius:14px;padding:12px 14px;">
+<div style="display:flex;align-items:center;justify-content:space-between;">
+<span style="font:700 13px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ r.name }}</span>
+<span style="font:700 10px 'Nunito Sans',sans-serif;color:oklch(0.5 0.02 260);background:#fff;border-radius:999px;padding:2px 8px;">{{ r.tag }}</span>
+</div>
+<div style="font:600 11px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">{{ r.label }}</div>
+<div style="height:6px;background:oklch(0.9 0.01 260);border-radius:999px;margin-top:6px;overflow:hidden;">
+<div style="height:100%;border-radius:999px;background:oklch(0.6 0.14 25);{{ r.barStyle }}"></div>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+<div>
+<div style="font:700 11px 'Nunito Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:oklch(0.55 0.02 260);">By tag</div>
+<div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+<sc-for list="{{ reportTagRows }}" as="r" hint-placeholder-count="4">
+<div style="background:oklch(0.97 0.015 260);border-radius:14px;padding:12px 14px;">
+<span style="font:700 13px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ r.tag }}</span>
+<div style="font:600 11px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">{{ r.label }}</div>
+<div style="height:6px;background:oklch(0.9 0.01 260);border-radius:999px;margin-top:6px;overflow:hidden;">
+<div style="height:100%;border-radius:999px;background:oklch(0.6 0.14 25);{{ r.barStyle }}"></div>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
 <!-- ============ HOME ============ -->
-<sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
 <div style="background:#fff;border-radius:24px;padding:40px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
 <div style="font:600 32px/1.15 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">What's for dinner?</div>
 <button onClick="{{ goStart }}" style="margin-top:20px;padding:14px 26px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:600 15px 'Fredoka',sans-serif;cursor:pointer;">Start a session →</button>
@@ -118,7 +360,7 @@
 <div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
 <div style="display:flex;align-items:center;justify-content:space-between;">
 <div style="font:600 22px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">{{ trackLabel }} · Batch {{ batchNumber }}</div>
-<div style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.55 0.16 300);background:oklch(0.94 0.05 300);padding:4px 10px;border-radius:999px;flex:none;">{{ batchTotal }} meals</div>
+<div style="font:700 11px 'Nunito Sans',sans-serif;color:oklch(0.55 0.16 300);background:oklch(0.94 0.05 300);padding:4px 10px;border-radius:999px;flex:none;">{{ batchTotal }} options</div>
 </div>
 
 <div style="display:flex;gap:6px;margin-top:16px;align-items:center;flex-wrap:wrap;">
@@ -427,7 +669,7 @@
 <sc-if value="{{ isPeopleScreen }}" hint-placeholder-val="{{ false }}">
 <div style="background:#fff;border-radius:24px;padding:32px;box-shadow:0 14px 30px rgba(60,50,110,.10);">
 <span style="font:600 22px 'Fredoka',sans-serif;color:oklch(0.25 0.02 260);">People</span>
-<div style="font:600 11.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">Name + PIN, no accounts. Deactivated, never deleted.</div>
+<div style="font:600 11.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);margin-top:6px;">Anyone in the group can vote in a session. Deactivated, never deleted.</div>
 
 <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
 <sc-for list="{{ peopleRows }}" as="p" hint-placeholder-count="5">
@@ -435,7 +677,7 @@
 <span style="width:38px;height:38px;flex:none;border-radius:999px;color:#fff;display:flex;align-items:center;justify-content:center;font:700 14px 'Fredoka',sans-serif;{{ p.avatarStyle }}">{{ p.initial }}</span>
 <div style="flex:1;">
 <div style="font:700 14px 'Nunito Sans',sans-serif;color:oklch(0.25 0.02 260);">{{ p.name }}</div>
-<div style="font:600 10.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);">{{ p.trackLabel }} · PIN ••••</div>
+<div style="font:600 10.5px 'Nunito Sans',sans-serif;color:oklch(0.55 0.02 260);">{{ p.trackLabel }}</div>
 </div>
 <button onClick="{{ p.toggleAdmin }}" style="{{ p.adminStyle }}">{{ p.adminLabel }}</button>
 <button onClick="{{ p.toggleActive }}" style="border:none;background:none;color:oklch(0.55 0.02 260);font:700 11px 'Nunito Sans',sans-serif;cursor:pointer;">{{ p.activeLabel }}</button>
@@ -453,6 +695,7 @@
 </div>
 </div>
 </div>
+</sc-if>
 
 </x-dc>
 <script type="text/x-dc" data-dc-script>
@@ -494,12 +737,27 @@ const TYPE_HUE = { dinner: 25, lunch: 140, both: 300 };
 const TYPE_LABEL = { dinner: 'Dinner', lunch: 'Lunch', both: 'Both' };
 const TAG_OPTIONS = ['kid-favorite','quick','slow-cooker','freezer-friendly','healthy-ish','one-pot','company-worthy','spicy'];
 const PEOPLE_HUES = [20,90,150,220,300,60,320,180];
-const WIDTHS = { home:'920px', start:'880px', vote:'920px', reveal:'640px', done:'760px', manage:'920px', mealEdit:'640px', recipeView:'700px', history:'860px', people:'780px' };
+const REPORT_ITEMS = [
+  { name: 'Fish Tacos', tag: 'fish', rejected: 6, total: 8 },
+  { name: 'Liver and Onions', tag: 'organ-meat', rejected: 7, total: 8 },
+  { name: 'Chicken Parm', tag: 'company-worthy', rejected: 1, total: 9 },
+  { name: 'Chili', tag: 'slow-cooker', rejected: 0, total: 9 },
+];
+const REPORT_TAGS = [
+  { tag: 'fish', rejected: 7, total: 10 },
+  { tag: 'spicy', rejected: 5, total: 9 },
+  { tag: 'kid-favorite', rejected: 2, total: 14 },
+  { tag: 'slow-cooker', rejected: 1, total: 9 },
+];
+const WIDTHS = {
+  home:'920px', start:'880px', vote:'920px', reveal:'640px', done:'760px', manage:'920px', mealEdit:'640px', recipeView:'700px', history:'860px', people:'780px',
+  collections:'920px', collectionCreate:'560px', groups:'760px', groupCreate:'480px', groupMembers:'700px', reporting:'900px',
+};
 function nextType(t) { return t === 'dinner' ? 'lunch' : t === 'lunch' ? 'both' : 'dinner'; }
 
 class Component extends DCLogic {
   state = {
-    screen: 'home',
+    screen: 'collections',
     viewMode: 'desktop',
     dinnerTarget: 5,
     lunchTarget: 2,
@@ -534,6 +792,32 @@ class Component extends DCLogic {
       { id: 1, date: 'Week of Aug 18', dinners: ['Chicken Parm', 'Chili', 'Grilled Cheese'], lunches: ['Quesadillas'] },
       { id: 2, date: 'Week of Aug 11', dinners: ['BBQ Sandwiches', 'Frozen Pizza', 'Nachos'], lunches: [] },
     ],
+
+    authIsSignup: false, authEmail: '', authPassword: '', authName: '',
+    joinIsLoggedIn: false, joinGuestName: '', joinLoggedName: 'Mom',
+    groups: [
+      { id: 1, name: 'The Smith Family', role: 'owner', memberCount: 5 },
+      { id: 2, name: 'Neighborhood Book Club', role: 'admin', memberCount: 8 },
+    ],
+    currentGroupId: 1,
+    newGroupName: '',
+    groupMembers: {
+      1: [
+        { id: 1, name: 'Mom', email: 'mom@example.com', role: 'owner' },
+        { id: 2, name: 'Dad', email: 'dad@example.com', role: 'admin' },
+      ],
+      2: [
+        { id: 3, name: 'Jess', email: 'jess@example.com', role: 'owner' },
+        { id: 4, name: 'Mom', email: 'mom@example.com', role: 'admin' },
+      ],
+    },
+    nextGroupId: 3,
+    inviteEmail: '',
+    collectionsByGroup: {
+      1: [{ id: 1, name: 'Weekly Meals', type: 'meal-planner' }],
+      2: [],
+    },
+    newCollectionName: '', newCollectionType: 'meal-planner',
   };
 
   setViewMode(m) { this.setState({ viewMode: m }); }
@@ -542,6 +826,74 @@ class Component extends DCLogic {
   goManage() { this.setState({ screen: 'manage' }); }
   goHistory() { this.setState({ screen: 'history' }); }
   goPeople() { this.setState({ screen: 'people' }); }
+
+  goAuthLogin() { this.setState({ screen: 'auth', authIsSignup: false }); }
+  toggleAuthMode() { this.setState(s => ({ authIsSignup: !s.authIsSignup })); }
+  setAuthName(v) { this.setState({ authName: v }); }
+  setAuthEmail(v) { this.setState({ authEmail: v }); }
+  setAuthPassword(v) { this.setState({ authPassword: v }); }
+  submitAuth() { this.setState({ screen: 'collections' }); }
+
+  goSessionJoin() { this.setState({ screen: 'sessionJoin' }); }
+  setJoinMode(loggedIn) { this.setState({ joinIsLoggedIn: loggedIn }); }
+  setJoinGuestName(v) { this.setState({ joinGuestName: v }); }
+  submitJoin() { this.startVoting(); }
+
+  goCollections() { this.setState({ screen: 'collections' }); }
+  goCollectionCreate() { this.setState({ screen: 'collectionCreate', newCollectionName: '', newCollectionType: 'meal-planner' }); }
+  setNewCollectionName(v) { this.setState({ newCollectionName: v }); }
+  createCollection() {
+    const s = this.state;
+    if (!s.newCollectionName.trim()) return;
+    this.setState(s2 => {
+      const list = s2.collectionsByGroup[s2.currentGroupId] || [];
+      const newId = Date.now();
+      return {
+        collectionsByGroup: { ...s2.collectionsByGroup, [s2.currentGroupId]: [...list, { id: newId, name: s2.newCollectionName.trim(), type: 'meal-planner' }] },
+        screen: 'collections',
+      };
+    });
+  }
+
+  goGroups() { this.setState({ screen: 'groups' }); }
+  switchGroup(id) { this.setState({ currentGroupId: id }); }
+  goGroupCreate() { this.setState({ screen: 'groupCreate', newGroupName: '' }); }
+  setNewGroupName(v) { this.setState({ newGroupName: v }); }
+  createGroup() {
+    const s = this.state;
+    if (!s.newGroupName.trim()) return;
+    this.setState(s2 => {
+      const newId = s2.nextGroupId;
+      return {
+        groups: [...s2.groups, { id: newId, name: s2.newGroupName.trim(), role: 'owner', memberCount: 1 }],
+        groupMembers: { ...s2.groupMembers, [newId]: [{ id: Date.now(), name: 'You', email: 'you@example.com', role: 'owner' }] },
+        collectionsByGroup: { ...s2.collectionsByGroup, [newId]: [] },
+        currentGroupId: newId, nextGroupId: newId + 1, screen: 'groups',
+      };
+    });
+  }
+  goGroupMembers(id) { this.setState(s => ({ currentGroupId: id || s.currentGroupId, screen: 'groupMembers' })); }
+  setInviteEmail(v) { this.setState({ inviteEmail: v }); }
+  inviteAdmin() {
+    const s = this.state;
+    const email = s.inviteEmail.trim();
+    if (!email) return;
+    this.setState(s2 => {
+      const list = s2.groupMembers[s2.currentGroupId] || [];
+      return {
+        groupMembers: { ...s2.groupMembers, [s2.currentGroupId]: [...list, { id: Date.now(), name: email.split('@')[0], email, role: 'admin', pending: true }] },
+        inviteEmail: '',
+      };
+    });
+  }
+  removeAdmin(id) {
+    this.setState(s => {
+      const list = s.groupMembers[s.currentGroupId] || [];
+      return { groupMembers: { ...s.groupMembers, [s.currentGroupId]: list.filter(m => m.id !== id) } };
+    });
+  }
+
+  goReporting() { this.setState({ screen: 'reporting' }); }
 
   togglePersonTrack(id) { this.setState(s => ({ people: s.people.map(p => p.id === id ? { ...p, lunch: !p.lunch } : p) })); }
   changeDinnerTarget(delta) { this.setState(s => ({ dinnerTarget: Math.max(1, Math.min(15, s.dinnerTarget + delta)) })); }
@@ -768,21 +1120,29 @@ class Component extends DCLogic {
     const myVotes = votesForTrack[currentPerson.id] || {};
 
     const mobile = s.viewMode === 'mobile';
-    const navDefs = [
+    const isInModule = ['home','start','vote','reveal','done','manage','mealEdit','recipeView','history','people'].includes(s.screen);
+    const isAuth = s.screen === 'auth';
+    const isSessionJoin = s.screen === 'sessionJoin';
+    const isStandalone = isAuth || isSessionJoin;
+
+    const topNavDefs = [
+      { key: 'collections', label: 'Collections', click: () => this.goCollections(), match: ['collections','collectionCreate'] },
+      { key: 'groups', label: 'Group', click: () => this.goGroups(), match: ['groups','groupCreate','groupMembers'] },
+      { key: 'reporting', label: 'Reporting', click: () => this.goReporting(), match: ['reporting'] },
+    ];
+    const navStyleFor = active => mobile
+      ? "flex:none;border:none;border-radius:999px;padding:8px 14px;font:700 12px 'Nunito Sans',sans-serif;cursor:pointer;white-space:nowrap;" + (active ? 'background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);' : 'background:none;color:oklch(0.4 0.02 260);')
+      : "display:block;width:100%;box-sizing:border-box;text-align:left;border:none;border-radius:10px;padding:11px 12px;font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;" + (active ? 'background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);' : 'background:none;color:oklch(0.4 0.02 260);');
+    const navItemsTop = topNavDefs.map(n => ({ label: n.label, click: n.click, style: navStyleFor(n.match.includes(s.screen)) }));
+
+    const moduleNavDefs = [
       { key: 'home', label: 'Home', click: () => this.goHome() },
       { key: 'manage', label: 'Meal Library', click: () => this.goManage() },
       { key: 'history', label: 'History', click: () => this.goHistory() },
       { key: 'people', label: 'People', click: () => this.goPeople() },
     ];
-    const navItems = navDefs.map(n => {
-      const activeColor = s.screen === n.key ? 'background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);' : 'background:none;color:oklch(0.4 0.02 260);';
-      return {
-        label: n.label, click: n.click,
-        style: mobile
-          ? "flex:none;border:none;border-radius:999px;padding:8px 14px;font:700 12px 'Nunito Sans',sans-serif;cursor:pointer;white-space:nowrap;" + activeColor
-          : "display:block;width:100%;box-sizing:border-box;text-align:left;border:none;border-radius:10px;padding:11px 12px;font:700 13px 'Nunito Sans',sans-serif;cursor:pointer;" + activeColor,
-      };
-    });
+    const navItemsModule = moduleNavDefs.map(n => ({ label: n.label, click: n.click, style: navStyleFor(s.screen === n.key) }));
+
     const toggleBtnStyle = active => "border:none;border-radius:999px;padding:8px 14px;font:700 12px 'Nunito Sans',sans-serif;cursor:pointer;" +
       (active ? 'background:oklch(0.7 0.16 300);color:#fff;' : 'background:none;color:oklch(0.5 0.02 260);');
 
@@ -910,11 +1270,67 @@ class Component extends DCLogic {
       toggleActive: () => this.toggleActive(p.id),
     }));
 
+    const currentGroup = s.groups.find(g => g.id === s.currentGroupId);
+    const currentGroupName = currentGroup ? currentGroup.name : '';
+    const groupsRows = s.groups.map(g => ({
+      id: g.id, name: g.name,
+      roleLabel: g.role === 'owner' ? 'Owner' : 'Admin',
+      roleBadgeStyle: `font:700 10px 'Nunito Sans',sans-serif;border-radius:999px;padding:3px 9px;` + (g.role === 'owner' ? 'background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);' : 'background:oklch(0.93 0.01 260);color:oklch(0.5 0.02 260);'),
+      memberLabel: `${g.memberCount} member${g.memberCount === 1 ? '' : 's'}`,
+      manageClick: () => this.goGroupMembers(g.id),
+      switchClick: g.id === s.currentGroupId ? () => {} : () => this.switchGroup(g.id),
+      switchLabel: g.id === s.currentGroupId ? 'Current' : 'Switch',
+      switchStyle: "flex:none;border:none;border-radius:999px;padding:8px 16px;font:700 12px 'Fredoka',sans-serif;cursor:pointer;" +
+        (g.id === s.currentGroupId ? 'background:oklch(0.93 0.01 260);color:oklch(0.55 0.02 260);' : 'background:oklch(0.7 0.16 300);color:#fff;'),
+    }));
+    const groupMembersRows = (s.groupMembers[s.currentGroupId] || []).map(m => ({
+      id: m.id, name: m.name, email: m.email,
+      badgeLabel: m.role === 'owner' ? '★ Owner' : (m.pending ? 'Invited' : 'Admin'),
+      badgeStyle: `font:700 10px 'Nunito Sans',sans-serif;border-radius:999px;padding:3px 9px;` + (m.role === 'owner' ? 'background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);' : 'background:oklch(0.93 0.01 260);color:oklch(0.5 0.02 260);'),
+      canRemove: m.role === 'admin', removeClick: () => this.removeAdmin(m.id),
+    }));
+
+    const collectionCards = (s.collectionsByGroup[s.currentGroupId] || []).map(c => ({
+      id: c.id, name: c.name, typeLabel: 'Meal Planner', detail: `${s.meals.filter(x => !x.archived).length} meals`,
+      click: () => this.goHome(),
+      style: "text-align:left;border:none;border-radius:20px;background:#fff;padding:20px;cursor:pointer;box-shadow:0 8px 20px rgba(60,50,110,.08);",
+    }));
+    const comingSoonCards = [{ name: 'Things To Do' }, { name: 'Game Night' }];
+
+    const reportItemRows = REPORT_ITEMS.map(r => ({ name: r.name, tag: r.tag, label: `Rejected ${r.rejected} of last ${r.total}`, barStyle: `width:${Math.round(100 * r.rejected / r.total)}%;` }));
+    const reportTagRows = REPORT_TAGS.map(r => ({ tag: r.tag, label: `Rejected ${r.rejected} of last ${r.total}`, barStyle: `width:${Math.round(100 * r.rejected / r.total)}%;` }));
+
     return {
+      isAuth, isSessionJoin, isShellMode: !isStandalone, isInModule,
       isHome: s.screen === 'home', isStart: s.screen === 'start', isVote: s.screen === 'vote', isReveal: s.screen === 'reveal',
       isDone: s.screen === 'done', isManage: s.screen === 'manage', isMealEdit: s.screen === 'mealEdit',
       isRecipeView: s.screen === 'recipeView', isHistory: s.screen === 'history', isPeopleScreen: s.screen === 'people',
-      navItems,
+      isCollections: s.screen === 'collections', isCollectionCreate: s.screen === 'collectionCreate',
+      isGroups: s.screen === 'groups', isGroupCreate: s.screen === 'groupCreate', isGroupMembers: s.screen === 'groupMembers',
+      isReporting: s.screen === 'reporting',
+
+      authIsSignup: s.authIsSignup,
+      authHeading: s.authIsSignup ? 'Create your account' : 'Sign in',
+      authCta: s.authIsSignup ? 'Create account' : 'Sign in',
+      authToggleLabel: s.authIsSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up",
+      toggleAuthMode: () => this.toggleAuthMode(),
+      authName: s.authName, handleAuthNameChange: e => this.setAuthName(e.target.value),
+      authEmail: s.authEmail, handleAuthEmailChange: e => this.setAuthEmail(e.target.value),
+      authPassword: s.authPassword, handleAuthPasswordChange: e => this.setAuthPassword(e.target.value),
+      submitAuth: () => this.submitAuth(), goAuthLogin: () => this.goAuthLogin(),
+
+      goSessionJoin: () => this.goSessionJoin(),
+      joinIsLoggedIn: s.joinIsLoggedIn, joinIsGuest: !s.joinIsLoggedIn,
+      setJoinGuest: () => this.setJoinMode(false), setJoinLoggedIn: () => this.setJoinMode(true),
+      joinGuestToggleStyle: toggleBtnStyle(!s.joinIsLoggedIn), joinLoggedInToggleStyle: toggleBtnStyle(s.joinIsLoggedIn),
+      joinGuestName: s.joinGuestName, handleJoinGuestNameChange: e => this.setJoinGuestName(e.target.value),
+      joinLoggedName: s.joinLoggedName, joinLoggedInitial: s.joinLoggedName ? s.joinLoggedName[0].toUpperCase() : '',
+      submitJoin: () => this.submitJoin(),
+
+      navItemsTop, navItemsModule,
+      moduleDividerStyle: mobile
+        ? 'font:700 9.5px \'Nunito Sans\',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:oklch(0.65 0.02 260);padding:0 6px;align-self:center;'
+        : "font:700 10px 'Nunito Sans',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:oklch(0.6 0.02 260);margin:10px 0 2px 4px;",
       setDesktopView: () => this.setViewMode('desktop'), setMobileView: () => this.setViewMode('mobile'),
       desktopToggleStyle: toggleBtnStyle(!mobile), mobileToggleStyle: toggleBtnStyle(mobile),
       outerDirection: mobile ? 'column' : 'row',
@@ -922,18 +1338,23 @@ class Component extends DCLogic {
         ? 'width:100%;flex:none;background:#fff;padding:14px 16px;display:flex;flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid oklch(0.93 0.01 260);box-sizing:border-box;'
         : 'width:240px;flex:none;background:#fff;padding:32px 22px;display:flex;flex-direction:column;gap:6px;border-right:1px solid oklch(0.93 0.01 260);box-sizing:border-box;',
       brandWrapStyle: mobile ? 'display:flex;flex-direction:column;margin-right:6px;' : 'display:flex;flex-direction:column;margin-bottom:20px;',
-      navWrapStyle: mobile ? 'display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;flex:1;' : 'display:flex;flex-direction:column;gap:6px;',
+      sidebarSubtitle: isInModule ? 'Meal Planner' : currentGroupName,
+      navWrapStyle: mobile ? 'display:flex;flex-direction:row;gap:6px;flex-wrap:wrap;flex:1;align-items:center;' : 'display:flex;flex-direction:column;gap:6px;',
       sidebarSpacerStyle: mobile ? 'display:none;' : 'flex:1;',
       sidebarCtaStyle: mobile
         ? "flex:none;padding:9px 14px;border:none;border-radius:999px;background:oklch(0.7 0.16 300);color:#fff;font:700 12px 'Fredoka',sans-serif;cursor:pointer;"
         : "padding:13px;border:none;border-radius:12px;background:oklch(0.7 0.16 300);color:#fff;font:700 13px 'Fredoka',sans-serif;cursor:pointer;",
-      mainPadStyle: mobile ? 'padding:20px 16px;' : 'padding:48px;',
+      previewLinksStyle: mobile ? 'display:none;' : 'display:flex;flex-direction:column;gap:4px;margin-top:14px;padding-top:14px;border-top:1px solid oklch(0.93 0.01 260);',
+      previewLinkStyle: "border:none;background:none;text-align:left;color:oklch(0.6 0.02 260);font:600 10.5px 'Nunito Sans',sans-serif;cursor:pointer;padding:2px 4px;",
+      mainPadStyle: mobile ? 'padding:20px 16px;' : (s.screen === 'collections' ? 'padding:80px 48px 48px;' : 'padding:48px;'),
       contentMaxWidth: mobile ? '480px' : (WIDTHS[s.screen] || '800px'),
       gridColsHome: mobile ? '1fr' : 'repeat(3,1fr)',
       gridColsStart: mobile ? '1fr' : '1fr 1fr',
       gridColsVote: mobile ? '1fr 1fr' : 'repeat(3,1fr)',
       gridColsLibrary: mobile ? '1fr' : '1fr 1fr',
       gridColsHistory: mobile ? '1fr' : '1fr 1fr',
+      gridColsCollections: mobile ? '1fr' : 'repeat(3,1fr)',
+      gridColsReporting: mobile ? '1fr' : '1fr 1fr',
       activeMealCount: s.meals.filter(m => !m.archived).length, historyCount: s.history.length, activePeopleCount: s.people.filter(p => p.isActive).length,
       goStart: () => this.goStart(), goManage: () => this.goManage(), goHistory: () => this.goHistory(), goPeople: () => this.goPeople(),
 
@@ -986,6 +1407,20 @@ class Component extends DCLogic {
       historyRows,
 
       peopleRows, newPersonName: s.newPersonName, handlePersonNameChange: e => this.setNewPersonName(e.target.value), addPerson: () => this.addPerson(),
+
+      currentGroupName,
+      collectionCards, comingSoonCards,
+      goCollections: () => this.goCollections(), goCollectionCreate: () => this.goCollectionCreate(),
+      newCollectionName: s.newCollectionName, handleNewCollectionNameChange: e => this.setNewCollectionName(e.target.value),
+      typeCardMealPlannerStyle: "border:none;border-radius:14px;padding:14px;text-align:center;cursor:pointer;font:700 12px 'Nunito Sans',sans-serif;background:oklch(0.94 0.05 300);color:oklch(0.4 0.16 300);",
+      selectMealPlannerType: () => {}, createCollection: () => this.createCollection(),
+
+      groupsRows, goGroups: () => this.goGroups(), goGroupCreate: () => this.goGroupCreate(),
+      newGroupName: s.newGroupName, handleNewGroupNameChange: e => this.setNewGroupName(e.target.value), createGroup: () => this.createGroup(),
+      goGroupMembers: () => this.goGroupMembers(),
+      groupMembersRows, inviteEmail: s.inviteEmail, handleInviteEmailChange: e => this.setInviteEmail(e.target.value), inviteAdmin: () => this.inviteAdmin(),
+
+      reportItemRows, reportTagRows,
     };
   }
 }

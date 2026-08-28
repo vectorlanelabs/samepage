@@ -1,6 +1,6 @@
 """Alembic environment — wired to app settings and the SQLAlchemy models (D15).
 
-The database URL is read from the environment (``DD_DB_PATH``) at runtime via
+The database URL is read from the environment (``SP_DB_PATH``) at runtime via
 ``app.settings.Settings``; the schema target is ``app.db.Base.metadata``.
 """
 

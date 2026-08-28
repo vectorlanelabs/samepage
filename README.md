@@ -1,6 +1,15 @@
-# Dinner Decider
+# SamePage
 
-A household web app for planning a week of meals that everyone will actually eat — replacing the D8/D20 spreadsheet-and-dice ritual, which narrows the list but never solves the decision problem.
+**SamePage** is a multi-tenant consensus-voting platform for families and friend groups: a group of people
+agree on something — what's for dinner, what to do this weekend, which game to play — through private
+batch voting instead of a spreadsheet, a dice roll, or an argument. **Meal Planner** is its first module,
+described below. Full platform architecture: [`docs/PLAN-v2-samepage.md`](docs/PLAN-v2-samepage.md).
+Identity/tenancy (accounts, groups) and the generic collections model are being built now (M2a/M2b);
+session-based voting itself (M3) has not started.
+
+## Meal Planner
+
+A module for planning a week of meals that everyone will actually eat — replacing the D8/D20 spreadsheet-and-dice ritual, which narrows the list but never solves the decision problem.
 
 ## What it does
 
@@ -14,7 +23,7 @@ The household runs a **weekly planning session**:
 
 Votes stay private — individual votes are never shown, before or after a batch closes. Only the outcome is revealed: the meals everyone agreed on. Every kept meal is recorded (`times_kept`), which is how favorites will be determined from actual use.
 
-The output is the week's meal plan, which then feeds grocery planning done elsewhere. **Dinner Decider does not build the grocery list.**
+The output is the week's meal plan, which then feeds grocery planning done elsewhere. **Meal Planner does not build the grocery list.**
 
 ## What's in v1
 
@@ -46,8 +55,8 @@ Full intent statements: [`docs/POST-V1.md`](docs/POST-V1.md).
 
 ## Run it
 
-_Setup and run instructions land with M5 (local dev: `uv sync` → `uv run scripts/seed.py` → `uv run uvicorn app.main:app`; production: VPS behind HTTPS per `docs/PLAN-v1-mvp.md` §7.1)._
+_Setup and run instructions land with M5 (local dev: `uv sync` → `uv run alembic upgrade head` → `uv run python -m scripts.seed` → `uv run uvicorn app.main:app`; production: VPS behind HTTPS per `docs/PLAN-v1-mvp.md` §7.1). Note: `uv run scripts/seed.py` (as a bare script) fails with `ModuleNotFoundError: No module named 'app'` — run it as a module (`python -m scripts.seed`) as shown above; worth fixing properly at M5._
 
 ## Success criterion
 
-Dinner Decider succeeds if the household can answer **"what are we eating tonight?"** faster, with less negotiation, while gradually building a better list of meals everyone can actually agree on.
+Meal Planner succeeds if the household can answer **"what are we eating tonight?"** faster, with less negotiation, while gradually building a better list of meals everyone can actually agree on.

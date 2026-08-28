@@ -1,7 +1,7 @@
 [project]
-name = "dinner-decider"
-version = "0.1.0"
-description = "Household weekly meal planning: private yes/no voting batches until the week's dinners and lunches are planned."
+name = "samepage"
+version = "0.2.0"
+description = "SamePage: a multi-tenant consensus-voting platform. Meal Planner (private yes/no voting batches until the week's dinners and lunches are planned) is its first collection."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

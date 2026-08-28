@@ -5,7 +5,7 @@ Run from the repo root::
     uv run python -m scripts.seed
 
 Reads ``seed/meals.json`` READ-ONLY (never mutated) and loads it into the
-database pointed at by ``DD_DB_PATH`` (default ``data/dinnerdecider.db``).
+database pointed at by ``SP_DB_PATH`` (default ``data/samepage.db``).
 The schema must already exist — run ``uv run alembic upgrade head`` first
 (the app's own startup does this, so booting once before seeding works too).
 Dedupe key is ``normalized_name`` (casefold + collapsed whitespace, D11):

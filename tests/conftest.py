@@ -10,8 +10,8 @@ import tempfile
 # Point the app's boot-time migration and secret-key creation at a throwaway
 # DB and a fixed test secret — never the real data/ dir or dev DB. Must run
 # BEFORE app.main is imported: the lifespan migrates at TestClient startup.
-os.environ["DD_DB_PATH"] = str(tempfile.mkdtemp(prefix="dd-test-") + "/conftest.db")
-os.environ["DD_SECRET"] = "test-secret-for-tests"
+os.environ["SP_DB_PATH"] = str(tempfile.mkdtemp(prefix="sp-test-") + "/conftest.db")
+os.environ["SP_SECRET"] = "test-secret-for-tests"
 
 import pytest
 from fastapi.testclient import TestClient

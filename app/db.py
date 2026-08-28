@@ -34,7 +34,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expi
 
 
 class Base(DeclarativeBase):
-    """Declarative base for all Dinner Decider models (plan §6)."""
+    """Declarative base for all SamePage models (plan §6)."""
 
 
 def get_db():

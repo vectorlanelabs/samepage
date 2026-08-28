@@ -1,12 +1,19 @@
-# Dinner Decider — Project Charter
+# SamePage — Project Charter
+
+> **⚠ Superseded in part, 2026-08-28.** This charter's identity model (D2, D16's "no accounts") and
+> meal-specific decisions (D10) are superseded by `docs/PLAN-v2-samepage.md` — SamePage is now a
+> multi-tenant consensus-voting platform with Meal Planner (formerly "Dinner Decider") as its first
+> collection. M0–M2's mechanics (vote privacy, unanimous/majority-host-accept, Alembic migrations, no
+> in-app AI) all carry forward; identity and single-household assumptions do not. M3+ is unapproved
+> pending sign-off on the v2 doc. Kept here for history rather than rewritten in place.
 
 | | |
 |---|---|
-| **Status** | **Approved by Charlie 2026-08-26 — M0+M1 complete, M2 next** (autonomous dev loop running) |
-| **Repo** | `vectorlanelabs/dinnerdecider` |
-| **Type** | Household web app — web-first, VPS-hosted |
-| **Budget** | 25 directed cycles for v1 MVP (or milestone-list completion, whichever comes first) |
-| **Source docs** | `README.md` (original concept) · `reference/D20 Dinner Decider.xlsx` (legacy data) · `docs/PLAN-v1-mvp.md` (operative build plan) |
+| **Status** | **M0+M1 landed under the original charter; M2 landed under it too — all three now being revised per the pivot above (M0 stands, M1→M2a, M2→M2b). M3 onward unapproved.** |
+| **Repo** | `vectorlanelabs/samepage` (renamed 2026-08-28 from `dinnerdecider` — see `docs/PLAN-v2-samepage.md` §9) |
+| **Type** | Multi-tenant web app — web-first, VPS-hosted, single shared deployment |
+| **Budget** | 25 directed cycles for v1 MVP (or milestone-list completion, whichever comes first) — carries forward; revisit if the v2 scope changes it materially |
+| **Source docs** | `README.md` (original concept) · `reference/D20 Dinner Decider.xlsx` (legacy data) · `docs/PLAN-v2-samepage.md` (**current** operative build plan) · `docs/PLAN-v1-mvp.md` (superseded) |
 
 ## Target user
 

@@ -1,22 +1,30 @@
-# Dinner Decider — Roadmap
+# SamePage — Roadmap
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-## v1 MVP (current target)
+## ⚠ Architecture pivot in progress (2026-08-28)
 
-Product shape: **weekly planning sessions** — replacing the spreadsheet-and-dice ritual (the ritual is the problem this app exists to solve). Set lunch/dinner targets, iterate 15-meal yes/no batches (same list for everyone, private votes), keep unanimous-yes meals (host may accept majority-yes ones), repeat until the week is planned. Library **pre-seeded** from the legacy spreadsheet. No dice, no import feature, no grocery list.
+**M3 onward is unapproved.** Building M0–M2 as a single-household meal planner surfaced a bigger, more
+useful shape: a generalized multi-tenant consensus-voting platform (**SamePage**), with meal planning
+(**Meal Planner**) as its first collection. This changes identity/tenancy (M1 is being redone as M2a) and
+generalizes the meal-specific schema (M2 is being redone as M2b) before M3 (planning sessions & voting,
+never built) starts. Full architecture: `docs/PLAN-v2-samepage.md`. `docs/PLAN-v1-mvp.md` and
+`CHARTER.md`'s identity/D10 decisions are superseded by that doc — left in place for history, not deleted.
+
+## v2 (current target)
 
 | ID | Milestone | Status | Notes |
 |---|---|---|---|
-| M0 | Foundation: scaffolding, FastAPI skeleton, SQLite models, **Alembic migrations**, session, security middleware, CI | [x] | Landed 2026-08-26 (`0a786dc`); 22 tests; review fixes applied |
-| M1 | Household profiles: people (hashed PINs, admin flag), deactivate-not-delete | [x] | Landed 2026-08-26 (`e8a83d2`); 58 tests; atomic lockout + fail-closed Origin |
-| M2 | Meal library CRUD + pre-seeded data (seed loader + tests) | [ ] | `seed/meals.json` already committed |
-| M3 | Planning sessions & voting: lobby/roster freeze, targets, batches, yes/no voting, keeps, completion | [ ] | Core loop; two-browser walkthrough |
-| M4 | History & favorites signal (`times_kept`) | [ ] | |
-| M5 | Hardening, polish, deployment docs, WAL-safe backup + restore check | [ ] | Definition-of-done check |
-| M6 | External API + MCP server (for Charlie's AI tools; **no in-app AI**) | [ ] | Proves recipe import + trend queries via MCP |
+| M0 | Foundation: scaffolding, FastAPI skeleton, SQLite models, **Alembic migrations**, session, security middleware, CI | [x] | Landed 2026-08-26 (`0a786dc`); 22 tests; review fixes applied. Stands as-is — no identity/tenancy coupling. |
+| ~~M1~~ → **M2a** | ~~Household profiles (PINs)~~ → **Identity & tenancy**: `Account` (email+password), `Group`/`group_admin`, replaces `Person`+PIN entirely | [ ] next | Landed version (`e8a83d2`) is being replaced, not extended — PINs are gone. See `docs/PLAN-v2-samepage.md` §4/§8. |
+| **M2b** | **Generic collections & items**: `Collection`/`Item`/`meal_detail`, scoped `Category`/`Tag`, migrate the 155 seeded meals | [ ] | Revises the M2 work (`6d22054`) — CRUD/seed logic mostly reusable, schema underneath changes. §5 |
+| M3 | Session-based voting engine: group/account-hosted sessions, account-optional participants, ad hoc + library-backed items, outcome-only recording (no per-person vote history) | [ ] unapproved | Mechanics (batch size, unanimous/majority-host-accept) carry over from the old spec; identity plumbing does not. §5/§8 |
+| M4 | Reporting & discovery (tag/category trend analysis on vote outcomes) | [ ] | Supersedes "history & favorites" — broader than `times_kept` alone. §6 |
+| M5 | Hardening, polish, deployment docs, WAL-safe backup + restore check | [ ] | Mostly unchanged; env vars renamed `DD_*`→`SP_*` |
+| M6 | External API + MCP server (**no in-app AI**) | [ ] | Token scoping likely moves from one household key to per-group tokens — resolve at build time |
 
-Detailed build plan: `docs/PLAN-v1-mvp.md` · Scope & stop criteria: `CHARTER.md`
+Detailed build plan: `docs/PLAN-v2-samepage.md` (current) · `docs/PLAN-v1-mvp.md` (superseded, kept for
+history) · Scope & stop criteria: `CHARTER.md` (identity/D10 sections superseded — see pivot note above)
 
 ## Post-MVP (stubs — intent only, see `docs/POST-V1.md`)
 
@@ -28,6 +36,13 @@ Each gets a full plan doc when its trigger condition fires.
 
 ## Change log
 
+- **2026-08-28** — **Architecture pivot: SamePage.** Renamed from Dinner Decider; multi-tenant consensus
+  platform (`docs/PLAN-v2-samepage.md`) with Meal Planner as the first collection. Real accounts +
+  group ownership/admin replace `Person`+PIN entirely (no PINs anywhere); meals generalize to
+  `collection`/`item`; voting outcomes are recorded per-item with aggregate yes/no counts and **no
+  person-level history**, keeping the privacy invariant even stronger than before. M3+ unapproved until
+  this doc is signed off; M1 becomes M2a (identity/tenancy), M2 becomes M2b (generic collections).
+  Pre-reveal ad hoc option submission logged as backlog, not blocking.
 - **2026-08-26** — **Plan 1 committed.** Charter, v1 MVP build plan (weekly planning sessions, pre-seeded library), and post-MVP stubs; legacy spreadsheet moved to `reference/`; seed data generated (155 meals); architecture: backend, VPS-hosted. Awaiting charter approval.
 - **2026-08-26** — **Initial plan review applied** (`docs/INITIAL-PLAN-REVIEW.md`, 12/12 findings accepted): roster-freeze lobby phase, Alembic migrations (M0), WAL-safe backups with restore verification (M5), curated 27-meal `both` seed subset (lunch track populated), admin/PIN-hashing/CSRF security, strengthened vote-privacy invariant, README rewritten (concept moved to `docs/ORIGINAL-CONCEPT.md`), deployment wording fixed, recipe-use experience attached to v2 intake, batch size fixed at 15, idempotent session transitions, deactivate-not-delete. Awaiting charter approval.
 - **2026-08-26** — **Majority-vote host acceptance** (Charlie): unanimous auto-kept; majority-yes meals (`yes > no`, ties excluded) shown with aggregate counts; host accepts while slots remain; `kept_by='host'` recorded. Awaiting charter approval.

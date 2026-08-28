@@ -85,3 +85,56 @@ Chronological record of work on Dinner Decider. Oldest at top.
 **CI**: removed 2026-08-26 per Charlie (error emails on every commit; will re-enable when a hosting environment exists). Runs had been failing GitHub-side (~12s, zero steps, logs 404) with no determined cause — local gates are the verification. Tracked in REQUESTS.
 
 **Next**: M2 — meal library CRUD + pre-seeded data (seed loader from `seed/meals.json`, library screen per handoff screen 6/7).
+
+## 2026-08-26 — M2 landed (cycle 3 complete)
+
+**Shipped** (`6d22054`): seed loader, browse/search/filter, CRUD, recipe view. 85 tests passing. Not yet
+devlog'd in detail before the pivot below — see git log for the slice.
+
+## 2026-08-28 — Local validation, then a real architecture pivot
+
+Charlie cloned M0–M2 for local testing (this session, as primary agent going forward — the autonomous
+loop that ran M0–M2 had stopped for review, not still running). `uv sync` → `alembic upgrade head` →
+`scripts/seed.py` → 85 tests green, `ruff` clean, manual browser walkthrough of home/library/people/login
+all confirmed working. One real gap found: `GET /people` requires an existing admin even on a fresh
+install, but the bootstrap-first-admin logic lives in `POST /people` — no UI path exists to create the
+first person. Logged for a future fix; worked around via direct POST for this session's testing.
+
+**Then a genuine scope conversation, not a testing note.** Walking through what M3 (voting) would need
+surfaced that the consensus mechanic (batch of options → private yes/no → unanimous-keep, host-may-accept-
+majority) has nothing to do with meals specifically, and Charlie wants this to become **SamePage** — a
+multi-tenant platform any family/friend group can host, with meal planning (**Meal Planner**) as the first
+of several collections (things to do, games, date-night options, ...).
+
+**Design conversation landed on:**
+- **Single shared multi-tenant deployment**, not per-family self-hosted + federation — avoids a real
+  distributed-identity problem since federation between independent instances was the hard alternative.
+- **Real accounts, but only for group owners/admins.** Regular participants need zero credentials — PINs
+  are gone entirely, not just loosened. A logged-in account only pre-fills a display name when voting;
+  it's never a gate to join or vote.
+- **Groups have an owner (one, transferable) + any number of admins**, who together manage that group's
+  collections, sessions, and reports.
+- **Sessions don't require group membership to join** — a link/code is enough, logged in or not, and this
+  is also how cross-group invites work (no federation needed, since everyone's account lives in the same
+  system).
+- **Vote outcomes are recorded, voters are not.** `batch_item` becomes the durable record — per-item
+  outcome + aggregate yes/no counts, no `person_id`, ever. This is what "was this meal rejected because of
+  a `fish` tag" reporting reads from later. In-batch per-participant response tracking still exists (to
+  detect "has everyone responded") but is explicitly ephemeral/operational, not history.
+- **Voting sessions don't require a backing collection** — ad hoc, never-persisted options are first-class
+  (`batch_item.ad_hoc_label`), covering "what bar tonight" without any database involved.
+- **Pre-reveal ad hoc option submission** (everyone adds options before the batch is revealed; host may
+  promote one into the permanent collection) — logged as backlog, schema already accommodates it, not
+  blocking anything above.
+
+**Produced**: `docs/PLAN-v2-samepage.md` (full v2 architecture — supersedes `CHARTER.md`'s identity/D10
+decisions and `docs/PLAN-v1-mvp.md`'s M3–M6); `ROADMAP.md` and `CHARTER.md` updated with pivot banners and
+a revised milestone table (M0 stands, M1→**M2a** identity/tenancy, M2→**M2b** generic collections, M3
+unapproved until the v2 doc is signed off). Product/repo/module renamed **SamePage** / **Meal Planner**
+(was Dinner Decider) — code-level rename (env var prefix `DD_*`→`SP_*`, package name, branding strings)
+done alongside the docs; **GitHub repo rename intentionally left for an explicit go-ahead** (changes a
+public URL).
+
+**Status**: M0–M2 code stands as the starting point for M2a/M2b, not thrown away. M3 onward unapproved
+pending Charlie's sign-off on `docs/PLAN-v2-samepage.md`. No implementation work started against the new
+architecture yet — this was a spec/design pass only.

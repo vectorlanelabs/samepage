@@ -1,1 +1,1 @@
-"""Dinner Decider application package."""
+"""SamePage application package."""

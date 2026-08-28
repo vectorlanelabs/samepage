@@ -1,1 +1,1 @@
-"""Route blueprints for the Dinner Decider UI."""
+"""Route blueprints for the SamePage UI."""

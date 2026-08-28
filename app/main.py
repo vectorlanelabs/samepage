@@ -28,7 +28,7 @@ logger = logging.getLogger("dinnerdecider")
 def _run_migrations(db_path: str | None = None) -> None:
     """Run ``alembic upgrade head`` against the configured DB.
 
-    When ``db_path`` is given, ``DD_DB_PATH`` is pointed at it for the
+    When ``db_path`` is given, ``SP_DB_PATH`` is pointed at it for the
     duration of the upgrade (restored afterwards). Exceptions are NOT caught:
     a boot-time migration failure must fail fast. After a successful upgrade
     the migrated DB file is tightened to 0o600 (the file holds private
@@ -39,15 +39,15 @@ def _run_migrations(db_path: str | None = None) -> None:
         command.upgrade(cfg, "head")
         target = settings.db_path
     else:
-        previous = os.environ.get("DD_DB_PATH")
-        os.environ["DD_DB_PATH"] = db_path
+        previous = os.environ.get("SP_DB_PATH")
+        os.environ["SP_DB_PATH"] = db_path
         try:
             command.upgrade(cfg, "head")
         finally:
             if previous is None:
-                os.environ.pop("DD_DB_PATH", None)
+                os.environ.pop("SP_DB_PATH", None)
             else:
-                os.environ["DD_DB_PATH"] = previous
+                os.environ["SP_DB_PATH"] = previous
         target = db_path
     try:
         os.chmod(target, 0o600)
@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Dinner Decider", lifespan=lifespan)
+app = FastAPI(title="SamePage — Meal Planner", lifespan=lifespan)
 
 setup_middleware(app)
 
