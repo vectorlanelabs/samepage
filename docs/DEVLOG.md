@@ -420,3 +420,8 @@ shows all kinds — **rejected as a defect**: intentional asymmetry, documented 
 M2c is complete. The mandate's steps 1 and 2 are done: spec + doc sweep landed, correctness punch
 list landed, routing landed. Next up per ROADMAP: design round-1 (Charlie + Claude Design, kickoff
 brief in docs/DESIGN-BRIEF-mobile.md), then M3 approval gate on the revised plan.
+
+**Note (2026-08-29, Charlie):** retiring the old PNG wordmark was Charlie's own instruction to the
+designer — the legacy logo was constraining directions he actually liked. The re-set CSS wordmark +
+kept favicon mark in the Quiet Kitchen bundle is therefore a decision, not a deviation; the M2d
+reskin implements it as spec'd.
