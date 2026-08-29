@@ -156,7 +156,6 @@ class MealDetail(Base):
     __tablename__ = "meal_detail"
 
     item_id: Mapped[int] = mapped_column(ForeignKey("item.id"), primary_key=True)
-    ingredients: Mapped[str | None] = mapped_column(Text, nullable=True)
     recipe_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
