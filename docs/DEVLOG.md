@@ -250,3 +250,47 @@ ritual). Everything else got a real disposition instead of sitting as an open qu
 **Status**: M3 remains unapproved and unbuilt. The one real open question before it starts is the
 access-gate call above — everything else in the plan review is either already locked or doesn't block
 starting M3.
+
+## 2026-08-29 — Three decisions from Charlie; dice mechanic permanently retired
+
+Charlie answered the three open items from the plan review, and gave a hard directive on a fourth thing
+that had never actually been asked as a question: purge every trace of the dice mechanic from the live
+repo. It came up repeatedly (a "dice ritual, resurrected" backlog stub, `Category.legacy_sheet_index`
+tracking a meal's position on the old spreadsheet, "D8/D20" framing in copy) despite Charlie never having
+asked for any of it to be preserved — leftover from the original DeepSeek-run cycles that started this
+project, not a real product direction.
+
+**Decisions:**
+1. **Access gate: accounts.** No site-wide passphrase. Real accounts are the security boundary.
+   `Settings.access_key`/`SP_ACCESS_KEY` removed outright — it was dead code, never enforced by any
+   middleware (the M5 gate-middleware task was never built), so this was a clean deletion, not a
+   migration. `docs/PLAN-v2-samepage.md`'s M5 row updated from "open question" to "locked."
+2. **Lunch `both` subset**: moot. This seed data gets replaced entirely; not worth curating something
+   going away.
+3. **Dice mechanic: gone, permanently, not a backlog item.** Swept every live/operative doc:
+   - `docs/POST-V1.md` — deleted the "dice ritual, resurrected" backlog stub outright (its own footer
+     says exactly the right thing: "if an item stops making sense, it gets deleted").
+   - `ROADMAP.md` — removed "dice-ritual resurrection" from the Post-MVP "later" list (also caught it
+     listing multi-household+accounts as still "later" — they landed in M2a/M2b, fixed while there).
+   - `CLAUDE.md` — reworded the product-shape framing off "replace the dice ritual" language; dropped the
+     "No dice roll" non-goal line (redundant once the mechanic doesn't exist at all).
+   - `docs/PLAN-v2-samepage.md` — reworded the "no dice ritual" non-goal without the word, same substance.
+   - `README.md` — dropped the live link to `reference/D20 Dinner Decider.xlsx` from the Docs list; no
+     reason to keep surfacing a dice-named file in front-door copy.
+   - `REQUESTS.md` — deleted the "Dice ritual (optional, someday)" item outright rather than resolving it
+     with an explanation; added a real engineering follow-up instead (`Category.legacy_sheet_index` —
+     literally "position on the old dice spreadsheet" as a persisted column — gets dropped in a real
+     migration next time the seed pipeline is touched, not urgent standalone).
+   - `CHARTER.md` — left as historical record (it's already banner-marked superseded, matching how
+     `docs/PLAN-v1-mvp.md` and `docs/ORIGINAL-CONCEPT.md` are treated), but added an explicit note to its
+     banner: the dice/D8/D20 framing in its body is historical only, not a live description of the
+     product, and not coming back.
+   - **Not touched**: `docs/DEVLOG.md` (this file — a chronological log shouldn't be rewritten to erase
+     what actually happened), `docs/ORIGINAL-CONCEPT.md` and `docs/PLAN-v1-mvp.md` (both explicitly
+     archival), `reference/D20 Dinner Decider.xlsx` and `reference/README.md` (the actual legacy source
+     file and its provenance doc — left in place as a dormant, unreferenced archive rather than deleted,
+     since deleting source data is a more consequential call than editing prose; flagged to Charlie in
+     case he wants it gone too, not assumed).
+
+**Status**: All three plan-review items resolved. `REQUESTS.md`'s "needs Charlie's judgment" section is
+now empty. Next: a Fable-run Oscar review of the updated plan before M3 execution starts.

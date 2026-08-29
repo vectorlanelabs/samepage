@@ -20,7 +20,6 @@ The meal library is the first thing built on this mechanic. It's meant to work f
 - [`ROADMAP.md`](ROADMAP.md) — milestone status
 - [`docs/PLAN-v2-samepage.md`](docs/PLAN-v2-samepage.md) — current architecture: accounts, groups, collections, how voting will work
 - [`docs/DEVLOG.md`](docs/DEVLOG.md) — what actually shipped, in order
-- Legacy spreadsheet (the original household meal data) — [`reference/D20 Dinner Decider.xlsx`](reference/D20%20Dinner%20Decider.xlsx), provenance in [`reference/README.md`](reference/README.md)
 
 ## Run it locally
 

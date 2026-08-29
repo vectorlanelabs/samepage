@@ -56,7 +56,6 @@ def _secret_key() -> str:
 class Settings:
     db_path: str = field(default_factory=lambda: os.environ.get("SP_DB_PATH", str(_default_db_path())))
     secret_key: str = field(default_factory=_secret_key)
-    access_key: str = field(default_factory=lambda: os.environ.get("SP_ACCESS_KEY", ""))
     api_key: str = field(default_factory=lambda: os.environ.get("SP_API_KEY", ""))
     port: int = field(default_factory=lambda: int(os.environ.get("SP_PORT", "8000")))
     env: str = field(default_factory=lambda: os.environ.get("SP_ENV", "development"))

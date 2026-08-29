@@ -57,7 +57,6 @@ One-liners on purpose — each gets a PLAN doc only if/when it becomes real:
 - **Integrations**: grocery delivery, kitchen tablets / smart displays.
 - **"Used to work, fell out of favor" detection**: meals whose keeps decayed over time.
 - **Archived-meal reconsideration**: periodically re-offer archived meals.
-- **The dice ritual, resurrected**: optional D20-flavored pick among kept meals, for fun (the original spreadsheet ritual — Charlie's call if it comes back).
 - **Data export / portability.**
 
 ---

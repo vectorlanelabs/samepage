@@ -14,15 +14,15 @@
 
 ## Product shape (binding)
 
-The app exists to **replace** the spreadsheet-and-dice ritual — it was never a dice-roll app; the D8/D20 mechanic is the pain point, not the product.
+The app exists to replace ad-hoc negotiation with private group voting — it was never built around a randomized pick, and nothing about that mechanic (including its data provenance) belongs in this product going forward.
 
 - **No in-app AI, ever.** The app exposes a token-authenticated JSON API (`/api/v1`, Bearer `SP_API_KEY`) + an MCP server; recipe parsing, discovery, and trend analysis happen in Charlie's AI tools (D17). **No LLM keys in this codebase.**
 
 - The product is a **weekly planning session**: set lunch/dinner targets → iterative batches of 15 meals → private **binary yes/no** votes → **unanimous-yes meals kept automatically; majority-yes meals (yes > no, ties excluded) offered to the host to accept** → repeat until targets met.
 - Majority acceptance is a **host-only** action at batch results, shown with aggregate counts only (never who voted which way), recorded as `kept_by='host'`.
-- **No dice roll. No "not tonight" / vote shades. No import feature or import UI.** The library is pre-seeded from `seed/meals.json`.
+- **No "not tonight" / vote shades. No import feature or import UI.** The library is pre-seeded from `seed/meals.json`.
 - Meals have title, type (lunch/dinner/both), category, tags, recipe (link/text). `times_kept`/`last_kept_at` are the favorites signal.
-- **Deployment is VPS-hosted** (Charlie's Hostinger VPS, behind HTTPS via Caddy) — the app is internet-facing; no LAN/local-only assumptions. Deployment specifics: plan §7.1. Env: `SP_SECRET`, `SP_ACCESS_KEY` (household access gate, once per device), `SP_DB_PATH`, `SP_PORT`.
+- **Deployment is VPS-hosted** (Charlie's Hostinger VPS, behind HTTPS via Caddy) — the app is internet-facing; no LAN/local-only assumptions. Deployment specifics: plan §7.1. Env: `SP_SECRET`, `SP_DB_PATH`, `SP_PORT`. No site-wide access gate — real accounts (M2a) are the security boundary (decided 2026-08-29, see REQUESTS.md).
 
 ## Non-negotiables
 

@@ -30,7 +30,7 @@ history) · Scope & stop criteria: `CHARTER.md` (identity/D10 sections supersede
 
 - **v1.5 — Planning refinements & richer library**: recency-weighted batches, stale-meal suggestions, per-person constraints, planned-week view, re-run last week, meal photos, **recipe-use experience (cooking view, printing)**, better filtering, looser keep rules if needed.
 - **v2 — External intelligence via API & MCP (no in-app AI)**: recipe parsing (photo/link → recipe), discovery, trend analysis, and favorites surfacing all run in Charlie's AI tools through the app's API/MCP (D17) — no LLM keys or AI code in the product.
-- **Later / explore**: grocery list generation (explicitly out of MVP), pantry mode, multi-household hosting + real accounts + public deployment, mobile apps, calendar/recurring rhythm, integrations, dice-ritual resurrection, data export.
+- **Later / explore**: grocery list generation (explicitly out of MVP), pantry mode, mobile apps, calendar/recurring rhythm, integrations, data export. (Multi-household hosting + real accounts + public deployment are no longer "later" — they landed in M2a/M2b.)
 
 Each gets a full plan doc when its trigger condition fires.
 

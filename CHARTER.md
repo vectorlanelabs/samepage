@@ -5,7 +5,10 @@
 > multi-tenant consensus-voting platform with Meal Planner (formerly "Dinner Decider") as its first
 > collection. M0–M2's mechanics (vote privacy, unanimous/majority-host-accept, Alembic migrations, no
 > in-app AI) all carry forward; identity and single-household assumptions do not. M3+ is unapproved
-> pending sign-off on the v2 doc. Kept here for history rather than rewritten in place.
+> pending sign-off on the v2 doc. Kept here for history rather than rewritten in place. **Note (2026-08-29):
+> this document's dice/D8/D20 framing below is historical only** — it describes the spreadsheet ritual
+> Meal Planner replaced. The mechanic is permanently retired, including as a future "bring it back" idea;
+> see `REQUESTS.md`'s Resolved section.
 
 | | |
 |---|---|

@@ -3,22 +3,7 @@
 Genuinely needs Charlie's judgment — not decidable from the architecture or from what's already been
 built. **Nothing here is promised.** Add freely.
 
-- [ ] **Site access gate vs. open signup.** The original plan had a site-wide passphrase (`DD_ACCESS_KEY`,
-  now `SP_ACCESS_KEY`) gating the whole app before login — reasonable for a single-household app nobody
-  else was meant to reach. Now that the platform is meant to let other groups self-serve sign up (a
-  friend creates their own account, their own group), a blanket site passphrase works against that: they
-  can't even reach the signup page without you handing them a separate passphrase first. Real accounts
-  (M2a) already provide the actual security boundary. Options: drop the site gate entirely and rely on
-  accounts; keep it but scope it to something else (e.g. an invite code required at signup, not a
-  whole-site gate); or keep it as-is if you want the platform to stay closed to anyone you haven't
-  personally let in. This is a real product tradeoff, not an engineering detail — needs your call before
-  M5 builds the deployment story around it.
-- [ ] **Lunch `both` subset sanity check.** The seed tags a curated 27-meal lunch-capable subset as `both`
-  (list in `seed/README.md`). If any of those feel wrong for lunch, or meals were missed, say so — it's a
-  one-line edit in the seed curation and a regenerate. Only you can judge this; no urgency.
-- [ ] **Dice ritual.** The D8/D20 roll (the thing Meal Planner replaced) stays out of scope. Purely
-  optional: resurrect it later as a fun pick among kept meals, if you ever want it. No action needed
-  unless you bring it up.
+*(empty — the three items that were here on 2026-08-29 are all resolved; see below.)*
 
 ## Known engineering follow-ups (decided, not blocking, no input needed)
 
@@ -38,6 +23,14 @@ Tracked so they don't get lost — these are settled calls, not open questions.
   mutations, etc. return a bare 401 rather than redirecting to `/login`. Polish pass, whenever convenient.
 - [ ] **Library export** — JSON export of items + recipes as backup/portability. M5 ships DB-level
   backups regardless; this would be a user-facing export on top. Low priority.
+- [ ] **Drop `Category.legacy_sheet_index`.** This column persists a meal's position on the old dice
+  spreadsheet — Charlie's call (2026-08-29) is that nothing about the dice mechanic, including its data
+  provenance, belongs in this product going forward. Small, mechanical migration: drop the column, stop
+  deriving it in `scripts/seed.py` (the `_category_index`/"Tab N" parsing), update `tests/test_seed.py`
+  and `tests/test_models.py` accordingly. `Category.sort_order` stays — a display-order concept, not a
+  dice-sheet artifact — but no longer gets populated from spreadsheet position. Do this in the same slice
+  that next touches the seed pipeline (e.g. when the meal library gets re-curated with fresh, non-dice
+  category names), not urgent on its own.
 
 ## Resolved
 
@@ -67,3 +60,13 @@ Tracked so they don't get lost — these are settled calls, not open questions.
   referred to was removed with `Person` in M2a. `account.email`'s `UNIQUE` constraint already makes
   concurrent signups safe at the database level — no in-process lock needed, multi-worker or not.
 - ~~CLAUDE.md refresh~~ — done.
+- ~~Site access gate vs. open signup~~ (2026-08-29, Charlie) — **accounts.** No site-wide passphrase; real
+  accounts are the security boundary. `Settings.access_key`/`SP_ACCESS_KEY` removed (it was never
+  actually enforced by any middleware, so this is a clean deletion, not a migration). M5's deployment
+  story no longer includes a gate-middleware task.
+- ~~Lunch `both` subset sanity check~~ (2026-08-29, Charlie) — moot. This seed data gets replaced entirely;
+  not worth curating a dataset that's going away.
+- ~~Dice ritual~~ (2026-08-29, Charlie) — **removed, permanently, not a backlog item.** The dice mechanic
+  is not coming back in any form, including as an optional feature, a data-provenance detail, or a design
+  reference. Every "dice ritual, maybe later" mention across the repo's live docs was deleted, not
+  deferred — see `docs/DEVLOG.md` for the full sweep.

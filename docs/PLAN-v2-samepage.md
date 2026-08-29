@@ -53,7 +53,8 @@ Two things forced a real architecture revision rather than an additive feature:
 Still true (unchanged from `CHARTER.md`):
 
 - No in-app AI, no LLM keys, ever — recipe parsing/discovery/trend analysis stay external via API/MCP.
-- No grocery list, no dice ritual.
+- No grocery list. No randomized/chance-based selection of any kind — options get chosen by the group,
+  not a roll; this is permanent, not a deferred feature.
 - Vote privacy is still a hard invariant — **stronger now**: individual votes were never *shown*; under
   this design they are largely never *durably stored against an identity* at all (§5.5).
 - Deactivate/archive-not-delete; schema changes ship as Alembic migrations.
@@ -262,7 +263,7 @@ SQLite file, not preemptively.
 | **M2b** | **Generic collections & items**: `Collection`/`Item`/`meal_detail`/scoped `Category`/`Tag`, migrate the 155 meals (§5.1), library UI becomes collection-aware | **Revises M2** (CRUD/seed logic mostly reusable, schema underneath changes) | [x] landed |
 | M3 | **Session-based voting engine**: group/account-hosted sessions, account-optional participants, `session_target`, ad hoc + library-backed `batch_item`, outcome-only recording | Net-new build against this doc; old M3 spec (§9 of plan v1) is void — roster-freeze/batch-assembly/unanimous+majority *mechanics* carry over, identity plumbing does not | [ ] unapproved until this doc is approved |
 | M4 | **Reporting & discovery** (§6) — supersedes "history & favorites" (broader scope: trend/tag correlation, not just `times_kept`). **Every query scoped to the requesting account's own groups (§6)** — a new hard requirement multi-tenancy introduces that didn't exist in the old single-household plan. | Expanded from old M4 | [ ] |
-| M5 | Hardening, deployment docs, backup/restore. Single shared SQLite DB (§6.1) — backup/restore story unchanged (still one file). **Open question: does the old `DD_ACCESS_KEY`-style site-wide passphrase gate still make sense** now that real accounts exist and the platform is meant to let other groups self-serve sign up? A blanket site passphrase blocks exactly the "invite a friend's group to join" flow the platform is for. Needs Charlie's call — tracked in REQUESTS.md, not resolved here. | Access-gate question is new; backup/restore mechanics otherwise unchanged | [ ] |
+| M5 | Hardening, deployment docs, backup/restore. Single shared SQLite DB (§6.1) — backup/restore story unchanged (still one file). **Locked (2026-08-29): no site-wide passphrase gate.** Real accounts (M2a) are the security boundary; a blanket site gate would work against the "invite a friend's group to join" flow the platform is for. `Settings.access_key`/`SP_ACCESS_KEY` already removed — dead code, never enforced. | Resolved; M5 no longer has a gate-middleware task | [ ] |
 | M6 | External API + MCP. **Locked change from the old plan: tokens are per-group, not one shared household key.** A single global `DD_API_KEY`/`SP_API_KEY` would let one group's AI tools read every other group's data on the same deployment — a real leak now that other people's groups live in this database, not a hypothetical. Each group's owner generates and can revoke their own group's token; MCP tools operate on generic `item`/`collection` endpoints (not meal-specific), scoped the same way as M4's reporting. "AI lives outside the app" still holds — it now applies per-group, not just to Charlie's own tools. | Token-scoping question from the original table is now a locked decision, not an open item | [ ] |
 
 ## 9. Rename
