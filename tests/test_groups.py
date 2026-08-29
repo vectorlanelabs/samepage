@@ -38,6 +38,17 @@ def test_create_group_requires_login(client, post):
     assert resp.status_code == 401
 
 
+def test_groups_page_has_back_link_to_hub(client, post, db_session):
+    """Mobile dead-end fix (2026-08-29 review): every signed-in inner page
+    carries a back link at the top of content — the groups page links back to
+    the collections hub."""
+    _make_account(db_session, email="owner@example.com")
+    _login(client, db_session, "owner@example.com")
+    resp = client.get("/groups")
+    assert resp.status_code == 200
+    assert '<a class="back-link" href="/collections">← Collections</a>' in resp.text
+
+
 def test_create_group_sets_owner(client, post, db_session):
     account = _make_account(db_session, email="owner@example.com")
     _login(client, db_session, "owner@example.com")

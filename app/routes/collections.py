@@ -7,10 +7,16 @@ library now lives at /collections/{id}, so an account in two groups can
 actually reach both groups' libraries (the multi-group dead end this slice
 closes). Requires a signed-in account; a signed-out visitor gets the standard
 401 → /login redirect, and no account ever sees another group's collections.
+
+Since M7 S2 the hub is the composed post-login home: a time-of-day greeting,
+per-group collection lists with last-session labels, the most recent completed
+session's kept-picks strip, and the Host/Join CTAs. All aggregates are
+computed in the route, never in the template.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -20,10 +26,43 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_account, require_group_admin
 from app.db import get_db
-from app.models import Account, Collection, Group, GroupAdmin, Item
+from app.models import Account, Batch, BatchItem, Collection, Group, GroupAdmin, Item
+from app.models import (
+    Session as VotingSession,
+)
+from app.session_logic import Outcome
 from app.templating import templates
 
 router = APIRouter()
+
+KEPT_OUTCOMES = [Outcome.KEPT_UNANIMOUS.value, Outcome.KEPT_HOST.value]
+
+
+def _short_date_label(value: datetime) -> str:
+    """'%b %-d'-style label ('Aug 8'), built portably from '%b %d'.
+
+    strftime's '%-d' is platform-specific (GNU vs BSD), so strip the leading
+    zero from the day ourselves.
+    """
+    month, day = value.strftime("%b %d").split()
+    return f"{month} {day.lstrip('0')}"
+
+
+def _greeting(account: Account) -> str:
+    """Time-of-day greeting, suffixed with the account's first name.
+
+    Uses UTC like the rest of the app's timestamps (sessions.py); a per-user
+    timezone is a product decision we don't make yet.
+    """
+    hour = datetime.now(UTC).hour
+    if hour < 12:
+        part = "Good morning"
+    elif hour < 17:
+        part = "Good afternoon"
+    else:
+        part = "Good evening"
+    first_name = account.display_name.split()[0] if account.display_name else ""
+    return f"{part}, {first_name}" if first_name else part
 
 
 def _owned_groups(db: Session, account: Account) -> list[dict]:
@@ -52,7 +91,8 @@ def collections_page(request: Request, db: Annotated[Session, Depends(get_db)]):
     """Hub: every collection of groups the account owns or admins, grouped by
     group (distinct groups with the same name stay separate — grouping is keyed
     on group id, not the display name), with per-collection active-item counts
-    (archived items don't count)."""
+    (archived items don't count) and a last-session label. Also computes the
+    greeting and the most recent completed session's kept-picks strip."""
     account = require_account(request, db)
 
     rows = db.execute(
@@ -77,14 +117,67 @@ def collections_page(request: Request, db: Annotated[Session, Depends(get_db)]):
     for collection_id, collection_name, group_id, group_name, active_count in rows:
         if not groups or groups[-1]["id"] != group_id:
             groups.append({"id": group_id, "name": group_name, "collections": []})
-        groups[-1]["collections"].append(
-            {"id": collection_id, "name": collection_name, "active_count": active_count}
+        last_session_at = db.scalar(
+            select(VotingSession.created_at)
+            .where(VotingSession.collection_id == collection_id)
+            .order_by(VotingSession.created_at.desc())
+            .limit(1)
         )
+        groups[-1]["collections"].append(
+            {
+                "id": collection_id,
+                "name": collection_name,
+                "active_count": active_count,
+                "last_session_label": (
+                    _short_date_label(last_session_at) if last_session_at else None
+                ),
+            }
+        )
+
+    # The kept-picks strip: the most recent COMPLETED session across the
+    # account's OWNED/ADMINED groups (fix 2026-08-29 review: the collection
+    # join above only yields groups that have collections, so a completed
+    # session in a collection-less group was invisible — scope to the
+    # ownership query instead), and how many of its options ended up kept.
+    owned_group_ids = [g["id"] for g in _owned_groups(db, account)]
+    last_kept = None
+    if owned_group_ids:
+        last_complete = db.scalar(
+            select(VotingSession)
+            .where(
+                (VotingSession.status == "complete")
+                & VotingSession.group_id.in_(owned_group_ids)
+            )
+            .order_by(VotingSession.finished_at.desc(), VotingSession.created_at.desc())
+            .limit(1)
+        )
+        if last_complete is not None:
+            kept_count = (
+                db.scalar(
+                    select(func.count())
+                    .select_from(BatchItem)
+                    .join(Batch, Batch.id == BatchItem.batch_id)
+                    .where(
+                        (Batch.session_id == last_complete.id)
+                        & BatchItem.outcome.in_(KEPT_OUTCOMES)
+                    )
+                )
+                or 0
+            )
+            last_kept = {
+                "count": kept_count,
+                "label": _short_date_label(last_complete.finished_at or last_complete.created_at),
+            }
 
     return templates.TemplateResponse(
         request,
         "collections.html",
-        {"groups": groups},
+        {
+            "groups": groups,
+            "greeting": _greeting(account),
+            "last_kept": last_kept,
+            "has_collections": any(g["collections"] for g in groups),
+        },
     )
 
 

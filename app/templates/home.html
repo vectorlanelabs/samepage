@@ -1,26 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Home · Same Page{% endblock %}
 {% block content %}
-{% if account %}
-<section class="card hero-card">
-  <h1 class="hero-title">Decide together</h1>
-  <p class="hero-sub">Host a voting session, or open your collections and groups.</p>
-  <div class="hero-cta">
-    <a class="btn btn-primary" href="/sessions/new">Host a session</a>
-    <a class="btn btn-secondary" href="/join">Join a session</a>
-  </div>
-</section>
-<section class="stat-grid">
-  <a class="stat-card" href="/collections">
-    <div class="stat-label">Collections</div>
-    <div class="stat-count">{{ collection_count }} {{ "collection" if collection_count == 1 else "collections" }}</div>
-  </a>
-  <a class="stat-card" href="/groups">
-    <div class="stat-label">Groups</div>
-    <div class="stat-count">{{ active_group_count }} {{ "group" if active_group_count == 1 else "groups" }}</div>
-  </a>
-</section>
-{% else %}
 <div class="landing">
   <div class="landing-hero">
     <h1 class="landing-title">Decide together, without the group chat spiral.</h1>
@@ -58,5 +38,4 @@
     <p class="landing-step-text">Unanimous picks are kept automatically. The host calls the close ones. Nobody sees who voted how.</p>
   </div>
 </section>
-{% endif %}
 {% endblock %}

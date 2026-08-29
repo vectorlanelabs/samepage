@@ -99,7 +99,9 @@ async def _handle_http_exceptions(request: Request, exc: StarletteHTTPException)
     keep the default JSON body — relevant once M6's token-authenticated
     routes exist."""
     if exc.status_code == 429 and "text/html" in request.headers.get("accept", ""):
-        return templates.TemplateResponse(request, "rate_limited.html", {}, status_code=429)
+        return templates.TemplateResponse(
+            request, "rate_limited.html", {"chrome": "session"}, status_code=429
+        )
     if exc.status_code == 401 and "text/html" in request.headers.get("accept", ""):
         target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
         return RedirectResponse(f"/login?{urlencode({'next': target})}", status_code=303)

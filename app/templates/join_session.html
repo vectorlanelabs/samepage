@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Join {{ session.code }} · Same Page{% endblock %}
 {% block content %}
+<div class="session-brand">
+  <span class="brand-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
+  Same Page
+</div>
 <div class="page page--narrow">
   <h1 class="page-title">Join session</h1>
   <p class="page-meta">Code: <span class="sp-code">{{ session.code }}</span></p>

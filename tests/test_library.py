@@ -231,7 +231,7 @@ def test_collections_hub_shows_both_groups_collections(client, post, db_session)
     assert f"/collections/{collection_a.id}" in resp.text
     assert f"/collections/{collection_b.id}" in resp.text
     # Per-collection active-item counts; archived items don't count.
-    assert "1 active items" in resp.text
+    assert "1 active item" in resp.text
     assert "2 active items" in resp.text
 
 
@@ -265,7 +265,7 @@ def test_collections_hub_keeps_same_named_groups_separate(client, post, db_sessi
     assert "Dinners" in resp.text
     assert "Weeknight Eats" in resp.text
     # Two separate "Family" section headers — not one merged group.
-    assert resp.text.count(">Family</div>") == 2
+    assert resp.text.count('class="hub-group-name">Family</span>') == 2
 
 
 def test_collection_page_shows_only_that_collections_items(client, post, db_session):

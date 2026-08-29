@@ -188,6 +188,51 @@ button { font-family: var(--sp-font-sans); }
   width: auto;
 }
 
+/* Signed-in mobile identity: brand left, avatar circle right — no nav row.
+   The avatar is the "always leads home" chip: it links to the hub. */
+.topbar-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--sp-avatar);
+  color: var(--sp-chip-ink);
+  font-weight: 600;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  flex: none;
+  text-decoration: none;
+}
+
+/* ---------- Session flow chrome ---------- */
+
+/* Session screens (join/lobby/vote/results) are a focused flow: no sidebar,
+   no topbar nav, no site footer — just the centered content column. */
+.shell--session { flex-direction: column; }
+
+.content--session {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 26px 28px;
+}
+
+/* The join screen carries the wordmark above its content. */
+.session-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--sp-ink);
+  margin: 26px 0 10px;
+}
+
 /* ---------- Main content ---------- */
 
 /* Column flex so the footer sits at the bottom of the viewport, not mid-page. */
@@ -424,15 +469,6 @@ button { font-family: var(--sp-font-sans); }
 .hero-card { padding: 32px 26px; }
 .hero-card--center { text-align: center; }
 
-.hero-title {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.018em;
-  line-height: 1.2;
-  color: var(--sp-ink);
-  margin: 0;
-}
-
 .hero-sub {
   font-size: 14px;
   font-weight: 500;
@@ -444,38 +480,6 @@ button { font-family: var(--sp-font-sans); }
   display: flex;
   gap: 10px;
   margin-top: 20px;
-}
-
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.stat-card {
-  display: block;
-  background: var(--sp-card);
-  border: 1px solid var(--sp-border);
-  border-radius: 16px;
-  box-shadow: var(--sp-shadow);
-  padding: 18px 20px;
-  text-decoration: none;
-}
-
-.stat-card:hover { border-color: var(--sp-border-strong); }
-
-.stat-label {
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--sp-ink);
-}
-
-.stat-count {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--sp-sub);
-  margin-top: 4px;
 }
 
 /* ---------- Signed-out landing ---------- */
@@ -584,19 +588,78 @@ button { font-family: var(--sp-font-sans); }
 
 /* ---------- Collections hub ---------- */
 
-.group-heading {
-  font-size: 13px;
-  font-weight: 600;
+.hub-greeting {
+  font-size: 15px;
   color: var(--sp-sub);
+  margin: 6px 0 0;
+}
+
+.hub-group-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   margin: 26px 0 10px;
 }
 
-.hub-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+.hub-group-name {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  color: var(--sp-ink);
 }
 
+.hub-group-manage {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sp-accent);
+}
+
+.hub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* "+ New collection" sits under the last group's list (or the empty state);
+   a text-link needs a little air after the cards. */
+.hub-list + .text-link,
+.empty-state + .text-link {
+  margin-top: 14px;
+}
+
+.hub-last-session {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--sp-border);
+  padding-top: 16px;
+  margin-top: 28px;
+  font-size: 13px;
+  color: var(--sp-sub);
+}
+
+.hub-last-session span:last-child {
+  font-size: 12px;
+  color: var(--sp-faint);
+  flex: none;
+}
+
+.hub-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin-top: 16px;
+  max-width: 480px;
+}
+
+.hub-signout {
+  display: none;
+  text-align: center;
+  margin-top: 18px;
+}
+
+/* Collection rows: full-width cards stacked in the hub-list column. */
 .hub-card {
   display: flex;
   align-items: center;
@@ -1083,19 +1146,7 @@ button { font-family: var(--sp-font-sans); }
     padding: 0 3px;
   }
 
-  .topbar .nav {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    flex: 1;
-    gap: 2px;
-    overflow-x: auto;
-    min-width: 0;
-  }
-
-  /* The name indicator is decor on a phone — the Sign out control stays. */
-  .topbar .nav-account { display: none; }
-  .topbar form { flex: none; }
-
+  /* Only the signed-out "Sign in" uses a nav-link in the topbar now. */
   .topbar .nav-link {
     width: auto;
     min-height: 44px;
@@ -1103,13 +1154,12 @@ button { font-family: var(--sp-font-sans); }
     font-size: 13px;
   }
 
-  .topbar .nav-account { margin-left: auto; }
-
   .content { padding: 20px 16px 104px; }
 
   /* 56–60px primaries on phone; ≥44px hit targets everywhere. */
   .btn-primary,
-  .btn-secondary { min-height: 56px; font-size: 16.5px; }
+  .btn-secondary,
+  .btn-ink { min-height: 56px; font-size: 16.5px; }
 
   .chip { min-height: 44px; }
 
@@ -1124,7 +1174,10 @@ button { font-family: var(--sp-font-sans); }
     font-size: 16.5px;
   }
 
-  .stat-grid { grid-template-columns: 1fr; }
+  /* Session flow: full-height column so templates can pin CTAs to the bottom. */
+  .content--session { min-height: 100dvh; }
+
+  .hub-signout { display: block; }
 
   .lib-grid { grid-template-columns: 1fr; }
 

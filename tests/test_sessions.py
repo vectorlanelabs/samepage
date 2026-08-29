@@ -2162,10 +2162,14 @@ def test_home_join_session_entry_signed_out(client):
 
 
 def test_home_join_session_entry_signed_in(client, db_session):
+    """The hub (the post-login home) carries both CTAs: Host a session and
+    Join with a code (join-by-code is the guest landing's co-star; signed-in
+    users still get a join entry from the hub)."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     _login(client, db_session, host.email)
-    resp = client.get("/")
+    resp = client.get("/collections")
     assert resp.status_code == 200
-    assert "Join a session" in resp.text
-    assert 'href="/join"' in resp.text
+    assert "Host a session" in resp.text
     assert 'href="/sessions/new"' in resp.text
+    assert "Join with a code" in resp.text
+    assert 'href="/join"' in resp.text

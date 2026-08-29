@@ -188,6 +188,7 @@ def _lobby_context(
         "participants": roster,
         "participant_count": len(roster),
         "is_host": is_host,
+        "chrome": "session",
     }
 
 
@@ -484,6 +485,7 @@ def _completion_context(db: Session, session: VotingSession) -> dict:
         "session": session,
         "collection_name": collection.name if collection else None,
         "kept_groups": kept_groups,
+        "chrome": "session",
     }
 
 
@@ -625,6 +627,7 @@ def _results_context(
         "track_progress": track_progress,
         "all_targets_met": all_targets_met,
         "next_batch_available": next_track is not None,
+        "chrome": "session",
     }
 
 
@@ -779,7 +782,7 @@ def join_page(request: Request, code: str | None = None):
     to /s/{code}; without JS it GETs /join?code=... and we redirect here."""
     if code:
         return RedirectResponse(f"/s/{code.strip().lower()}", status_code=302)
-    return templates.TemplateResponse(request, "join.html", {})
+    return templates.TemplateResponse(request, "join.html", {"chrome": "session"})
 
 
 @router.get("/s/{code}")
@@ -801,7 +804,7 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
         )
     if session.status in ENDED_STATUSES:
         return templates.TemplateResponse(
-            request, "session_ended.html", {"session": session}
+            request, "session_ended.html", {"session": session, "chrome": "session"}
         )
 
     account = get_current_account(request, db)
@@ -816,6 +819,7 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
                 "prefill_name": account.display_name if account else "",
                 "posted_name": "",
                 "error": None,
+                "chrome": "session",
             },
         )
 
@@ -865,6 +869,7 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
                     "option": _option_data(db, session, next_option),
                     "responded": responded,
                     "total": total,
+                    "chrome": "session",
                 },
             )
         finished, roster = _voting_progress_counts(db, session)
@@ -877,6 +882,7 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
                 "roster": roster,
                 "is_host": is_host,
                 "has_open_batch": open_batch is not None,
+                "chrome": "session",
             },
         )
 
@@ -906,7 +912,7 @@ def join_session(
     _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
     if session.status in ENDED_STATUSES:
         return templates.TemplateResponse(
-            request, "session_ended.html", {"session": session}
+            request, "session_ended.html", {"session": session, "chrome": "session"}
         )
     if session.status == "voting":
         # §5.6: no mid-batch joins — the roster denominator is frozen at batch
@@ -914,7 +920,13 @@ def join_session(
         return templates.TemplateResponse(
             request,
             "join_session.html",
-            {"session": session, "prefill_name": "", "posted_name": "", "error": None},
+            {
+                "session": session,
+                "prefill_name": "",
+                "posted_name": "",
+                "error": None,
+                "chrome": "session",
+            },
         )
 
     display_name = display_name.strip()
@@ -927,6 +939,7 @@ def join_session(
                 "prefill_name": "",
                 "posted_name": display_name,
                 "error": "Display name is required.",
+                "chrome": "session",
             },
             status_code=400,
         )

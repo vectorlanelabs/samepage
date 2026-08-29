@@ -32,7 +32,18 @@ def test_home_signed_out_shows_no_data(client):
     assert "stat-count" not in resp.text  # no count data rendered at all
 
 
-def test_home_signed_in_shows_own_counts(client, post, db_session):
+def test_home_signed_in_redirects_to_hub(client, db_session):
+    """The collections hub is the post-login home: a signed-in visitor to "/"
+    is 303'd to /collections — the landing page never renders app data to
+    anyone (the redirect also closes the old signed-in-dashboard leak)."""
+    _make_account(db_session)
+    _login(client, db_session)
+    resp = client.get("/", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/collections"
+
+
+def test_hub_shows_own_collections(client, post, db_session):
     account = _make_account(db_session)
     group = Group(name="Test Group", owner_account_id=account.id)
     db_session.add(group)
@@ -44,18 +55,18 @@ def test_home_signed_in_shows_own_counts(client, post, db_session):
     db_session.commit()
 
     _login(client, db_session)
-    resp = client.get("/")
+    resp = client.get("/collections")
     assert resp.status_code == 200
-    # The dashboard is generic — it counts collections (of any kind), not meals.
-    assert "Decide together" in resp.text
-    assert "1 collection" in resp.text
-    assert "1 group" in resp.text
+    # The hub lists the account's own collections with their active counts.
+    assert "Test Group" in resp.text
+    assert "Meal Planner" in resp.text
+    assert "1 active item" in resp.text
     assert "Meal Library" not in resp.text  # meal framing stays inside the collection
 
 
-def test_home_never_shows_another_groups_counts(client, post, db_session):
-    """Regression: home page counts must be scoped to the signed-in account's
-    own groups, never a global count across the whole deployment."""
+def test_hub_never_shows_another_groups_collections(client, post, db_session):
+    """Regression: the post-login hub must be scoped to the signed-in account's
+    own groups — never another group's collections on the same deployment."""
     other_account = _make_account(db_session, email="other@example.com", display_name="Other")
     other_group = Group(name="Other Household", owner_account_id=other_account.id)
     db_session.add(other_group)
@@ -72,9 +83,11 @@ def test_home_never_shows_another_groups_counts(client, post, db_session):
     # A second account with no groups of its own.
     _make_account(db_session)
     _login(client, db_session)
-    resp = client.get("/")
-    assert "0 collections" in resp.text
-    assert "0 groups" in resp.text
+    resp = client.get("/collections")
+    assert resp.status_code == 200
+    assert "Other Household" not in resp.text
+    assert "Meal Planner" not in resp.text
+    assert "No collections yet" in resp.text
 
 
 def test_signed_out_nav_hides_app_links(client):
@@ -86,8 +99,11 @@ def test_signed_out_nav_hides_app_links(client):
 
 
 def test_signed_in_nav_shows_app_links(client, db_session):
+    """The signed-in app shell (on the hub, the post-login home) carries the
+    sidebar nav — Collections and Groups — plus the sign-out form."""
     _make_account(db_session)
     _login(client, db_session)
-    body = client.get("/").text
+    body = client.get("/collections").text
     assert 'href="/collections"' in body
     assert 'href="/groups"' in body
+    assert '<form method="post" action="/logout">' in body

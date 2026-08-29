@@ -82,8 +82,12 @@ def test_callback_new_identity_creates_account_and_signs_in(client, db_session, 
     assert auth_identity.provider == "google"
     assert auth_identity.account_id == account.id
 
-    # Session works on a follow-up page load: the display name shows.
-    resp = client.get("/")
+    # Session works on a follow-up page load: signed-in "/" lands on the hub
+    # (the post-login home) and the display name shows in the app shell.
+    resp = client.get("/", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/collections"
+    resp = client.get("/collections")
     assert resp.status_code == 200
     assert "Brand New" in resp.text
 
@@ -125,7 +129,11 @@ def test_callback_email_match_links_identity_to_existing_account(client, db_sess
     assert auth_identity is not None
     assert auth_identity.account_id == account.id
     assert auth_identity.email == "linked@example.com"
-    resp = client.get("/")
+    # Signed-in "/" is the hub now (303), and the hub shows the account name.
+    resp = client.get("/", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/collections"
+    resp = client.get("/collections")
     assert "Linked User" in resp.text
 
 

@@ -26,8 +26,13 @@
 </script>
 </head>
 <body>
-<div class="shell{% if not current_account %} shell--guest{% endif %}">
-  {% if current_account %}
+{# Two chrome modes share one content block (a block name may only be defined
+   once per template). Session screens (join/lobby/vote/results) run in a
+   focused flow — no sidebar, no topbar nav, no site footer — per the "session
+   chrome" design. Everything else gets the app shell (signed-in) or the slim
+   guest top bar (signed-out) plus the site footer. #}
+<div class="shell{% if chrome == 'session' %} shell--session{% elif not current_account %} shell--guest{% endif %}">
+  {% if chrome != "session" and current_account %}
   {# App shell sidebar — signed-in only. Signed-out visitors get the slim guest
      top bar below instead (no app-shell nav they can't use). #}
   <aside class="sidebar">
@@ -46,34 +51,30 @@
   </aside>
   {% endif %}
 
+  {% if chrome != "session" %}
   <div class="topbar">
     <a class="brand" href="/">
       <span class="brand-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
       Same Page
     </a>
     {% if current_account %}
-    <nav class="nav">
-      <a class="nav-link{% if request.url.path == '/' %} is-active{% endif %}" href="/">Home</a>
-      <a class="nav-link{% if request.url.path.startswith('/collections') %} is-active{% endif %}" href="/collections">Collections</a>
-      <a class="nav-link{% if request.url.path.startswith('/groups') %} is-active{% endif %}" href="/groups">Groups</a>
-    </nav>
-    {% endif %}
-    {% if current_account %}
-    <span class="nav-account">{{ current_account.display_name }}</span>
-    <form method="post" action="/logout"><button type="submit" class="nav-link">Sign out</button></form>
+    <a class="topbar-avatar" href="/collections">{{ current_account.display_name[:1]|upper }}</a>
     {% else %}
     <a class="nav-link" href="/login">Sign in</a>
     {% endif %}
   </div>
+  {% endif %}
 
   <main class="main">
-    <div class="content">
+    <div class="content{% if chrome == 'session' %} content--session{% endif %}">
       {% block content %}{% endblock %}
     </div>
+    {% if chrome != "session" %}
     <footer class="site-footer">
       <a href="/privacy">Privacy</a>
       <a href="/terms">Terms</a>
     </footer>
+    {% endif %}
   </main>
 </div>
 </body>

@@ -185,8 +185,10 @@ def test_admin_can_create_collection_in_admined_group(client, post, db_session):
 
 
 def test_collections_hub_shows_new_collection_button(client, db_session):
-    """The hub always offers the create flow — button in the header, and the
-    new empty-state copy when there are no collections yet."""
+    """The hub always offers the create flow — the + New collection text link
+    under the last group's list (per the 2026-08-29 design: no header h1, no
+    header button), and the empty-state copy when there are no collections
+    yet (empty state AND the link both render)."""
     _make_group(db_session, name="Household")
     _login(client, db_session)
     resp = client.get("/collections")
