@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Privacy · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow prose">
+  <h1 class="page-title">Privacy</h1>
+  <p>Same Page is run by one person (Charlie Rhodes) so families and friend groups can plan things together. This explains exactly what it does with your data.</p>
+
+  <h2 class="section-title">Signing in</h2>
+  <p>You sign in with Google. Same Page receives your email address and name, and nothing else: no password, and no access to your Gmail, contacts, or anything else in your Google account. Your name and email identify you as a group's owner or admin.</p>
+
+  <h2 class="section-title">What's stored</h2>
+  <ul>
+    <li>Your account: your name and email.</li>
+    <li>Whatever you create: groups, collections, and the items (meals, recipes) in them.</li>
+    <li>Voting outcomes: which items a group kept, and the aggregate yes/no counts per item.</li>
+  </ul>
+
+  <h2 class="section-title">Voting is private</h2>
+  <p>When people vote in a session, each yes/no is stored only long enough to tally the batch. The moment a batch closes, every individual vote is deleted. Same Page keeps the totals ("4 yes, 1 no") but not who cast them. No one can see how any one person voted, during a session or after: not the other voters, not the host, not me.</p>
+  <p>People who join a session type a display name. Those names are deleted when the session ends.</p>
+
+  <h2 class="section-title">What Same Page does not do</h2>
+  <ul>
+    <li>It never sells your data. There's nothing to sell it for; this isn't a business.</li>
+    <li>No ads, no third-party analytics, no trackers.</li>
+    <li>No AI inside the app. Your data is never sent to an outside model or service.</li>
+    <li>No password to leak, because sign-in is Google's.</li>
+  </ul>
+
+  <h2 class="section-title">Deleting your data</h2>
+  <p>Email <a href="mailto:crhodes@gmail.com">crhodes@gmail.com</a> to delete your account, or a group and everything in it.</p>
+
+  <h2 class="section-title">Changes</h2>
+  <p>If this policy changes, the new version goes up here. Last updated August 2026.</p>
+</div>
+{% endblock %}

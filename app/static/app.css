@@ -986,3 +986,22 @@ button { font-family: var(--sp-font-sans); }
   outline-offset: 1px;
   border-radius: 999px;
 }
+
+/* ---------- Site footer + prose pages ---------- */
+
+.site-footer {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  padding: 28px 24px 40px;
+  font-size: 13px;
+}
+.site-footer a { color: var(--sp-sub); text-decoration: none; }
+.site-footer a:hover { color: var(--sp-ink); }
+
+.prose { line-height: 1.6; }
+.prose h2.section-title { margin: 28px 0 8px; }
+.prose p { margin: 0 0 12px; color: var(--sp-ink); }
+.prose ul { margin: 0 0 12px; padding-left: 20px; }
+.prose li { margin: 0 0 6px; }
+.prose a { color: var(--sp-accent); }

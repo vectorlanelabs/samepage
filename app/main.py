@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from alembic import command
-from app.routes import api, auth, collections, groups, home, library, reports, sessions
+from app.routes import api, auth, collections, groups, home, library, pages, reports, sessions
 from app.security import setup_middleware
 from app.settings import REPO_ROOT, settings
 from app.templating import templates
@@ -112,3 +112,4 @@ app.include_router(library.router)
 app.include_router(reports.router)
 app.include_router(sessions.router)
 app.include_router(api.router)
+app.include_router(pages.router)
