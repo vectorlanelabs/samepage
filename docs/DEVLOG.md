@@ -357,3 +357,34 @@ the wrong target. Visual/template work held for that pass.
 **Addendum (same day):** Charlie corrected the brand: **"Same Page", with a space**, wherever a
 human reads it; identifiers (`samepage-app`, `SP_*`, repo name) stay collapsed. Live docs swept; the
 user-visible template/title strings go in the M2c implementation slice.
+
+---
+
+## 2026-08-29 — M2c part 1 landed: correctness punch list
+
+Implementation: `deepseek-v4-flash` against a decision-locked spec, driven across four invocations (the
+CLI caps at 25 tool rounds per run; `--continue` resumes with context intact — noted for future
+slices: budget ~4 runs for a slice this size or slice smaller). Three residual failures were
+root-caused and fixed by the lead, honestly noted: (1) the spec's own design flaw — the
+`current_account` context processor opened `app.db.SessionLocal`, which points at the real DB, not the
+test-overridden engine; redesigned to a session-only read (login/signup store `account_name`; no DB
+hit per render); (2) two pre-existing 401-redirect tests asserted the unencoded `next` form the spec
+deliberately replaced — expectations updated; (3) the seed file genuinely contains a duplicate
+("Chicken parm" ×2) that the old loader inserted twice — with within-run dedupe the correct count is
+154, not 155; tests updated with the reason inline.
+
+Shipped: sign-out control + account indicator (both navs), "Same Page" brand in all UI strings,
+401 redirects preserve query strings (urlencoded), signup preserves `?next=`, groups error page keeps
+the group list (and missing-name is a friendly 400, not a 422), case-insensitive library ordering,
+`verify_password` odd-hex guard, seed within-run dedupe + honest skip counts, migration 0006 drops
+`item.is_active`, vestigial `can_edit`/`no_collection`/recipe-graft template plumbing removed.
+Verification by the lead: `ruff` clean, `pytest -q` **113 passed** (up from 105), full diff read.
+
+Oscar review (Sonnet, adversarial, live-reproduction rule): **ship**, one minor finding — phantom
+account indicator on a stale session after out-of-band account deletion — **consciously deferred**,
+tracked in REQUESTS.md (no deletion path exists; revisit with any account-removal slice). Probes with
+no finding: XSS via `next`/display_name (autoescape confirmed), open-redirect suite incl. tab-byte
+bypass (Starlette percent-encoding closes it), 401→login→post-login query-string round trip, migration
+0006 up/down/up live, seed-dedupe test proven non-vacuous by mutation, logout under the origin check.
+
+Remaining for M2c part 2: collection-scoped routing (`/collections/{id}`, plan §9).

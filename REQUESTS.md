@@ -15,6 +15,11 @@ Tracked so they don't get lost — these are settled calls, not open questions.
   oracle ("That email is already in use" — accept openly or make signup non-revealing); join-by-code
   rate limiting once M3 sessions exist; and the login timing side-channel (dummy hash on the
   unknown-email path — the smallest of the set). Tracked in plan §8 M5 as milestone requirements.
+- [ ] **Phantom account indicator on a stale session** — `app/templating.py` trusts the session's
+  `account_name` without a DB check (deliberate: no DB hit per render; names aren't editable). If an
+  account-deletion/deactivation path ever lands, a surviving session cookie shows a live-looking
+  indicator while every real route 401s. Revisit the context processor in the same slice that adds any
+  account-removal capability. (Oscar M2c review, 2026-08-29 — minor, consciously deferred.)
 - [ ] **`reference/D20 Dinner Decider.xlsx`** — dormant legacy source data, unreferenced since the dice
   purge. Flagged 2026-08-29 for Charlie: delete it too, or keep as archive? (Deleting source data is
   Charlie's call, not assumed.)

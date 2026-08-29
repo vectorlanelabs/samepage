@@ -14,23 +14,20 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlencode, urlparse
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.auth import require_account
 from app.db import get_db
 from app.models import Account, Collection, Group, GroupAdmin, Item, ItemTag, MealDetail, Tag
+from app.templating import templates
 
 router = APIRouter()
-
-templates = Jinja2Templates(directory=Path(__file__).resolve().parents[1] / "templates")
 
 TYPE_LABELS = {"dinner": "Dinner", "lunch": "Lunch", "both": "Both"}
 TYPE_HUES = {"dinner": 25, "lunch": 140, "both": 300}
@@ -278,7 +275,6 @@ def library_page(
     """Library browse (signed-in accounts only): search (q), type / tag (OR) /
     status filters, scoped to the account's own group's collection."""
     account = require_account(request, db)
-    can_edit = True
 
     # Resolve the account's own meal collection; if none exists, show empty state.
     collection = _get_meal_collection(db, account)
@@ -290,7 +286,6 @@ def library_page(
                 "meals": [],
                 "active_count": 0,
                 "archived_count": 0,
-                "can_edit": can_edit,
                 "q": q,
                 "type": type,
                 "tags": tags,
@@ -328,7 +323,7 @@ def library_page(
         stmt = stmt.where(Item.archived_at.is_(None))
     elif status == "archived":
         stmt = stmt.where(Item.archived_at.is_not(None))
-    items = db.scalars(stmt.order_by(Item.name)).all()
+    items = db.scalars(stmt.order_by(Item.normalized_name)).all()
     item_ids = [item.id for item in items]
 
     # Fetch meal details and tags for this collection's items in one query each
@@ -355,7 +350,7 @@ def library_page(
             "id": item.id,
             "name": item.name,
             "type_label": TYPE_LABELS[_type_of(item)],
-            "type_style": _type_pill_style(_type_of(item), interactive=can_edit),
+            "type_style": _type_pill_style(_type_of(item), interactive=True),
             "tags": sorted(tags_by_item.get(item.id, [])),
             "kept_label": f"Kept {item.times_kept}×" if item.times_kept > 0 else None,
             "has_recipe": _has_recipe(item_details.get(item.id)),
@@ -422,7 +417,6 @@ def library_page(
             "meals": rows,
             "active_count": active_count,
             "archived_count": archived_count,
-            "can_edit": can_edit,
             "q": q,
             "type": type,
             "tags": tags,
@@ -467,14 +461,12 @@ def recipe_view(
         if line.strip()
     ]
 
-    # Template expects meal.recipe_text, so attach it to item for template compat.
-    item.recipe_text = detail.recipe_text if detail else None
-
     return templates.TemplateResponse(
         request,
         "recipe.html",
         {
             "meal": item,  # keep template var name for compatibility
+            "detail": detail,
             "tags": _item_tags(db, item.id),
             "type_label": TYPE_LABELS[detail.type if detail else "dinner"],
             "type_style": _type_pill_style(detail.type if detail else "dinner"),
@@ -536,7 +528,6 @@ def create_meal(
         name=form["name"],
         normalized_name=_normalize_name(form["name"]),
         description=None,
-        is_active=True,
     )
     db.add(item)
     db.flush()

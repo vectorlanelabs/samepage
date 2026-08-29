@@ -2,22 +2,45 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import is_group_owner, require_account, require_group_admin
 from app.db import get_db
 from app.models import Account, Group, GroupAdmin
+from app.templating import templates
 
 router = APIRouter()
 
-templates = Jinja2Templates(directory=Path(__file__).resolve().parents[1] / "templates")
+
+def _groups_context(db: Session, account: Account) -> dict:
+    """Groups owned or admined by the account, as template rows."""
+    # Get groups owned by this account.
+    owned_groups = db.scalars(
+        select(Group).where(Group.owner_account_id == account.id)
+    ).all()
+    # Get groups admined by this account.
+    admin_groups = db.scalars(
+        select(Group)
+        .join(GroupAdmin, GroupAdmin.group_id == Group.id)
+        .where(GroupAdmin.account_id == account.id)
+    ).all()
+    # Combine and dedupe.
+    all_groups = list(dict.fromkeys(owned_groups + admin_groups))
+    return {
+        "groups": [
+            {
+                "id": g.id,
+                "name": g.name,
+                "is_owner": g.owner_account_id == account.id,
+            }
+            for g in all_groups
+        ]
+    }
 
 
 def _group_detail_context(db: Session, group: Group, account: Account) -> dict:
@@ -49,30 +72,10 @@ def _group_detail_context(db: Session, group: Group, account: Account) -> dict:
 def groups_page(request: Request, db: Annotated[Session, Depends(get_db)]):
     """List groups owned or admined by the current account."""
     account = require_account(request, db)
-    # Get groups owned by this account.
-    owned_groups = db.scalars(
-        select(Group).where(Group.owner_account_id == account.id)
-    ).all()
-    # Get groups admined by this account.
-    admin_groups = db.scalars(
-        select(Group)
-        .join(GroupAdmin, GroupAdmin.group_id == Group.id)
-        .where(GroupAdmin.account_id == account.id)
-    ).all()
-    # Combine and dedupe.
-    all_groups = list(dict.fromkeys(owned_groups + admin_groups))
-    groups = [
-        {
-            "id": g.id,
-            "name": g.name,
-            "is_owner": g.owner_account_id == account.id,
-        }
-        for g in all_groups
-    ]
     return templates.TemplateResponse(
         request,
         "groups.html",
-        {"groups": groups},
+        _groups_context(db, account),
         status_code=200,
     )
 
@@ -80,17 +83,19 @@ def groups_page(request: Request, db: Annotated[Session, Depends(get_db)]):
 @router.post("/groups")
 def create_group(
     request: Request,
-    name: Annotated[str, Form()],
     db: Annotated[Session, Depends(get_db)],
+    name: Annotated[str, Form()] = "",
 ):
     """Create a group owned by the current account."""
     account = require_account(request, db)
     name = name.strip()
     if not name:
+        context = _groups_context(db, account)
+        context["error"] = "Group name is required."
         return templates.TemplateResponse(
             request,
             "groups.html",
-            {"error": "Group name is required."},
+            context,
             status_code=400,
         )
 
@@ -127,7 +132,7 @@ def add_admin(
 
     # Owner-only check.
     if not is_group_owner(account, group):
-        raise HTTPException(403, "Admin required")
+        raise HTTPException(403, "Owner required")
 
     email = email.strip().lower()
     target = db.scalar(select(Account).where(Account.email == email))
@@ -188,7 +193,7 @@ def remove_admin(
 
     # Owner-only check.
     if not is_group_owner(account, group):
-        raise HTTPException(403, "Admin required")
+        raise HTTPException(403, "Owner required")
 
     # Delete the row if it exists (idempotent).
     admin_row = db.scalar(

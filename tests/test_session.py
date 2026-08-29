@@ -1,9 +1,11 @@
 """Session cookie flags (D16): HttpOnly always; Secure only in production.
 
 Starlette only emits ``Set-Cookie`` when a request actually writes to the
-session, and M0 has no session-writing route (auth arrives in M1). So these
-tests exercise the exact production middleware config from
-``app.security.setup_middleware`` on a minimal probe app.
+session. The real app's login/signup routes do that, but asserting cookie
+flags through them would couple these tests to the auth flow; instead they
+exercise the exact production middleware config from
+``app.security.setup_middleware`` on a minimal probe app that writes a
+session cookie directly.
 """
 
 from fastapi import FastAPI, Request

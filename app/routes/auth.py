@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -16,10 +14,9 @@ from app.auth import get_current_account
 from app.credentials import hash_password, is_valid_email, is_valid_password, verify_password
 from app.db import get_db
 from app.models import Account
+from app.templating import templates
 
 router = APIRouter()
-
-templates = Jinja2Templates(directory=Path(__file__).resolve().parents[1] / "templates")
 
 
 def _safe_next(value: str | None) -> str:
@@ -38,9 +35,9 @@ def _login_page(request: Request, error: str | None, status_code: int = 200, nex
     )
 
 
-def _signup_page(request: Request, error: str | None, status_code: int = 200):
+def _signup_page(request: Request, error: str | None, status_code: int = 200, next: str | None = None):
     return templates.TemplateResponse(
-        request, "signup.html", {"error": error}, status_code=status_code
+        request, "signup.html", {"error": error, "next": next}, status_code=status_code
     )
 
 
@@ -72,15 +69,16 @@ def login(
         return _login_page(request, "Email or password doesn't match.", status_code=401, next=next)
 
     request.session["account_id"] = account.id
+    request.session["account_name"] = account.display_name
     return RedirectResponse(_safe_next(next), status_code=303)
 
 
 @router.get("/signup")
-def signup_page(request: Request, db: Annotated[Session, Depends(get_db)]):
-    # Redirect to / if already signed in.
+def signup_page(request: Request, db: Annotated[Session, Depends(get_db)], next: str | None = None):
+    # Redirect to `next` (or /) if already signed in.
     if get_current_account(request, db) is not None:
-        return RedirectResponse("/", status_code=303)
-    return _signup_page(request, error=None)
+        return RedirectResponse(_safe_next(next), status_code=303)
+    return _signup_page(request, error=None, next=next)
 
 
 @router.post("/signup")
@@ -90,25 +88,27 @@ def signup(
     password: Annotated[str, Form()],
     display_name: Annotated[str, Form()],
     db: Annotated[Session, Depends(get_db)],
+    next: Annotated[str, Form()] = "",
 ):
     """Create an account with email + password + display_name.
 
     Failure paths re-render the signup form with an error (HTTP 400).
-    Success stores ``account_id`` in session and 303-redirects to / (PRG).
+    Success stores ``account_id`` in session and 303-redirects to
+    `next` (if it was a same-site path) or / otherwise (PRG).
     """
     email = email.strip().lower()
     display_name = display_name.strip()
 
     if not email:
-        return _signup_page(request, "Email is required.", status_code=400)
+        return _signup_page(request, "Email is required.", status_code=400, next=next)
     if not is_valid_email(email):
-        return _signup_page(request, "Email is not valid.", status_code=400)
+        return _signup_page(request, "Email is not valid.", status_code=400, next=next)
     if not password:
-        return _signup_page(request, "Password is required.", status_code=400)
+        return _signup_page(request, "Password is required.", status_code=400, next=next)
     if not is_valid_password(password):
-        return _signup_page(request, "Password must be at least 8 characters.", status_code=400)
+        return _signup_page(request, "Password must be at least 8 characters.", status_code=400, next=next)
     if not display_name:
-        return _signup_page(request, "Display name is required.", status_code=400)
+        return _signup_page(request, "Display name is required.", status_code=400, next=next)
 
     account = Account(
         email=email,
@@ -120,10 +120,11 @@ def signup(
         db.commit()
     except IntegrityError:
         db.rollback()
-        return _signup_page(request, "That email is already in use.", status_code=400)
+        return _signup_page(request, "That email is already in use.", status_code=400, next=next)
 
     request.session["account_id"] = account.id
-    return RedirectResponse("/", status_code=303)
+    request.session["account_name"] = account.display_name
+    return RedirectResponse(_safe_next(next), status_code=303)
 
 
 @router.post("/logout")

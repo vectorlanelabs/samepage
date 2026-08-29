@@ -48,6 +48,31 @@ def test_create_group_sets_owner(client, post, db_session):
     assert group.owner_account_id == account.id
 
 
+def test_create_group_blank_name_400_keeps_group_list(client, post, db_session):
+    """A blank group name is a 400 re-render of the groups page — and the
+    re-render must keep the account's existing groups (regression: the 400
+    path used to render without the ``groups`` context, showing 'No groups
+    yet' to an account that had groups)."""
+    owner = _make_account(db_session, email="owner@example.com")
+    _make_group(db_session, "Existing Group", owner)
+    _login(post, "owner@example.com")
+    resp = post("/groups", data={"name": "   "})
+    assert resp.status_code == 400
+    assert "Group name is required." in resp.text
+    assert "Existing Group" in resp.text  # group list survives the 400
+
+
+def test_create_group_absent_name_400(client, post, db_session):
+    """Omitting the name field entirely is a 400, not a 422 — the form field
+    is optional in the signature with an empty-string default, so a browser
+    that drops the field still gets the friendly error page."""
+    _make_account(db_session, email="owner@example.com")
+    _login(post, "owner@example.com")
+    resp = post("/groups", data={})
+    assert resp.status_code == 400
+    assert "Group name is required." in resp.text
+
+
 def test_list_groups_owned_and_admined(client, post, db_session):
     owner = _make_account(db_session, email="owner@example.com")
     admin = _make_account(db_session, email="admin@example.com")

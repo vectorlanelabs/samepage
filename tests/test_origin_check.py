@@ -152,7 +152,7 @@ def test_api_path_with_evil_origin_still_rejected(probe):
 def test_login_rejects_cross_site_origin(client):
     resp = client.post(
         "/login",
-        data={"name": "Ada", "pin": "1234"},
+        data={"email": "test@example.com", "password": "testpass123"},
         headers={"Origin": "https://evil.example"},
     )
     assert resp.status_code == 403
@@ -160,6 +160,8 @@ def test_login_rejects_cross_site_origin(client):
 
 
 def test_login_rejects_absent_origin(client):
-    resp = client.post("/login", data={"name": "Ada", "pin": "1234"})
+    resp = client.post(
+        "/login", data={"email": "test@example.com", "password": "testpass123"}
+    )
     assert resp.status_code == 403
     assert resp.json() == {"detail": "CSRF origin required"}

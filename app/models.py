@@ -14,7 +14,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -95,7 +94,6 @@ class Item(Base):
     normalized_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category_id: Mapped[int | None] = mapped_column(ForeignKey("category.id"), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     times_offered: Mapped[int] = mapped_column(Integer, default=0)
     times_kept: Mapped[int] = mapped_column(Integer, default=0)

@@ -19,7 +19,7 @@ def test_home_signed_out_shows_no_data(client):
     counts to anyone; that leaked cross-tenant data on a multi-tenant deployment."""
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "SamePage" in resp.text
+    assert "Same Page" in resp.text
     assert "Sign in" in resp.text
     assert "Sign up" in resp.text
     assert "stat-count" not in resp.text  # no count data rendered at all
@@ -33,7 +33,7 @@ def test_home_signed_in_shows_own_counts(client, post, db_session):
     collection = Collection(group_id=group.id, kind="meal", name="Meal Planner")
     db_session.add(collection)
     db_session.commit()
-    db_session.add(Item(collection_id=collection.id, name="Tacos", normalized_name="tacos", is_active=True))
+    db_session.add(Item(collection_id=collection.id, name="Tacos", normalized_name="tacos"))
     db_session.commit()
 
     _login(post)
@@ -56,7 +56,7 @@ def test_home_never_shows_another_groups_counts(client, post, db_session):
     db_session.commit()
     for name in ("A", "B", "C"):
         db_session.add(
-            Item(collection_id=other_collection.id, name=name, normalized_name=name.lower(), is_active=True)
+            Item(collection_id=other_collection.id, name=name, normalized_name=name.lower())
         )
     db_session.commit()
 

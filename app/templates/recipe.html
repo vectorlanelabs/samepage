@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ meal.name }} · SamePage{% endblock %}
+{% block title %}{{ meal.name }} · Same Page{% endblock %}
 {% block content %}
 <div style="background:var(--dd-card);border-radius:var(--dd-radius-card);padding:40px;box-shadow:var(--dd-shadow-card);">
   <a href="/library" style="border:none;background:none;color:var(--dd-text-muted);font:700 13px var(--dd-font-body);cursor:pointer;">← Back to library</a>
@@ -26,16 +26,16 @@
   </div>
   {% endif %}
 
-  {% if meal.recipe_text %}
+  {% if detail and detail.recipe_text %}
   <div style="font:700 11px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin-top:22px;">Instructions</div>
-  <div style="margin-top:8px;font:500 17px/1.7 var(--dd-font-body);color:oklch(0.28 0.02 260);white-space:pre-wrap;max-width:560px;">{{ meal.recipe_text }}</div>
+  <div style="margin-top:8px;font:500 17px/1.7 var(--dd-font-body);color:oklch(0.28 0.02 260);white-space:pre-wrap;max-width:560px;">{{ detail.recipe_text }}</div>
   {% endif %}
 
   {% if safe_source_url %}
   <a href="{{ safe_source_url }}" target="_blank" rel="noopener" style="display:inline-block;margin-top:14px;font:700 12px var(--dd-font-body);color:oklch(0.5 0.12 140);text-decoration:underline;">Originally sourced from this recipe ↗</a>
   {% endif %}
 
-  {% if not ingredients and not meal.recipe_text %}
+  {% if not ingredients and not (detail and detail.recipe_text) %}
   <div style="margin-top:20px;font:600 13px var(--dd-font-body);color:var(--dd-text-muted);">No recipe saved yet — the household's own version can be added from this meal's edit screen, not just a link out.</div>
   {% endif %}
 

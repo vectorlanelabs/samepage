@@ -28,6 +28,8 @@ def test_malformed_stored_never_raises():
         "pbkdf2_sha256$600000$aa$bb$cc",  # extra segment
         "PBKDF2_SHA256$600000$aa$bb",  # wrong algorithm case
         "sha256$600000$aa$bb",  # wrong algorithm name
+        "pbkdf2_sha256$600000$a$ff",  # odd-length salt hex
+        "pbkdf2_sha256$600000$aa$f",  # odd-length hash hex
     ]
     for stored in malformed:
         assert verify_password("testpass123", stored) is False

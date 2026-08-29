@@ -33,6 +33,8 @@ def verify_password(password: str, stored: str) -> bool:
     match = _PATTERN.fullmatch(stored)
     if match is None:
         return False
+    if len(match.group(2)) % 2 != 0 or len(match.group(3)) % 2 != 0:
+        return False
     iterations = int(match.group(1))
     salt = bytes.fromhex(match.group(2))
     expected = bytes.fromhex(match.group(3))

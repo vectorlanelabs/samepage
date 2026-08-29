@@ -57,7 +57,6 @@ def _make_item(
         name=name,
         normalized_name=name.casefold(),
         description=None,
-        is_active=True,
     )
     db_session.add(item)
     db_session.flush()
@@ -119,6 +118,22 @@ def test_library_page_lists_items(client, post, db_session):
     assert "Taco Tuesday" in resp.text
     assert "Pancakes" in resp.text
     assert "2 active · 0 archived." in resp.text
+
+
+def test_library_orders_by_normalized_name_case_insensitively(client, post, db_session):
+    """SQLite's BINARY collation would sort "Ziti" before "bacon and eggs"
+    when ordering by the raw name; the library orders by the casefolded
+    normalized_name so the list reads naturally regardless of original
+    capitalization (OSCAR review fix)."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Ziti", type="dinner")
+    _make_item(db_session, collection.id, group.id, "bacon and eggs", type="both")
+    _make_item(db_session, collection.id, group.id, "Apple pie", type="both")
+    _login(post)
+    resp = client.get("/library")
+    assert resp.status_code == 200
+    assert resp.text.index("Apple pie") < resp.text.index("bacon and eggs") < resp.text.index("Ziti")
 
 
 def test_library_search_filters(client, post, db_session):
@@ -227,7 +242,7 @@ def test_library_page_renders_item_with_no_meal_detail(client, post, db_session)
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     detail_less = Item(
-        collection_id=collection.id, name="No Detail Yet", normalized_name="no detail yet", is_active=True
+        collection_id=collection.id, name="No Detail Yet", normalized_name="no detail yet"
     )
     db_session.add(detail_less)
     db_session.commit()
@@ -244,8 +259,12 @@ def test_library_empty_when_no_collection(client, post, db_session):
     _login(post)
     resp = client.get("/library")
     assert resp.status_code == 200
-    # Should render gracefully without collection
     assert "Meal Library" in resp.text
+    # The empty state names the cause (no collection yet) rather than the
+    # generic filter-empty message — a stale no_collection flag used to be
+    # passed to a template that ignored it.
+    assert "No meal collection yet" in resp.text
+    assert "No meals match these filters" not in resp.text
 
 
 # ---------- Recipe view (signed-in accounts, own group only) ----------

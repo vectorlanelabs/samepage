@@ -187,7 +187,6 @@ def test_item_and_meal_detail_round_trip(db_session):
         name="Pasta Carbonara",
         normalized_name="pasta carbonara",
         description="Classic Italian pasta",
-        is_active=True,
     )
     db_session.add(item)
     db_session.flush()
@@ -237,7 +236,6 @@ def test_item_tag_linkage(db_session):
         collection_id=collection.id,
         name="Thai food",
         normalized_name="thai food",
-        is_active=True,
     )
     db_session.add(item)
     db_session.flush()

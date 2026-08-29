@@ -158,7 +158,7 @@ def test_anonymous_page_load_401_redirects_to_login(client):
     with `next` set to where they were headed, not a bare JSON error body."""
     resp = client.get("/groups", headers={"accept": "text/html"}, follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/login?next=/groups"
+    assert resp.headers["location"] == "/login?next=%2Fgroups"
 
 
 def test_anonymous_api_style_401_stays_json(client):
@@ -178,6 +178,58 @@ def test_login_next_redirects_after_success(client, post, db_session):
     )
     assert resp.status_code == 303
     assert resp.headers["location"] == "/groups"
+
+
+# ---------- Signup `next` handling ----------
+
+
+def test_signup_next_redirects_after_success(client, post, db_session):
+    resp = post(
+        "/signup",
+        data={
+            "email": "newuser@example.com",
+            "password": "testpass123",
+            "display_name": "New User",
+            "next": "/groups",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/groups"
+
+
+def test_signup_next_rejects_absolute_url(client, post, db_session):
+    resp = post(
+        "/signup",
+        data={
+            "email": "newuser@example.com",
+            "password": "testpass123",
+            "display_name": "New User",
+            "next": "https://evil.example.com",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
+
+
+# ---------- Account indicator / sign-out in the chrome (base.html) ----------
+
+
+def test_signed_in_page_shows_account_and_sign_out(client, post, db_session):
+    _make_account(db_session, display_name="Ada Lovelace")
+    post("/login", data={"email": "test@example.com", "password": "testpass123"})
+    resp = client.get("/groups")
+    assert resp.status_code == 200
+    assert "Ada Lovelace" in resp.text
+    assert '<form method="post" action="/logout">' in resp.text
+
+
+def test_signed_out_page_shows_sign_in_link(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert '<a class="nav-link" href="/login">Sign in</a>' in resp.text
+    assert "Sign out" not in resp.text
 
 
 # ---------- _safe_next open-redirect guard ----------

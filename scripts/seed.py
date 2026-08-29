@@ -114,6 +114,7 @@ def _load(db: Session, seed_path: Path, group_id: int) -> None:
                     print(
                         f"skip (category): {name} — '{cat_name}' has no sheet index"
                     )
+                    skipped += 1
                     continue
                 category = Category(
                     collection_id=collection.id,
@@ -147,12 +148,14 @@ def _load(db: Session, seed_path: Path, group_id: int) -> None:
             normalized_name=normalized,
             description=None,
             category_id=category.id if category is not None else None,
-            is_active=True,
             times_offered=0,
             times_kept=0,
         )
         db.add(item)
         db.flush()
+        # Within-run dedupe: a name appearing twice in the seed file is a skip
+        # on the second occurrence, not a second insert.
+        existing_normalized.add(normalized)
 
         # Create the meal_detail row.
         meal_detail = MealDetail(

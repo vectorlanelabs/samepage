@@ -12,6 +12,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlencode
 
 from alembic.config import Config
 from fastapi import FastAPI, Request
@@ -25,7 +26,7 @@ from app.routes import auth, groups, home, library
 from app.security import setup_middleware
 from app.settings import REPO_ROOT, settings
 
-logger = logging.getLogger("dinnerdecider")
+logger = logging.getLogger("samepage")
 
 
 def _run_migrations(db_path: str | None = None) -> None:
@@ -64,7 +65,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="SamePage", lifespan=lifespan)
+app = FastAPI(title="Same Page", lifespan=lifespan)
 
 setup_middleware(app)
 
@@ -82,7 +83,8 @@ async def _redirect_unauthenticated(request: Request, exc: StarletteHTTPExceptio
     error. API-style requests (no ``text/html`` in Accept) keep the default
     JSON body — relevant once M6's token-authenticated routes exist."""
     if exc.status_code == 401 and "text/html" in request.headers.get("accept", ""):
-        return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
+        target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(f"/login?{urlencode({'next': target})}", status_code=303)
     return await http_exception_handler(request, exc)
 
 

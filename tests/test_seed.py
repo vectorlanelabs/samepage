@@ -40,11 +40,11 @@ def test_seed_loads_full_library(db_session):
     group = _make_group(db_session)
     _run(db_session, group.id)
 
-    assert _count(db_session, Item) == 155
+    assert _count(db_session, Item) == 154
     assert _count(db_session, Category) == 8
     assert _count(db_session, Tag) >= 1
     assert _count(db_session, ItemTag) >= 1
-    assert _count(db_session, MealDetail) == 155
+    assert _count(db_session, MealDetail) == 154
 
     # Categories are "Tab 1".."Tab 8" with the sheet index recorded (D8).
     categories = db_session.scalars(select(Category).order_by(Category.name)).all()
@@ -81,9 +81,9 @@ def test_seed_loads_full_library(db_session):
 def test_seed_is_idempotent(db_session):
     group = _make_group(db_session)
     _run(db_session, group.id)
-    assert _count(db_session, Item) == 155
+    assert _count(db_session, Item) == 154
     _run(db_session, group.id)
-    assert _count(db_session, Item) == 155
+    assert _count(db_session, Item) == 154
     assert _count(db_session, Category) == 8
     assert _count(db_session, Tag) == 1  # takeout only, no re-creation
 
@@ -93,7 +93,8 @@ def test_seed_skips_existing_household_edit(db_session):
 
     "bacon and eggs" is in the seed as type "both"; the household's version
     is "dinner" — after seeding, its type is unchanged and no second row
-    appears (155 = 1 pre-existing + 154 seeded).
+    appears (154 = 1 pre-existing + 153 seeded — the seed file itself carries a
+    real duplicate, "chicken parm", whose second occurrence is skipped).
     """
     group = _make_group(db_session)
     collection = Collection(group_id=group.id, kind="meal", name="Meal Planner")
@@ -104,7 +105,6 @@ def test_seed_skips_existing_household_edit(db_session):
         collection_id=collection.id,
         name="Bacon and Eggs (house style)",
         normalized_name="bacon and eggs",
-        is_active=True,
     )
     db_session.add(item)
     db_session.flush()
@@ -116,7 +116,7 @@ def test_seed_skips_existing_household_edit(db_session):
 
     _run(db_session, group.id)
 
-    assert _count(db_session, Item) == 155
+    assert _count(db_session, Item) == 154
     meal = db_session.scalar(select(Item).where(Item.normalized_name == "bacon and eggs"))
     assert meal is not None
     assert meal.name == "Bacon and Eggs (house style)"
@@ -131,6 +131,39 @@ def test_seed_orders_categories_by_sheet_index(db_session):
         select(Category).order_by(Category.sort_order)
     ).all()
     assert [c.name for c in categories] == [f"Tab {i}" for i in range(1, 9)]
+
+
+def test_seed_within_run_duplicate_name_skipped(tmp_path, db_session):
+    """A name appearing twice inside one seed file inserts exactly once — the
+    second occurrence is a skip (its normalized name was added to the seen set
+    on the first insert), never a second row. Regression for the within-run
+    dedupe gap: the seen set was only loaded once up front, so in-file
+    duplicates both inserted despite the docstring promising a skip."""
+    import json
+
+    seed_path = tmp_path / "dupes.json"
+    seed_path.write_text(
+        json.dumps(
+            {
+                "meals": [
+                    {"name": "Tacos", "type": "dinner"},
+                    {"name": "tacos", "type": "lunch"},  # same normalized name
+                    {"name": "Burgers", "type": "dinner"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    group = _make_group(db_session)
+    seed_module.main(seed_path, db=db_session, group_id=group.id)
+
+    assert _count(db_session, Item) == 2
+    # First occurrence wins; the duplicate was skipped, not merged.
+    meals = db_session.scalars(select(Item).order_by(Item.normalized_name)).all()
+    assert [m.name for m in meals] == ["Burgers", "Tacos"]
+    tacos = db_session.scalar(select(Item).where(Item.normalized_name == "tacos"))
+    assert tacos is not None
+    assert db_session.get(MealDetail, tacos.id).type == "dinner"
 
 
 def test_seed_requires_group_id(db_session):

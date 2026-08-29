@@ -10,21 +10,18 @@ platform, fixed alongside the same class of bug in app/routes/library.py.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_account
 from app.db import get_db
 from app.models import Collection, Group, GroupAdmin, Item
+from app.templating import templates
 
 router = APIRouter()
-
-templates = Jinja2Templates(directory=Path(__file__).resolve().parents[1] / "templates")
 
 
 @router.get("/")

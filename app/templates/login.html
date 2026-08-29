@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Sign in · SamePage{% endblock %}
+{% block title %}Sign in · Same Page{% endblock %}
 {% block content %}
 <div style="display:flex;justify-content:center;padding:32px 0;">
   <div style="width:min(400px,100%);background:var(--dd-card);border-radius:var(--dd-radius-card);box-shadow:var(--dd-shadow-card);padding:32px;">
@@ -16,7 +16,7 @@
              style="box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
       <button type="submit" class="pill" style="margin-top:6px;">Sign in</button>
     </form>
-    <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:18px 0 0;">Don't have an account? <a href="/signup" style="color:var(--dd-accent);">Sign up →</a></p>
+    <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:18px 0 0;">Don't have an account? <a href="{% if next %}/signup?next={{ next|urlencode }}{% else %}/signup{% endif %}" style="color:var(--dd-accent);">Sign up →</a></p>
   </div>
 </div>
 {% endblock %}
