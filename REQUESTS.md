@@ -17,6 +17,9 @@ Wanted-but-not-blocking ideas. The lead picks these up when appropriate, or Char
 - [ ] **API auth shape** — single household `DD_API_KEY` (Bearer) is the plan; per-tool tokens can come later.
 - [ ] **Raw votes via API** — default is **no** (aggregates only, consistent with the privacy invariant); say so if your analysis genuinely needs raw per-person data.
 
+- [ ] **Login timing side-channel** — `POST /login` returns instantly for an unknown email (no hash computed) but takes ~60ms for a known email with a wrong password (full 600k-iteration PBKDF2 run), live-measured during M2a review. Lets an attacker enumerate valid account emails by response time even though the error message itself is generic. Inherited from the M1 PIN-login code this replaced (same early-return shape), not introduced by M2a — but real and unaddressed. Fix is cheap (always run a dummy hash on the unknown-email path) — worth doing before any public launch.
+- [ ] **Library CRUD gating is interim** — M2a gates `/library` create/edit/archive on "any signed-in account" (not group/collection-scoped) because collections aren't group-owned yet. M2b should tighten this to "must be an owner/admin of the group that owns this collection."
+
 ## Resolved (2026-08-26)
 
 - ~~Batch size default~~ — fixed at 15 (not a setup choice); revisit after real sessions.

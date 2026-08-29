@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Groups · SamePage{% endblock %}
+{% block content %}
+<div style="max-width:1200px;margin:0 auto;padding:32px 24px;">
+  <h1 style="font-family:var(--dd-font-display);font-weight:600;font-size:28px;margin:0 0 24px;color:var(--dd-text);">Groups</h1>
+
+  {% if error %}
+  <p style="font:700 12px var(--dd-font-body);color:var(--dd-dinner);margin:0 0 16px;">{{ error }}</p>
+  {% endif %}
+
+  <!-- Create group form -->
+  <div style="background:var(--dd-card);border-radius:var(--dd-radius-card);box-shadow:var(--dd-shadow-card);padding:24px;margin-bottom:32px;">
+    <h2 style="font-family:var(--dd-font-display);font-weight:600;font-size:16px;margin:0 0 16px;color:var(--dd-text);">New Group</h2>
+    <form method="post" action="/groups" style="display:flex;gap:12px;">
+      <input type="text" name="name" placeholder="Group name" required
+             style="flex:1;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
+      <button type="submit" class="pill">Create</button>
+    </form>
+  </div>
+
+  <!-- Groups list -->
+  {% if groups %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+    {% for group in groups %}
+    <a href="/groups/{{ group.id }}" style="text-decoration:none;">
+      <div style="background:var(--dd-card);border-radius:var(--dd-radius-card);box-shadow:var(--dd-shadow-card);padding:20px;transition:transform 0.2s ease,box-shadow 0.2s ease;cursor:pointer;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--dd-shadow-card-hover)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='var(--dd-shadow-card)'">
+        <h3 style="font-family:var(--dd-font-display);font-weight:600;font-size:16px;margin:0;color:var(--dd-text);">{{ group.name }}</h3>
+        <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:8px 0 0;">{% if group.is_owner %}Owner{% else %}Admin{% endif %}</p>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);text-align:center;padding:48px 24px;">No groups yet. Create one above.</p>
+  {% endif %}
+</div>
+{% endblock %}

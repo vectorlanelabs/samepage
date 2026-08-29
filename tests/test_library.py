@@ -3,8 +3,8 @@ admin gating, archive/unarchive, type cycle, recipe view."""
 
 from sqlalchemy import func, select
 
-from app.models import Meal, MealTag, Person, Tag
-from app.pins import hash_pin
+from app.credentials import hash_password
+from app.models import Account, Meal, MealTag, Tag
 
 
 def _make_meal(
@@ -41,15 +41,19 @@ def _make_meal(
     return meal
 
 
-def _make_person(db_session, name="Admin", is_admin=True):
-    person = Person(name=name, pin_hash=hash_pin("1234"), is_admin=is_admin, is_active=True)
-    db_session.add(person)
+def _make_account(db_session, email="admin@example.com", password="testpass123", display_name="Admin"):
+    account = Account(
+        email=email,
+        password_hash=hash_password(password),
+        display_name=display_name,
+    )
+    db_session.add(account)
     db_session.commit()
-    return person
+    return account
 
 
-def _login(post, name="Admin", pin="1234"):
-    post("/login", data={"name": name, "pin": pin})
+def _login(post, email="admin@example.com", password="testpass123"):
+    post("/login", data={"email": email, "password": password})
 
 
 def _tags_of(db_session, meal_id):
@@ -180,19 +184,11 @@ def test_recipe_view_unknown_404(client, db_session):
 
 def test_admin_gating(client, post, db_session):
     _make_meal(db_session, "Steak")
-    # No session at all.
-    assert post("/library", data={"name": "X", "type": "dinner"}).status_code == 403
-    assert client.get("/library/new").status_code == 403
-    assert client.get("/library/1/edit").status_code == 403
-    # Signed in as a non-admin.
-    _make_person(db_session, "User", is_admin=False)
-    _login(post, "User")
-    assert post("/library", data={"name": "X", "type": "dinner"}).status_code == 403
-    assert post("/library/1/archive").status_code == 403
-    assert post("/library/1/cycle-type").status_code == 403
-    assert client.get("/library/1/edit").status_code == 403
-    assert client.get("/library/new").status_code == 403
-    # Non-admins still see the public pages.
+    # No session at all: 401 (not signed in).
+    assert post("/library", data={"name": "X", "type": "dinner"}).status_code == 401
+    assert client.get("/library/new").status_code == 401
+    assert client.get("/library/1/edit").status_code == 401
+    # Public pages still viewable when not signed in.
     assert client.get("/library").status_code == 200
 
 
@@ -200,8 +196,8 @@ def test_admin_gating(client, post, db_session):
 
 
 def test_create_meal(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     resp = post(
         "/library",
         data={
@@ -227,8 +223,8 @@ def test_create_meal(client, post, db_session):
 
 
 def test_create_meal_without_tags_or_recipe(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     resp = post(
         "/library",
         data={"name": "Bare meal", "type": "lunch"},
@@ -243,8 +239,8 @@ def test_create_meal_without_tags_or_recipe(client, post, db_session):
 
 
 def test_create_duplicate_normalized_name_400(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     _make_meal(db_session, "Bacon and Eggs")
     resp = post(
         "/library", data={"name": "bacon   and eggs", "type": "dinner"}
@@ -254,15 +250,15 @@ def test_create_duplicate_normalized_name_400(client, post, db_session):
 
 
 def test_create_invalid_type_400(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     resp = post("/library", data={"name": "Weird", "type": "brunch"})
     assert resp.status_code == 400
 
 
 def test_create_empty_name_400(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     resp = post("/library", data={"name": "   ", "type": "dinner"})
     assert resp.status_code == 400
 
@@ -271,8 +267,8 @@ def test_create_empty_name_400(client, post, db_session):
 
 
 def test_update_meal_rename_and_type(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     meal = _make_meal(db_session, "Old Name", type="dinner", tags=["takeout"])
     resp = post(
         f"/library/{meal.id}",
@@ -288,8 +284,8 @@ def test_update_meal_rename_and_type(client, post, db_session):
 
 
 def test_update_rename_collision_400(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     _make_meal(db_session, "Tacos")
     meal = _make_meal(db_session, "Other")
     resp = post(f"/library/{meal.id}", data={"name": "Tacos", "type": "dinner"})
@@ -307,8 +303,8 @@ def test_update_rename_collision_400(client, post, db_session):
 
 
 def test_cycle_type_round_trip(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     meal = _make_meal(db_session, "Cycler", type="dinner")
     for expected in ("lunch", "both", "dinner"):
         resp = post(f"/library/{meal.id}/cycle-type", follow_redirects=False)
@@ -318,8 +314,8 @@ def test_cycle_type_round_trip(client, post, db_session):
 
 
 def test_archive_unarchive(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     meal = _make_meal(db_session, "Archivable")
     post(f"/library/{meal.id}/archive")
     db_session.refresh(meal)
@@ -336,8 +332,8 @@ def test_archive_unarchive(client, post, db_session):
 
 
 def test_create_rejects_unsafe_source_url(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     unsafe_urls = [
         "javascript:alert(1)",
         "JaVaScRiPt:alert(1)",
@@ -360,8 +356,8 @@ def test_create_rejects_unsafe_source_url(client, post, db_session):
 
 
 def test_create_stores_valid_https_source_url(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     resp = post(
         "/library",
         data={
@@ -383,8 +379,8 @@ def test_create_stores_valid_https_source_url(client, post, db_session):
 
 
 def test_update_rejects_unsafe_source_url_keeps_previous(client, post, db_session):
-    _make_person(db_session, "Admin")
-    _login(post, "Admin")
+    _make_account(db_session)
+    _login(post)
     meal = _make_meal(db_session, "Sourced", source_url="https://example.com/ok")
     resp = post(
         f"/library/{meal.id}",

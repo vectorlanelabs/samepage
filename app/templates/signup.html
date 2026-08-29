@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Sign up · SamePage{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:center;padding:32px 0;">
+  <div style="width:min(400px,100%);background:var(--dd-card);border-radius:var(--dd-radius-card);box-shadow:var(--dd-shadow-card);padding:32px;">
+    <h1 style="font-family:var(--dd-font-display);font-weight:600;font-size:22px;margin:0;color:var(--dd-text);">Sign up</h1>
+    <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:6px 0 0;">Email, password, display name.</p>
+    {% if error %}
+    <p style="font:700 12px var(--dd-font-body);color:var(--dd-dinner);margin:14px 0 0;">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="/signup" style="display:flex;flex-direction:column;gap:10px;margin-top:18px;">
+      <input type="email" name="email" placeholder="Email" required autofocus
+             style="box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
+      <input type="password" name="password" placeholder="Password (8+ characters)" required
+             style="box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
+      <input type="text" name="display_name" placeholder="Display name" required
+             style="box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
+      <button type="submit" class="pill" style="margin-top:6px;">Sign up</button>
+    </form>
+    <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:18px 0 0;">Already have an account? <a href="/login" style="color:var(--dd-accent);">Sign in →</a></p>
+  </div>
+</div>
+{% endblock %}

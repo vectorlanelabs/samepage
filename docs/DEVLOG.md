@@ -138,3 +138,41 @@ public URL).
 **Status**: M0–M2 code stands as the starting point for M2a/M2b, not thrown away. M3 onward unapproved
 pending Charlie's sign-off on `docs/PLAN-v2-samepage.md`. No implementation work started against the new
 architecture yet — this was a spec/design pass only.
+
+## 2026-08-28 — M2a landed (identity & tenancy)
+
+**Shipped**: `Account` (email+password, PBKDF2-SHA256 600k iterations, stdlib-only — matches the existing
+PIN-hashing pattern, just a higher work factor), `Group` (`owner_account_id`), `GroupAdmin` (additional
+admins beyond the owner). `Person`, PIN hashing/lockout, and the never-built M3-shaped `Session`/
+`SessionParticipant`/`Batch`/`BatchMeal`/`Vote` tables are all removed (the latter were empty, unused,
+superseded by `docs/PLAN-v2-samepage.md` §5's session model — M3 recreates them when it starts).
+`app/routes/groups.py` replaces `app/routes/people.py`: create a group, view members, owner adds/removes
+admins by email. Signup is always open (no admin bootstrap gate — anyone can create an account, then
+create a group and become its owner) — this directly fixes the real bug found during manual M0–M2 testing
+last session (no UI path existed to create the first person). 88 tests passing, `ruff` clean.
+
+**Process**: implementer (Haiku) → lead re-verify (venv had gone stale after the folder rename to
+`samepage-app` — shebangs pointed at the old path; `rm -rf .venv && uv sync` fixed it) → **caught a real
+architecture violation the implementer invented and never flagged as a decision**: an ungated
+`Account.is_admin` boolean, defaulting `False`, that nothing in the app ever set to `True` — every real
+signed-up account would have been permanently locked out of library editing forever. Tests only passed
+because the test helper set `is_admin=True` directly via the ORM, bypassing the app entirely. Sent back
+with a locked decision (library CRUD gates on "any signed-in account" for this slice — deliberate, interim,
+tracked in REQUESTS.md — proper group-scoping is M2b's job) → re-verify (clean) → Oscar review → **1
+blocking finding, live-reproduced**: `GET /login`/`GET /signup` 500'd for any already-authenticated visitor
+(`get_current_account(request, None)` — passed `db=None`, a bug in code that didn't exist before this
+slice) → lead fixed directly (pass the real `Depends(get_db)` session) + added 2 regression tests → landed.
+
+**Findings disposition (nothing left behind):**
+
+| Finding | Sev | Disposition |
+|---|---|---|
+| `Account.is_admin` — ungated, nothing ever sets it True, permanently locks out every real user | blocking | **fixed** — removed the field entirely; library CRUD now gates on `require_account` (any signed-in account), a deliberate interim policy until M2b group-scopes collections; live-verified (anon 401, signed-in 303) |
+| `is_group_admin` mid-function import + SQLAlchemy 1.x `.query().filter_by()` style | minor | **fixed** — top-level import, rewritten to 2.x `select()` style matching the rest of the codebase |
+| `GET /login`/`GET /signup` 500 for an already-signed-in visitor (`db=None` passed to `get_current_account`) | blocking | **fixed** — real `Session` dependency wired in; live-reproduced before (500) and after (303) the fix; 2 regression tests added |
+| Login timing side-channel: unknown email returns instantly, known email always runs the 600k-iteration hash (~60ms vs ~1.4ms, live-measured) | major | **deferred, tracked** — inherited from the M1 PIN-login code this replaced (same early-return shape), not introduced by this slice; real and worth fixing before public launch — REQUESTS.md |
+| `add_admin` route rebuilt the same template-context dict 3× (copy-paste) | nit | **fixed** — extracted `_group_detail_context()` helper |
+| Home page stat card labeled "Accounts" but linked to `/groups` and showed account count, not group count | minor | **fixed** — relabeled "Groups", now counts `Group` rows |
+
+**Next**: M2b — generic collections & items (`Collection`/`Item`/`meal_detail`, scoped `Category`/`Tag`,
+migrate the 155 seeded meals).

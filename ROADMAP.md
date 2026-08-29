@@ -16,7 +16,7 @@ never built) starts. Full architecture: `docs/PLAN-v2-samepage.md`. `docs/PLAN-v
 | ID | Milestone | Status | Notes |
 |---|---|---|---|
 | M0 | Foundation: scaffolding, FastAPI skeleton, SQLite models, **Alembic migrations**, session, security middleware, CI | [x] | Landed 2026-08-26 (`0a786dc`); 22 tests; review fixes applied. Stands as-is — no identity/tenancy coupling. |
-| ~~M1~~ → **M2a** | ~~Household profiles (PINs)~~ → **Identity & tenancy**: `Account` (email+password), `Group`/`group_admin`, replaces `Person`+PIN entirely | [ ] next | Landed version (`e8a83d2`) is being replaced, not extended — PINs are gone. See `docs/PLAN-v2-samepage.md` §4/§8. |
+| ~~M1~~ → **M2a** | ~~Household profiles (PINs)~~ → **Identity & tenancy**: `Account` (email+password), `Group`/`group_admin`, replaces `Person`+PIN entirely | [x] landed 2026-08-28 | PINs fully removed. Library CRUD gated on "any signed-in account" (interim — proper group-scoping lands in M2b, tracked in REQUESTS.md). See `docs/PLAN-v2-samepage.md` §4/§8. |
 | **M2b** | **Generic collections & items**: `Collection`/`Item`/`meal_detail`, scoped `Category`/`Tag`, migrate the 155 seeded meals | [ ] | Revises the M2 work (`6d22054`) — CRUD/seed logic mostly reusable, schema underneath changes. §5 |
 | M3 | Session-based voting engine: group/account-hosted sessions, account-optional participants, ad hoc + library-backed items, outcome-only recording (no per-person vote history) | [ ] unapproved | Mechanics (batch size, unanimous/majority-host-accept) carry over from the old spec; identity plumbing does not. §5/§8 |
 | M4 | Reporting & discovery (tag/category trend analysis on vote outcomes) | [ ] | Supersedes "history & favorites" — broader than `times_kept` alone. §6 |

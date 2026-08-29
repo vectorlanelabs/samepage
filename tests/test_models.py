@@ -1,4 +1,4 @@
-"""Model round-trip + integrity constraints for every table in plan §6."""
+"""Model round-trip + integrity constraints for every table in PLAN-v2-samepage.md §5."""
 
 import sqlite3
 
@@ -7,124 +7,77 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 
 from app.db import Base
-from app.models import (
-    Batch,
-    BatchMeal,
-    Category,
-    Meal,
-    MealTag,
-    Person,
-    Session,
-    SessionParticipant,
-    Tag,
-    Vote,
-)
+from app.models import Account, Group, GroupAdmin
 
 
-def test_full_round_trip(db_session):
-    person = Person(name="Ada", pin_hash="pbkdf2-hash")
-    category = Category(name="Tab 1", sort_order=1, legacy_sheet_index=1)
-    tag = Tag(name="takeout")
-    db_session.add_all([person, category, tag])
-    db_session.flush()
-
-    meal = Meal(name="Tacos", normalized_name="tacos", type="dinner", category_id=category.id)
-    db_session.add(meal)
-    db_session.flush()
-    db_session.add(MealTag(meal_id=meal.id, tag_id=tag.id))
-
-    session = Session(
-        code="TACO-1234",
-        status="lobby",
-        created_by_person_id=person.id,
-        lunch_target=0,
-        dinner_target=2,
+def test_account_round_trip(db_session):
+    account = Account(
+        email="test@example.com",
+        password_hash="pbkdf2-hash",
+        display_name="Test User",
     )
-    db_session.add(session)
-    db_session.flush()
-
-    batch = Batch(session_id=session.id, seq=1, track="dinner")
-    db_session.add(batch)
-    db_session.flush()
-
-    db_session.add(BatchMeal(batch_id=batch.id, meal_id=meal.id, sort_order=1))
-    vote = Vote(batch_id=batch.id, person_id=person.id, meal_id=meal.id, choice="yes")
-    db_session.add(vote)
+    db_session.add(account)
     db_session.commit()
 
     # Prove persistence by expiring and re-reading from the database.
     db_session.expire_all()
 
-    assert db_session.get(Person, person.id).name == "Ada"
-    assert db_session.get(Category, category.id).name == "Tab 1"
-    assert db_session.get(Tag, tag.id).name == "takeout"
-    meal_q = db_session.get(Meal, meal.id)
-    assert meal_q.name == "Tacos"
-    assert meal_q.type == "dinner"
-    assert meal_q.normalized_name == "tacos"
-    assert db_session.get(MealTag, (meal.id, tag.id)) is not None
-    session_q = db_session.get(Session, session.id)
-    assert session_q.code == "TACO-1234"
-    assert session_q.status == "lobby"
-    assert session_q.dinner_target == 2
-    assert db_session.get(SessionParticipant, (session.id, person.id)) is None  # not joined
-    batch_q = db_session.get(Batch, batch.id)
-    assert batch_q.track == "dinner"
-    assert batch_q.status == "open"
-    batch_meal_q = db_session.get(BatchMeal, (batch.id, meal.id))
-    assert batch_meal_q.sort_order == 1
-    vote_q = db_session.get(Vote, vote.id)
-    assert vote_q.choice == "yes"
-    assert vote_q.batch_id == batch.id
+    account_q = db_session.get(Account, account.id)
+    assert account_q.email == "test@example.com"
+    assert account_q.password_hash == "pbkdf2-hash"
+    assert account_q.display_name == "Test User"
 
 
-def test_duplicate_vote_raises_integrity_error(db_session):
-    person = Person(name="Bob", pin_hash="pbkdf2-hash")
-    meal = Meal(name="Pasta", normalized_name="pasta", type="dinner")
-    db_session.add_all([person, meal])
+def test_group_and_admin_round_trip(db_session):
+    owner = Account(email="owner@example.com", password_hash="hash1", display_name="Owner")
+    admin = Account(email="admin@example.com", password_hash="hash2", display_name="Admin")
+    db_session.add_all([owner, admin])
     db_session.flush()
 
-    session = Session(
-        code="PAST-0001",
-        status="voting",
-        created_by_person_id=person.id,
-        lunch_target=0,
-        dinner_target=1,
-    )
-    db_session.add(session)
+    group = Group(name="Test Group", owner_account_id=owner.id)
+    db_session.add(group)
     db_session.flush()
 
-    batch = Batch(session_id=session.id, seq=1, track="dinner")
-    db_session.add(batch)
-    db_session.flush()
+    group_admin = GroupAdmin(group_id=group.id, account_id=admin.id)
+    db_session.add(group_admin)
+    db_session.commit()
 
-    db_session.add(Vote(batch_id=batch.id, person_id=person.id, meal_id=meal.id, choice="yes"))
+    # Prove persistence by expiring and re-reading from the database.
+    db_session.expire_all()
+
+    group_q = db_session.get(Group, group.id)
+    assert group_q.name == "Test Group"
+    assert group_q.owner_account_id == owner.id
+
+    group_admin_q = db_session.get(GroupAdmin, (group.id, admin.id))
+    assert group_admin_q is not None
+    assert group_admin_q.group_id == group.id
+    assert group_admin_q.account_id == admin.id
+
+
+def test_duplicate_account_email_raises_integrity_error(db_session):
+    """Duplicate email constraint."""
+    account1 = Account(email="test@example.com", password_hash="hash1", display_name="User 1")
+    db_session.add(account1)
     db_session.commit()
 
     with pytest.raises(IntegrityError):
-        db_session.add(Vote(batch_id=batch.id, person_id=person.id, meal_id=meal.id, choice="no"))
+        account2 = Account(email="test@example.com", password_hash="hash2", display_name="User 2")
+        db_session.add(account2)
         db_session.commit()
     db_session.rollback()
 
 
-def test_delete_referenced_person_raises_integrity_error(db_session):
-    """No cascade deletes: a person referenced by a session cannot be deleted."""
-    person = Person(name="Cara", pin_hash="pbkdf2-hash")
-    db_session.add(person)
+def test_delete_referenced_account_raises_integrity_error(db_session):
+    """No cascade deletes: an account referenced by a group cannot be deleted."""
+    account = Account(email="owner@example.com", password_hash="hash", display_name="Owner")
+    db_session.add(account)
     db_session.flush()
-    db_session.add(
-        Session(
-            code="CARA-0002",
-            status="lobby",
-            created_by_person_id=person.id,
-            lunch_target=1,
-            dinner_target=1,
-        )
-    )
+    db_session.add(Group(name="Test Group", owner_account_id=account.id))
     db_session.commit()
 
     with pytest.raises(IntegrityError):
-        db_session.delete(person)
+        db_session.delete(account)
         db_session.commit()
     db_session.rollback()
 

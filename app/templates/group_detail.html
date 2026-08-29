@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} · Groups · SamePage{% endblock %}
+{% block content %}
+<div style="max-width:800px;margin:0 auto;padding:32px 24px;">
+  <a href="/groups" style="font:600 13px var(--dd-font-body);color:var(--dd-accent);text-decoration:none;display:inline-block;margin-bottom:24px;">← Back to groups</a>
+
+  <h1 style="font-family:var(--dd-font-display);font-weight:600;font-size:28px;margin:0 0 8px;color:var(--dd-text);">{{ group.name }}</h1>
+  <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);margin:0 0 32px;">Owned by <strong>{{ owner.display_name }}</strong></p>
+
+  {% if error %}
+  <p style="font:700 12px var(--dd-font-body);color:var(--dd-dinner);margin:0 0 24px;">{{ error }}</p>
+  {% endif %}
+
+  <!-- Admins section -->
+  <div style="background:var(--dd-card);border-radius:var(--dd-radius-card);box-shadow:var(--dd-shadow-card);padding:24px;margin-bottom:32px;">
+    <h2 style="font-family:var(--dd-font-display);font-weight:600;font-size:16px;margin:0 0 16px;color:var(--dd-text);">Admins</h2>
+
+    {% if admins %}
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+      {% for admin in admins %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--dd-bg);border-radius:8px;">
+        <div>
+          <p style="font:600 13px var(--dd-font-body);margin:0;color:var(--dd-text);">{{ admin.display_name }}</p>
+          <p style="font:600 11.5px var(--dd-font-body);margin:4px 0 0;color:var(--dd-text-muted);">{{ admin.email }}{% if admin.is_self %} (you){% endif %}</p>
+        </div>
+        {% if is_owner %}
+        <form method="post" action="/groups/{{ group.id }}/admins/{{ admin.id }}/remove" style="margin:0;">
+          <button type="submit" style="font:600 12px var(--dd-font-body);background:none;border:none;color:var(--dd-text-muted);cursor:pointer;padding:0;text-decoration:underline;">Remove</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:0 0 16px;">No additional admins yet.</p>
+    {% endif %}
+
+    <!-- Add admin form (owner-only) -->
+    {% if is_owner %}
+    <div style="border-top:1px solid var(--dd-border);padding-top:16px;">
+      <h3 style="font-family:var(--dd-font-display);font-weight:600;font-size:14px;margin:0 0 12px;color:var(--dd-text);">Add Admin</h3>
+      <form method="post" action="/groups/{{ group.id }}/admins" style="display:flex;gap:12px;">
+        <input type="email" name="email" placeholder="Email address" required
+               style="flex:1;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
+        <button type="submit" class="pill">Add</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

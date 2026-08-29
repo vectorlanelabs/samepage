@@ -1,117 +1,150 @@
-"""Login/logout (M1, T1.2): PIN verify, attempt limiting, session identity.
+"""Signup/login/logout (M2a): email+password, session identity.
 
 The ``client`` and ``db_session`` fixtures share one tmp engine (conftest),
 so state created through the HTTP layer is visible to direct session queries.
 """
 
-import threading
-from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta
-
-from app.auth import LOCKOUT_ATTEMPTS
-from app.models import Person
-from app.pins import hash_pin
+from app.credentials import hash_password
+from app.models import Account
 
 
-def _make_person(db_session, name="Ada", pin="1234", **kwargs):
-    person = Person(name=name, pin_hash=hash_pin(pin), **kwargs)
-    db_session.add(person)
+def _make_account(db_session, email="test@example.com", password="testpass123", display_name="Test User"):
+    account = Account(
+        email=email,
+        password_hash=hash_password(password),
+        display_name=display_name,
+    )
+    db_session.add(account)
     db_session.commit()
-    return person
+    return account
 
 
-def _past() -> datetime:
-    """Naive-UTC timestamp in the past (matches SQLAlchemy DateTime storage)."""
-    return datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=1)
-
-
-def test_login_success_sets_session_and_me(client, post, db_session):
-    _make_person(db_session)
-    resp = post("/login", data={"name": "Ada", "pin": "1234"}, follow_redirects=False)
+def test_signup_success_creates_account_and_sets_session(client, post, db_session):
+    resp = post(
+        "/signup",
+        data={
+            "email": "newuser@example.com",
+            "password": "testpass123",
+            "display_name": "New User",
+        },
+        follow_redirects=False,
+    )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/people"
-    me = client.get("/me")
-    assert me.status_code == 200
-    assert me.json() == {"name": "Ada", "is_admin": False, "is_active": True}
+    assert resp.headers["location"] == "/"
+    # Account was created.
+    account = db_session.query(Account).filter_by(email="newuser@example.com").first()
+    assert account is not None
+    assert account.display_name == "New User"
 
 
-def test_login_wrong_pin_401_and_no_session(client, post, db_session):
-    _make_person(db_session)
-    resp = post("/login", data={"name": "Ada", "pin": "0000"})
-    assert resp.status_code == 401
-    assert client.get("/me").status_code == 401  # session never set
+def test_signup_duplicate_email_400(client, post, db_session):
+    _make_account(db_session, email="taken@example.com")
+    resp = post(
+        "/signup",
+        data={
+            "email": "taken@example.com",
+            "password": "testpass123",
+            "display_name": "Another User",
+        },
+    )
+    assert resp.status_code == 400
+    assert "already in use" in resp.text
 
 
-def test_unknown_person_401(post):
-    resp = post("/login", data={"name": "Ghost", "pin": "1234"})
-    assert resp.status_code == 401
+def test_signup_invalid_email_400(client, post, db_session):
+    resp = post(
+        "/signup",
+        data={
+            "email": "notanemail",
+            "password": "testpass123",
+            "display_name": "User",
+        },
+    )
+    assert resp.status_code == 400
+    assert "not valid" in resp.text
 
 
-def test_lockout_blocks_correct_pin_until_expiry(post, db_session):
-    person = _make_person(db_session)
-    for _ in range(LOCKOUT_ATTEMPTS):
-        resp = post("/login", data={"name": "Ada", "pin": "0000"})
-        assert resp.status_code == 401
-    # Locked: even the CORRECT pin is rejected with the lockout message.
-    resp = post("/login", data={"name": "Ada", "pin": "1234"})
-    assert resp.status_code == 401
-    assert "Too many attempts" in resp.text
-    assert "seconds" in resp.text
-    # Simulate expiry by back-dating locked_until, then login succeeds.
-    person.locked_until = _past()
-    db_session.commit()
-    resp = post("/login", data={"name": "Ada", "pin": "1234"}, follow_redirects=False)
+def test_signup_short_password_400(client, post, db_session):
+    resp = post(
+        "/signup",
+        data={
+            "email": "test@example.com",
+            "password": "short",
+            "display_name": "User",
+        },
+    )
+    assert resp.status_code == 400
+    assert "at least 8 characters" in resp.text
+
+
+def test_signup_empty_display_name_400(client, post, db_session):
+    resp = post(
+        "/signup",
+        data={
+            "email": "test@example.com",
+            "password": "testpass123",
+            "display_name": "  ",  # whitespace only
+        },
+    )
+    assert resp.status_code == 400
+    assert "Display name is required" in resp.text
+
+
+def test_login_success_sets_session(client, post, db_session):
+    _make_account(db_session, email="test@example.com", password="testpass123")
+    resp = post(
+        "/login",
+        data={"email": "test@example.com", "password": "testpass123"},
+        follow_redirects=False,
+    )
     assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
 
 
-def test_success_resets_failed_attempts(post, db_session):
-    person = _make_person(db_session)
-    for _ in range(LOCKOUT_ATTEMPTS - 1):
-        post("/login", data={"name": "Ada", "pin": "0000"})
-    # One more failure would lock; a correct login before that must reset.
-    resp = post("/login", data={"name": "Ada", "pin": "1234"}, follow_redirects=False)
-    assert resp.status_code == 303
-    db_session.refresh(person)
-    assert person.failed_pin_attempts == 0
-    assert person.locked_until is None
-
-
-def test_inactive_person_cannot_login(post, db_session):
-    _make_person(db_session, is_active=False)
-    resp = post("/login", data={"name": "Ada", "pin": "1234"})
+def test_login_wrong_password_401(client, post, db_session):
+    _make_account(db_session, email="test@example.com", password="testpass123")
+    resp = post("/login", data={"email": "test@example.com", "password": "wrongpass"})
     assert resp.status_code == 401
+    assert "Email or password" in resp.text
+
+
+def test_login_unknown_email_401(post):
+    resp = post("/login", data={"email": "nonexistent@example.com", "password": "anypass"})
+    assert resp.status_code == 401
+    assert "Email or password" in resp.text
+
+
+def test_login_case_insensitive_email(client, post, db_session):
+    _make_account(db_session, email="test@example.com", password="testpass123")
+    resp = post(
+        "/login",
+        data={"email": "TEST@EXAMPLE.COM", "password": "testpass123"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
 
 
 def test_logout_clears_session(client, post, db_session):
-    _make_person(db_session)
-    post("/login", data={"name": "Ada", "pin": "1234"})
-    assert client.get("/me").status_code == 200
+    _make_account(db_session)
+    post("/login", data={"email": "test@example.com", "password": "testpass123"})
     resp = post("/logout", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/login"
-    assert client.get("/me").status_code == 401
 
 
-def test_concurrent_wrong_pins_engage_lock_atomically(post, db_session):
-    """8 concurrent wrong-PIN attempts all 401 AND still engage the lock.
+def test_login_page_while_already_signed_in_redirects(client, post, db_session):
+    """Regression: the redirect-if-already-signed-in check must actually run a
+    DB lookup, not crash. Previously called get_current_account(request, None)."""
+    _make_account(db_session)
+    post("/login", data={"email": "test@example.com", "password": "testpass123"})
+    resp = client.get("/login", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
 
-    The old read-modify-write collapsed 10 concurrent guesses into a counter
-    of 1–2 and never locked; the atomic UPDATE + same-transaction read-back
-    must not lose increments (LOCKOUT_ATTEMPTS = 5 < 8). The barrier holds
-    all 8 threads until every one is ready, so the requests cannot serialize
-    by accident.
-    """
-    person = _make_person(db_session)
-    barrier = threading.Barrier(8)
 
-    def attempt(_):
-        barrier.wait()
-        return post("/login", data={"name": "Ada", "pin": "9999"}).status_code
-
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        statuses = list(pool.map(attempt, range(8)))
-
-    assert statuses == [401] * 8
-    db_session.refresh(person)
-    assert person.locked_until is not None  # lock engaged under concurrency
-    assert person.failed_pin_attempts == 0  # post-lock reset
+def test_signup_page_while_already_signed_in_redirects(client, post, db_session):
+    _make_account(db_session)
+    post("/login", data={"email": "test@example.com", "password": "testpass123"})
+    resp = client.get("/signup", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"

@@ -1,49 +1,55 @@
-"""Identity & auth helpers (M1, T1.2–T1.3): session person lookup + guards.
+"""Identity & auth helpers (M2a): session account lookup + guards.
 
-The signed session cookie stores only ``person_id`` (D2). Everything else is
-derived from the database on every request, so deactivating a person
-immediately invalidates any live session.
+The signed session cookie stores only ``account_id``. Everything else is
+derived from the database on every request.
 """
 
 from __future__ import annotations
 
 from fastapi import HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Person
-
-# PIN-verify attempt limiting (T1.2): N failures within a window lock the
-# person out for LOCKOUT_SECONDS.
-LOCKOUT_ATTEMPTS = 5
-LOCKOUT_SECONDS = 60
+from app.models import Account, Group, GroupAdmin
 
 
-def get_current_person(request: Request, db: Session) -> Person | None:
-    """Return the signed-in Person, or None when absent/inactive.
-
-    A deactivated person's session is dead on the next request — there is no
-    stale-session window (D16 deactivate-not-delete).
-    """
-    person_id = request.session.get("person_id")
-    if person_id is None:
+def get_current_account(request: Request, db: Session) -> Account | None:
+    """Return the signed-in Account, or None when absent."""
+    account_id = request.session.get("account_id")
+    if account_id is None:
         return None
-    person = db.get(Person, person_id)
-    if person is None or not person.is_active:
-        return None
-    return person
+    account = db.get(Account, account_id)
+    return account
 
 
-def require_admin(request: Request, db: Session) -> Person:
-    """Guard for admin-only routes: 403 unless an active admin is signed in."""
-    person = get_current_person(request, db)
-    if person is None or not person.is_admin:
-        raise HTTPException(403, "Admin required")
-    return person
-
-
-def require_any(request: Request, db: Session) -> Person:
-    """Guard for sign-in-required routes: 401 unless an active person is in."""
-    person = get_current_person(request, db)
-    if person is None:
+def require_account(request: Request, db: Session) -> Account:
+    """Guard for sign-in-required routes: 401 unless signed in."""
+    account = get_current_account(request, db)
+    if account is None:
         raise HTTPException(401, "Sign in required")
-    return person
+    return account
+
+
+def is_group_owner(account: Account, group: Group) -> bool:
+    """Check if account owns the group."""
+    return account.id == group.owner_account_id
+
+
+def is_group_admin(account: Account, group: Group, db: Session) -> bool:
+    """Check if account owns or admins the group."""
+    if is_group_owner(account, group):
+        return True
+    return db.scalar(select(GroupAdmin).where(GroupAdmin.group_id == group.id, GroupAdmin.account_id == account.id)) is not None
+
+
+def require_group_admin(request: Request, db: Session, group_id: int) -> tuple[Account, Group]:
+    """Guard: 401 if not signed in, 404 if group missing, 403 if not owner/admin."""
+    account = require_account(request, db)
+    group = db.get(Group, group_id)
+    if group is None:
+        raise HTTPException(404, "Group not found")
+    if not is_group_admin(account, group, db):
+        raise HTTPException(403, "Admin required")
+    return account, group
+
+

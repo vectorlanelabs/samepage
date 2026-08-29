@@ -11,16 +11,13 @@ import sqlite3
 from app.main import _run_migrations
 
 EXPECTED_TABLES = {
-    "person",
+    "account",
+    "group",
+    "group_admin",
     "category",
     "tag",
     "meal",
     "meal_tag",
-    "session",
-    "session_participant",
-    "batch",
-    "batch_meal",
-    "vote",
     "alembic_version",
 }
 

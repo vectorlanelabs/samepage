@@ -2,8 +2,9 @@
 archive/unarchive, type cycle, and the recipe view.
 
 The library list and the recipe view are public — the household reaches them
-from any device. Create/edit/archive/cycle-type are admin-only (D16), gated
-server-side by ``require_admin``.
+from any device. Create/edit/archive/cycle-type require a signed-in account
+(``require_account``) — an interim M2a policy; proper "must be an admin of
+the owning group" gating lands with M2b once collections are group-scoped.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_person, require_admin
+from app.auth import get_current_account, require_account
 from app.db import get_db
 from app.models import Meal, MealTag, Tag
 
@@ -203,8 +204,8 @@ def library_page(
     status: str = "active",
 ):
     """Public library browse: search (q), type / tag (OR) / status filters."""
-    current = get_current_person(request, db)
-    can_edit = current is not None and current.is_admin
+    current = get_current_account(request, db)
+    can_edit = current is not None
 
     type = type if type in VALID_TYPES else ""
     status = status if status in ("active", "archived", "all") else "active"
@@ -325,7 +326,7 @@ def new_meal_page(
 ):
     """Blank edit page for a new meal (admin-only). ``?type=`` presets the
     track; the in-form cycle button drives it from there."""
-    require_admin(request, db)
+    require_account(request, db)
     return _render_edit(
         request, db, None, _empty_form(type), [], error=None
     )
@@ -362,7 +363,7 @@ def edit_meal_page(
     request: Request, meal_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Edit page for an existing meal (admin-only)."""
-    require_admin(request, db)
+    require_account(request, db)
     meal = _get_meal_or_404(db, meal_id)
     return _render_edit(
         request, db, meal, _meal_form(meal), _meal_tags(db, meal.id), error=None
@@ -381,7 +382,7 @@ def create_meal(
     source_url: Annotated[str, Form()] = "",
 ):
     """Create a meal (admin-only). 303 to the new meal's edit page."""
-    require_admin(request, db)
+    require_account(request, db)
     tags = tags or []
     form = _clean_form(name, type, ingredients, instructions, source_url)
     error = _validate_form(form, db)
@@ -420,7 +421,7 @@ def update_meal(
 ):
     """Update a meal (admin-only): rename recomputes normalized_name; the
     collision check excludes this meal itself."""
-    require_admin(request, db)
+    require_account(request, db)
     tags = tags or []
     meal = _get_meal_or_404(db, meal_id)
     form = _clean_form(name, type, ingredients, instructions, source_url)
@@ -447,7 +448,7 @@ def archive_meal(
     request: Request, meal_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Archive (admin-only, reversible — never deleted, D16)."""
-    require_admin(request, db)
+    require_account(request, db)
     meal = _get_meal_or_404(db, meal_id)
     meal.archived_at = func.now()
     db.commit()
@@ -459,7 +460,7 @@ def unarchive_meal(
     request: Request, meal_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Restore an archived meal (admin-only)."""
-    require_admin(request, db)
+    require_account(request, db)
     meal = _get_meal_or_404(db, meal_id)
     meal.archived_at = None
     db.commit()
@@ -471,7 +472,7 @@ def cycle_type(
     request: Request, meal_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Type cycle dinner → lunch → both → dinner (admin-only)."""
-    require_admin(request, db)
+    require_account(request, db)
     meal = _get_meal_or_404(db, meal_id)
     meal.type = TYPE_CYCLE[meal.type]
     db.commit()
