@@ -43,13 +43,14 @@ def is_group_admin(account: Account, group: Group, db: Session) -> bool:
 
 
 def require_group_admin(request: Request, db: Session, group_id: int) -> tuple[Account, Group]:
-    """Guard: 401 if not signed in, 404 if group missing, 403 if not owner/admin."""
+    """Guard: 401 if not signed in; 404 if the group doesn't exist OR the
+    signed-in account isn't an owner/admin of it — never 403 for that case,
+    so the status code alone can't be used to enumerate which group ids exist
+    on the deployment (matches the no-existence-oracle rule in library.py)."""
     account = require_account(request, db)
     group = db.get(Group, group_id)
-    if group is None:
+    if group is None or not is_group_admin(account, group, db):
         raise HTTPException(404, "Group not found")
-    if not is_group_admin(account, group, db):
-        raise HTTPException(403, "Admin required")
     return account, group
 
 

@@ -329,25 +329,33 @@ def library_page(
     elif status == "archived":
         stmt = stmt.where(Item.archived_at.is_not(None))
     items = db.scalars(stmt.order_by(Item.name)).all()
+    item_ids = [item.id for item in items]
 
-    # Fetch all meal details and tags for the items.
-    item_details = {}
-    for item in items:
-        item_details[item.id] = _item_meal_detail(db, item.id)
-
+    # Fetch meal details and tags for this collection's items in one query each
+    # (not one query per item, and not every item-tag link on the deployment).
+    item_details: dict[int, MealDetail] = {
+        detail.item_id: detail
+        for detail in db.scalars(select(MealDetail).where(MealDetail.item_id.in_(item_ids)))
+    }
     item_tags = db.execute(
-        select(ItemTag.item_id, Tag.name).join(Tag, Tag.id == ItemTag.tag_id)
+        select(ItemTag.item_id, Tag.name)
+        .join(Tag, Tag.id == ItemTag.tag_id)
+        .where(ItemTag.item_id.in_(item_ids))
     ).all()
     tags_by_item: dict[int, list[str]] = defaultdict(list)
     for item_id, tag_name in item_tags:
         tags_by_item[item_id].append(tag_name)
 
+    def _type_of(item: Item) -> str:
+        detail = item_details.get(item.id)
+        return detail.type if detail is not None else "dinner"
+
     rows = [
         {
             "id": item.id,
             "name": item.name,
-            "type_label": TYPE_LABELS[item_details.get(item.id, MealDetail()).type or "dinner"],
-            "type_style": _type_pill_style(item_details.get(item.id, MealDetail()).type or "dinner", interactive=can_edit),
+            "type_label": TYPE_LABELS[_type_of(item)],
+            "type_style": _type_pill_style(_type_of(item), interactive=can_edit),
             "tags": sorted(tags_by_item.get(item.id, [])),
             "kept_label": f"Kept {item.times_kept}×" if item.times_kept > 0 else None,
             "has_recipe": _has_recipe(item_details.get(item.id)),

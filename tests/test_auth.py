@@ -148,3 +148,73 @@ def test_signup_page_while_already_signed_in_redirects(client, post, db_session)
     resp = client.get("/signup", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/"
+
+
+# ---------- 401 -> /login redirect (app/main.py's exception handler) ----------
+
+
+def test_anonymous_page_load_401_redirects_to_login(client):
+    """A signed-out browser navigation that hits a 401 gets a login redirect
+    with `next` set to where they were headed, not a bare JSON error body."""
+    resp = client.get("/groups", headers={"accept": "text/html"}, follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/login?next=/groups"
+
+
+def test_anonymous_api_style_401_stays_json(client):
+    """A non-browser request (no text/html Accept) keeps the plain JSON 401 --
+    relevant once M6's token-authenticated routes exist."""
+    resp = client.get("/groups", headers={"accept": "application/json"})
+    assert resp.status_code == 401
+    assert resp.json() == {"detail": "Sign in required"}
+
+
+def test_login_next_redirects_after_success(client, post, db_session):
+    _make_account(db_session)
+    resp = post(
+        "/login",
+        data={"email": "test@example.com", "password": "testpass123", "next": "/groups"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/groups"
+
+
+# ---------- _safe_next open-redirect guard ----------
+
+
+def test_login_next_rejects_absolute_url(client, post, db_session):
+    _make_account(db_session)
+    resp = post(
+        "/login",
+        data={"email": "test@example.com", "password": "testpass123", "next": "https://evil.example.com"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
+
+
+def test_login_next_rejects_protocol_relative(client, post, db_session):
+    _make_account(db_session)
+    resp = post(
+        "/login",
+        data={"email": "test@example.com", "password": "testpass123", "next": "//evil.example.com"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"
+
+
+def test_login_next_rejects_backslash_bypass(client, post, db_session):
+    """Regression: `/\\evil.com` starts with `/` and not `//`, but a browser
+    normalizes the backslash to a forward slash, turning it into the
+    protocol-relative `//evil.com` the plain startswith check was meant to
+    reject in the first place."""
+    _make_account(db_session)
+    resp = post(
+        "/login",
+        data={"email": "test@example.com", "password": "testpass123", "next": "/\\evil.example.com"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/"

@@ -74,14 +74,17 @@ def test_list_groups_owned_and_admined(client, post, db_session):
 
 
 def test_group_detail_requires_owner_or_admin(client, post, db_session):
+    """404, not 403, for a group you're not a member of -- the status code
+    must not double as an oracle for which group ids exist on the deployment
+    (same no-existence-oracle rule the library routes follow)."""
     owner = _make_account(db_session, email="owner@example.com")
     _make_account(db_session, email="other@example.com")
     group = _make_group(db_session, "Owned Group", owner)
 
-    # Non-owner cannot view.
+    # Non-member: 404, indistinguishable from a group that doesn't exist.
     _login(post, "other@example.com")
     resp = client.get(f"/groups/{group.id}")
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
     # Owner can view.
     post("/logout", follow_redirects=False)

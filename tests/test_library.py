@@ -218,6 +218,25 @@ def test_library_never_shows_another_groups_items(client, post, db_session):
     assert "Someone Else's Secret Casserole" not in resp.text
 
 
+def test_library_page_renders_item_with_no_meal_detail(client, post, db_session):
+    """Regression: an Item with no meal_detail row (the schema allows it --
+    meal_detail is an optional 1:1 extension) must not 500 the whole library
+    page. Previously `item_details.get(item.id, MealDetail())` returned None
+    (dict.get's default never fires when the key IS present with value None),
+    so `.type` raised AttributeError for every viewer of the collection."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    detail_less = Item(
+        collection_id=collection.id, name="No Detail Yet", normalized_name="no detail yet", is_active=True
+    )
+    db_session.add(detail_less)
+    db_session.commit()
+    _login(post)
+    resp = client.get("/library")
+    assert resp.status_code == 200
+    assert "No Detail Yet" in resp.text
+
+
 def test_library_empty_when_no_collection(client, post, db_session):
     """Library page shows empty state when the signed-in account has no meal
     collection yet (a group exists, but nobody has run the seed loader)."""
@@ -431,3 +450,58 @@ def test_update_rename_collision_400(client, post, db_session):
         follow_redirects=False,
     )
     assert resp.status_code == 303
+
+
+# ---------- Cross-tenant mutation guard ----------
+# Every item-addressed mutation route must 404 (never touch the item) when
+# given another group's item id -- these pin the protection _get_owned_item_or_404
+# already provides in code, so a future refactor that drops the guard on one
+# route fails a test instead of shipping a silent cross-tenant write.
+
+
+def _other_groups_item(db_session):
+    other_group = _make_group(db_session, owner_email="other-owner@example.com", group_name="Other Household")
+    other_collection = _make_collection(db_session, other_group.id)
+    return _make_item(db_session, other_collection.id, other_group.id, "Their Secret Recipe")
+
+
+def test_update_another_groups_item_404(client, post, db_session):
+    other_item = _other_groups_item(db_session)
+    _make_group(db_session)  # admin@example.com's own group, so they're a real signed-in account
+    _login(post)
+    resp = post(f"/library/{other_item.id}", data={"name": "Hijacked", "type": "dinner"})
+    assert resp.status_code == 404
+    db_session.refresh(other_item)
+    assert other_item.name == "Their Secret Recipe"  # untouched
+
+
+def test_archive_another_groups_item_404(client, post, db_session):
+    other_item = _other_groups_item(db_session)
+    _make_group(db_session)
+    _login(post)
+    resp = post(f"/library/{other_item.id}/archive", follow_redirects=False)
+    assert resp.status_code == 404
+    db_session.refresh(other_item)
+    assert other_item.archived_at is None  # untouched
+
+
+def test_unarchive_another_groups_item_404(client, post, db_session):
+    other_group = _make_group(db_session, owner_email="other-owner@example.com", group_name="Other Household")
+    other_collection = _make_collection(db_session, other_group.id)
+    other_item = _make_item(db_session, other_collection.id, other_group.id, "Their Archived Recipe", archived=True)
+    _make_group(db_session)
+    _login(post)
+    resp = post(f"/library/{other_item.id}/unarchive", follow_redirects=False)
+    assert resp.status_code == 404
+    db_session.refresh(other_item)
+    assert other_item.archived_at is not None  # still archived, untouched
+
+
+def test_cycle_type_another_groups_item_404(client, post, db_session):
+    other_item = _other_groups_item(db_session)
+    _make_group(db_session)
+    _login(post)
+    resp = post(f"/library/{other_item.id}/cycle-type", follow_redirects=False)
+    assert resp.status_code == 404
+    detail = db_session.get(MealDetail, other_item.id)
+    assert detail.type == "dinner"  # unchanged (default from _make_item)

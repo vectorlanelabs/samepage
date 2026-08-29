@@ -24,8 +24,10 @@ templates = Jinja2Templates(directory=Path(__file__).resolve().parents[1] / "tem
 
 def _safe_next(value: str | None) -> str:
     """Only allow a same-site relative path — never an absolute/protocol-relative
-    URL (open-redirect guard)."""
-    if value and value.startswith("/") and not value.startswith("//"):
+    URL (open-redirect guard). Rejects backslashes too: browsers normalize a
+    leading ``/\\evil.com`` to ``//evil.com`` (protocol-relative) even though
+    the raw string passes a naive ``startswith("//")`` check."""
+    if value and value.startswith("/") and not value.startswith("//") and "\\" not in value:
         return value
     return "/"
 
