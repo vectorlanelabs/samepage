@@ -144,7 +144,8 @@ def _generate_token(client, post, db_session, group, owner_email="owner@example.
     _login(client, db_session, owner_email)
     resp = post(f"/groups/{group.id}/api-token")
     assert resp.status_code == 200
-    match = re.search(r"margin-top:6px;\">([^<]+)</div>", resp.text)
+    # The one-time reveal renders the token in the first .copy-value element.
+    match = re.search(r'class="copy-value">([^<]+)</code>', resp.text)
     assert match is not None, "plaintext reveal box not found in generate response"
     return match.group(1)
 
