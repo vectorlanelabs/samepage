@@ -630,3 +630,30 @@ confirmed live. Suite: **246 passed**, ruff clean.
 
 Next: M3d — batch close (rollup + batch_response deletion per §5.5), unanimous auto-keep, majority
 host-accept, results screen, start next batch.
+
+---
+
+## 2026-08-29 — M3d landed: batch close, rollup, results, host accept (the privacy-critical core)
+
+Fourth M3 slice — the heart of the engine. `_close_batch` (auto when everyone's voted, or host manual
+close) runs one transaction: rolls each option up to aggregate yes/no counts (D5 missing=no via
+Tally(yes, roster-yes)), classifies the outcome with session_logic (unanimous→kept, sub-majority/tie→
+not_kept, majority→NULL pending the host), increments Item.times_offered (all offered) and
+times_kept/last_kept_at (unanimous keeps), and **DELETES every BatchResponse row for the batch** — plan
+§5.5's headline invariant: a closed batch retains zero per-person votes, only the aggregate survives.
+Idempotent (batch not 'open' → no-op). Results screen groups by outcome, aggregate counts only; the host
+gets Keep/Pass on the majority-pending items (KEPT_HOST + times_kept on keep, NOT_KEPT on pass; a decided
+item can't be re-decided → 400; non-host → 403).
+
+Implementation: `deepseek-v4-flash`, dispatch + one --continue; landed green on the first full run
+(259 tests, ruff clean) — cleanest implementer run of the night.
+
+Lead verification (direct invariant probing, the defensive review for these critical paths — 10 checks
+live): vote rows gone after close; unanimous 3/0→kept; majority 2/1→NULL pending; abstention counted as
+no on manual close (1/2→not_kept); times_kept/offered correct; **double-close does not double-increment**;
+host keep→KEPT_HOST+times_kept; re-keep decided→400; and **no participant display_name appears anywhere
+on a results page**. All passed. Suite: **259 passed**.
+
+Next: M3e — session progression (remaining-target tracking, start next batch, over-target host selection
+D13, session-complete when targets met, 24h lazy expiry + participant deletion §5.5, session summary).
+This completes the voting engine.

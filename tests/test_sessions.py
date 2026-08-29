@@ -1125,7 +1125,7 @@ def test_host_overview_when_not_joined(client, post, db_session):
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "0/1 finished voting." in page.text
-    assert "Results and batch controls arrive in the next release." in page.text
+    assert "Starting the next batch and finishing the session arrive in the next release (M3e)." in page.text
     assert f'hx-get="/s/{session.code}/voting-status"' in page.text
     assert "Option 1 of" not in page.text
     assert "All your votes are in." not in page.text
@@ -1150,6 +1150,478 @@ def test_ad_hoc_start_shows_coming_soon_placeholder(client, post, db_session):
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Ad hoc voting is coming soon — options entry lands in a later release." in page.text
+
+
+# ---------------------------------------------------------------------------
+# M3d: batch close, rollup, results, host accept/pass
+# ---------------------------------------------------------------------------
+
+
+def _started_roster(
+    client,
+    post,
+    db_session,
+    item_specs: list[tuple[str, str]],
+    roster_names: list[str],
+    targets: list[tuple[str, int]] | None = None,
+) -> tuple[VotingSession, Batch, list[BatchItem], list[SessionParticipant]]:
+    """Host logged in, a started collection-backed session with pre-inserted
+    participants, and its open batch + items."""
+    session, _, _ = _make_voting_setup(
+        db_session, item_specs=item_specs, targets=targets or [("dinner", 1)]
+    )
+    participants = [
+        SessionParticipant(session_id=session.id, account_id=None, display_name=name)
+        for name in roster_names
+    ]
+    db_session.add_all(participants)
+    db_session.commit()
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/start", follow_redirects=False)
+    assert resp.status_code == 303
+    batch = _open_batch(db_session, session.id)
+    assert batch is not None
+    return session, batch, _batch_items(db_session, batch.id), participants
+
+
+def _cast(
+    client,
+    post,
+    db_session,
+    session: VotingSession,
+    participant: SessionParticipant,
+    batch_item_id: int,
+    choice: str,
+) -> None:
+    """Vote as ``participant`` (switching the signed session cookie), asserting
+    the 303 redirect."""
+    _stamp_participant(client, participant.id)
+    resp = post(
+        f"/s/{session.code}/vote",
+        data={"batch_item_id": str(batch_item_id), "choice": choice},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+
+def _response_count(db_session, batch_id: int) -> int:
+    """How many batch_response rows remain for a batch (must be zero once the
+    batch is closed — §5.5)."""
+    return (
+        db_session.scalar(
+            select(func.count())
+            .select_from(BatchResponse)
+            .where(
+                BatchResponse.batch_item_id.in_(
+                    select(BatchItem.id).where(BatchItem.batch_id == batch_id)
+                )
+            )
+        )
+        or 0
+    )
+
+
+def test_auto_close_deletes_vote_rows_and_rolls_up(client, post, db_session):
+    """§5.5 hard requirement: the close transaction (triggered automatically by
+    the last vote) leaves ZERO batch_response rows, writes the aggregate
+    counts onto batch_item, and leaves session.status untouched (M3e owns
+    session progression)."""
+    session, batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    for bi in items:
+        _cast(client, post, db_session, session, sam, bi.id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[1].id, "no")  # auto-closes
+
+    db_session.expire_all()
+    assert batch.status == "closed"
+    assert batch.closed_at is not None
+    assert session.status == "voting"
+    assert _response_count(db_session, batch.id) == 0
+    by_id = {bi.id: bi for bi in _batch_items(db_session, batch.id)}
+    assert (by_id[items[0].id].yes_count, by_id[items[0].id].no_count) == (2, 0)
+    assert (by_id[items[1].id].yes_count, by_id[items[1].id].no_count) == (1, 1)
+    assert by_id[items[0].id].outcome == "kept_unanimous"
+    assert by_id[items[1].id].outcome == "not_kept"
+
+
+def test_manual_close_deletes_vote_rows_and_rolls_up(client, post, db_session):
+    """Host manual close: the same §5.5 deletion + rollup, with a missing vote
+    counted as 'no' (D5)."""
+    session, batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, sam, items[1].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    # Lee never votes on Banana — the host closes manually.
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/close", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
+
+    db_session.expire_all()
+    assert batch.status == "closed"
+    assert _response_count(db_session, batch.id) == 0
+    by_id = {bi.id: bi for bi in _batch_items(db_session, batch.id)}
+    assert (by_id[items[0].id].yes_count, by_id[items[0].id].no_count) == (2, 0)
+    assert (by_id[items[1].id].yes_count, by_id[items[1].id].no_count) == (1, 1)
+    assert by_id[items[0].id].outcome == "kept_unanimous"
+    assert by_id[items[1].id].outcome == "not_kept"
+
+
+def test_unanimous_keep_increments_item_counters(client, post, db_session):
+    """All-yes on an item → 'kept_unanimous'; its Item gets times_offered +1,
+    times_kept +1, and last_kept_at set."""
+    session, _, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    apple = db_session.scalar(select(Item).where(Item.name == "Apple"))
+    assert apple.times_offered == 0
+    assert apple.times_kept == 0
+    assert apple.last_kept_at is None
+
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")  # auto-closes
+
+    db_session.expire_all()
+    assert items[0].outcome == "kept_unanimous"
+    assert (items[0].yes_count, items[0].no_count) == (2, 0)
+    assert apple.times_offered == 1
+    assert apple.times_kept == 1
+    assert apple.last_kept_at is not None
+
+
+def test_not_kept_leaves_keep_counters_unchanged(client, post, db_session):
+    """Tie (or majority-no) → 'not_kept': times_offered still increments,
+    times_kept stays put and last_kept_at stays None."""
+    session, _, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    apple = db_session.scalar(select(Item).where(Item.name == "Apple"))
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "no")  # tie 1-1
+
+    db_session.expire_all()
+    assert items[0].outcome == "not_kept"
+    assert (items[0].yes_count, items[0].no_count) == (1, 1)
+    assert apple.times_offered == 1
+    assert apple.times_kept == 0
+    assert apple.last_kept_at is None
+
+
+def test_majority_pending_then_host_keep_and_pass(client, post, db_session):
+    """Roster 3, non-unanimous yes>no → outcome NULL after close (pending the
+    host's call). Host keep → KEPT_HOST + times_kept +1; host pass on another
+    pending item → NOT_KEPT with times_kept untouched. Non-host can't keep/pass
+    (403); a decided item can't be re-decided (400)."""
+    session, batch, items, (sam, lee, rae) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner"), ("Cherry", "dinner")],
+        roster_names=["Sam", "Lee", "Rae"],
+    )
+    apple, banana, cherry = items
+    apple_item = db_session.scalar(select(Item).where(Item.name == "Apple"))
+    banana_item = db_session.scalar(select(Item).where(Item.name == "Banana"))
+    # Apple 2-1 and Banana 2-1 (both pending), Cherry 1-2 (not_kept).
+    for bi, c in [(apple, "yes"), (banana, "yes"), (cherry, "no")]:
+        _cast(client, post, db_session, session, sam, bi.id, c)
+    for bi, c in [(apple, "yes"), (banana, "no"), (cherry, "no")]:
+        _cast(client, post, db_session, session, lee, bi.id, c)
+    for bi, c in [(apple, "no"), (banana, "yes"), (cherry, "yes")]:
+        _cast(client, post, db_session, session, rae, bi.id, c)  # auto-closes
+
+    db_session.expire_all()
+    assert batch.status == "closed"
+    assert apple.outcome is None  # majority → pending the host's call
+    assert banana.outcome is None
+    assert cherry.outcome == "not_kept"
+    assert apple_item.times_kept == 0
+    assert banana_item.times_kept == 0
+
+    # A non-host account can't keep or pass.
+    _get_or_make_account(db_session, "other@example.com", "Other")
+    _login(client, db_session, "other@example.com")
+    resp = post(f"/s/{session.code}/batch/{batch.id}/items/{apple.id}/keep")
+    assert resp.status_code == 403
+    resp = post(f"/s/{session.code}/batch/{batch.id}/items/{banana.id}/pass")
+    assert resp.status_code == 403
+
+    # The host keeps Apple and passes Banana.
+    _login(client, db_session, "host@example.com")
+    resp = post(
+        f"/s/{session.code}/batch/{batch.id}/items/{apple.id}/keep",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    resp = post(
+        f"/s/{session.code}/batch/{batch.id}/items/{banana.id}/pass",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    db_session.expire_all()
+    assert apple.outcome == "kept_host"
+    assert banana.outcome == "not_kept"
+    assert apple_item.times_kept == 1
+    assert apple_item.last_kept_at is not None
+    assert banana_item.times_kept == 0
+    assert banana_item.last_kept_at is None
+
+    # Decided items can't be re-decided.
+    resp = post(f"/s/{session.code}/batch/{batch.id}/items/{apple.id}/keep")
+    assert resp.status_code == 400
+    assert "Already decided" in resp.text
+    resp = post(f"/s/{session.code}/batch/{batch.id}/items/{cherry.id}/pass")
+    assert resp.status_code == 400
+
+
+def test_auto_close_on_final_vote_without_manual_close(client, post, db_session):
+    """The last roster member's last vote closes the batch automatically —
+    status 'closed', responses gone — with no /close call, and the voter's
+    next page load is the results screen."""
+    session, batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, sam, items[1].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    assert _open_batch(db_session, session.id) is not None  # still open
+    _cast(client, post, db_session, session, lee, items[1].id, "no")  # auto-closes
+
+    db_session.expire_all()
+    assert batch.status == "closed"
+    assert _open_batch(db_session, session.id) is None
+    assert _response_count(db_session, batch.id) == 0
+
+    _stamp_participant(client, lee.id)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Results" in page.text
+    assert "Kept — everyone agreed" in page.text
+    assert "Not kept" in page.text
+
+
+def test_manual_close_missing_votes_count_as_no(client, post, db_session):
+    """D5: roster 3, only 2 vote (both yes on the item) → host manual close →
+    the item gets yes 2 / no 1 (the abstainer) → majority (2 > 1) pending."""
+    session, batch, items, (sam, lee, _) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee", "Rae"],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    # Rae never votes.
+
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/close", follow_redirects=False)
+    assert resp.status_code == 303
+
+    db_session.expire_all()
+    assert batch.status == "closed"
+    assert (items[0].yes_count, items[0].no_count) == (2, 1)
+    assert items[0].outcome is None  # 'majority' → pending the host's call
+    assert _response_count(db_session, batch.id) == 0
+
+
+def test_close_twice_applies_once(client, post, db_session):
+    """Idempotent close (CLAUDE.md #7): a second /close POST finds no open
+    batch (404) and the counters are never double-incremented — times_offered
+    and times_kept land at exactly one across both POSTs."""
+    session, batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    apple = db_session.scalar(select(Item).where(Item.name == "Apple"))
+    banana = db_session.scalar(select(Item).where(Item.name == "Banana"))
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, sam, items[1].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    # Lee hasn't voted on Banana → still open; the host closes manually.
+
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/close", follow_redirects=False)
+    assert resp.status_code == 303
+    resp = post(f"/s/{session.code}/close", follow_redirects=False)
+    assert resp.status_code == 404
+    assert "No open batch to close" in resp.text
+
+    db_session.expire_all()
+    assert batch.status == "closed"
+    assert items[0].outcome == "kept_unanimous"
+    assert items[1].outcome == "not_kept"
+    assert apple.times_offered == 1
+    assert apple.times_kept == 1
+    assert apple.last_kept_at is not None
+    assert banana.times_offered == 1
+    assert banana.times_kept == 0
+    assert _response_count(db_session, batch.id) == 0
+
+
+def test_results_page_is_aggregate_only(client, post, db_session):
+    """The results screen shows yes/no counts only — never who voted. A closed
+    batch's page contains no participant display_name, for host AND voter
+    viewers, and the voter sees no host controls. (Names chosen to be
+    unambiguous substrings — "Sam" alone would collide with the 'Same Page'
+    brand text.)"""
+    session, _, items, (rosa, mina) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Rosa Delgado", "Mina Park"],
+    )
+    _cast(client, post, db_session, session, rosa, items[0].id, "yes")
+    _cast(client, post, db_session, session, mina, items[0].id, "no")  # auto-closes
+
+    # Host view: aggregates, no names.
+    _login(client, db_session, "host@example.com")
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Results" in page.text
+    assert "Yes 1" in page.text
+    assert "No 1" in page.text
+    assert "Rosa Delgado" not in page.text
+    assert "Mina Park" not in page.text
+
+    # Voter view: same aggregates, no names, no keep/pass controls.
+    _stamp_participant(client, rosa.id)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Yes 1" in page.text
+    assert "No 1" in page.text
+    assert "Rosa Delgado" not in page.text
+    assert "Mina Park" not in page.text
+    assert "/keep" not in page.text
+    assert "/pass" not in page.text
+    assert "Waiting for the host to finish reviewing." in page.text
+
+
+def test_results_pending_shows_host_controls_only_for_host(client, post, db_session):
+    """Pending majority items render Keep/Pass for the host; non-host viewers
+    see 'The host is reviewing N options' with aggregate counts only."""
+    session, batch, items, (sam, lee, rae) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee", "Rae"],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    _cast(client, post, db_session, session, rae, items[0].id, "no")  # auto-close → pending
+
+    _login(client, db_session, "host@example.com")
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Needs your call" in page.text
+    assert f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/keep" in page.text
+    assert f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/pass" in page.text
+    assert "Yes 2" in page.text
+    assert "No 1" in page.text
+
+    _stamp_participant(client, sam.id)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "The host is reviewing 1 option" in page.text
+    assert "/keep" not in page.text
+    assert "/pass" not in page.text
+    assert "Yes 2" in page.text
+    assert "Waiting for the host to finish reviewing." in page.text
+
+
+def test_keep_foreign_batch_404(client, post, db_session):
+    """A keep/pass targeting another session's batch is 404 — no existence
+    oracle (CLAUDE.md #6)."""
+    session_a, _, _, (_,) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam"],
+    )
+    # session_b's closed batch with its own pending item, built directly.
+    other = _get_or_make_account(db_session, "other@example.com", "Other")
+    group_b = _make_group(db_session, "Other Household", other.email)
+    collection_b = _make_collection(db_session, group_b.id, "Their meals")
+    pasta = _make_item(db_session, collection_b.id, "Pasta", type="dinner")
+    session_b = _make_session(db_session, group_b.id, other.id, collection_id=collection_b.id)
+    batch_b = Batch(session_id=session_b.id, seq=1, track_label="dinner", status="closed")
+    db_session.add(batch_b)
+    db_session.flush()
+    foreign = BatchItem(batch_id=batch_b.id, item_id=pasta.id, ad_hoc_label=None, sort_order=0)
+    db_session.add(foreign)
+    db_session.commit()
+
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session_a.code}/batch/{batch_b.id}/items/{foreign.id}/keep")
+    assert resp.status_code == 404
+    resp = post(f"/s/{session_a.code}/batch/{batch_b.id}/items/{foreign.id}/pass")
+    assert resp.status_code == 404
+
+
+def test_close_non_host_403(client, post, db_session):
+    """Only the session host can close a batch."""
+    session, batch, _, (_, _) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    other = _get_or_make_account(db_session, "other@example.com", "Other")
+    _login(client, db_session, other.email)
+    resp = post(f"/s/{session.code}/close")
+    assert resp.status_code == 403
+    db_session.refresh(batch)
+    assert batch.status == "open"
+
+
+def test_keep_open_batch_400(client, post, db_session):
+    """Keep/pass only applies to a CLOSED batch — an open batch's item (whose
+    outcome is still NULL) is 400, not silently decided."""
+    session, batch, items, (_, _) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/keep")
+    assert resp.status_code == 400
+    assert "Batch isn't closed yet" in resp.text
+    db_session.refresh(items[0])
+    assert items[0].outcome is None
 
 
 # ---------------------------------------------------------------------------

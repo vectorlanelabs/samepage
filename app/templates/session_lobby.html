@@ -17,7 +17,12 @@
   <section class="card" style="padding:20px;margin-top:20px;">
     <h2 class="section-title">Voting in progress</h2>
     <p class="page-meta"><span hx-get="/s/{{ session.code }}/voting-status" hx-trigger="every 2s" hx-swap="innerHTML">{{ finished }}/{{ roster }} finished voting.</span></p>
-    <p class="empty-state">Results and batch controls arrive in the next release.</p>
+    {% if has_open_batch %}
+    <form method="post" action="/s/{{ session.code }}/close" style="margin-top:16px;">
+      <button type="submit" class="btn btn-secondary btn-block">Close voting</button>
+    </form>
+    {% endif %}
+    <p class="empty-state">Starting the next batch and finishing the session arrive in the next release (M3e).</p>
   </section>
   {% endif %}
 

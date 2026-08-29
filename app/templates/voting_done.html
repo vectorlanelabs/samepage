@@ -5,6 +5,11 @@
   <h1 class="page-title">All your votes are in.</h1>
   <section class="card" style="padding:20px;margin-top:20px;">
     <p class="page-meta">Waiting for others — <span hx-get="/s/{{ session.code }}/voting-status" hx-trigger="every 2s" hx-swap="innerHTML">{{ finished }}/{{ roster }} finished.</span></p>
+    {% if is_host and has_open_batch %}
+    <form method="post" action="/s/{{ session.code }}/close" style="margin-top:16px;">
+      <button type="submit" class="btn btn-secondary btn-block">Close voting</button>
+    </form>
+    {% endif %}
   </section>
 </div>
 {% endblock %}

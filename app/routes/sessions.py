@@ -29,7 +29,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_account, require_account, require_group_admin
@@ -54,8 +54,12 @@ from app.models import (
 )
 from app.session_logic import (
     BATCH_SIZE,
+    Outcome,
+    Tally,
+    apply_batch_close,
     apply_transition,
     assemble_batch,
+    classify,
     make_code,
     next_seq,
 )
@@ -337,6 +341,103 @@ def _option_data(db: Session, session: VotingSession, batch_item: BatchItem) -> 
     }
 
 
+def _close_batch(db: Session, session: VotingSession, batch: Batch, *, manual: bool) -> None:
+    """Close one batch (plan §5.5/§5.6): roll up aggregate outcomes, update the
+    Item offer/keep counters, DELETE every per-person vote row, and stamp the
+    batch closed — all in the CALLER's transaction (the caller commits).
+
+    Idempotent (CLAUDE.md #7): a batch that isn't 'open' is a no-op, so a
+    double-submitted close (or a double auto-close) applies exactly once.
+    ``manual`` selects D5 semantics — on a manual close, roster members who
+    didn't record a 'yes' count as 'no' — but both paths build the same
+    ``Tally(yes, roster_size - yes)``: on auto-close everyone has voted, so
+    ``roster_size - yes`` equals the recorded no count.
+    """
+    if batch.status != "open":
+        return
+    roster_size = (
+        db.scalar(
+            select(func.count())
+            .select_from(SessionParticipant)
+            .where(SessionParticipant.session_id == session.id)
+        )
+        or 0
+    )
+    for batch_item in _batch_items(db, batch):
+        yes = (
+            db.scalar(
+                select(func.count())
+                .select_from(BatchResponse)
+                .where(
+                    (BatchResponse.batch_item_id == batch_item.id)
+                    & (BatchResponse.choice == "yes")
+                )
+            )
+            or 0
+        )
+        tally = Tally(yes=yes, no=roster_size - yes)
+        batch_item.yes_count = tally.yes
+        batch_item.no_count = tally.no
+        result = classify(tally, roster_size)
+        if result == Outcome.KEPT_UNANIMOUS.value:
+            batch_item.outcome = Outcome.KEPT_UNANIMOUS.value
+        elif result == Outcome.NOT_KEPT.value:
+            batch_item.outcome = Outcome.NOT_KEPT.value
+        # 'majority' → outcome stays NULL: PENDING the host's accept/pass. A
+        # closed batch with outcome NULL means "awaiting host", distinguished
+        # from an open batch by batch.status.
+        if batch_item.item_id is not None:
+            item = db.get(Item, batch_item.item_id)
+            if item is not None:
+                item.times_offered += 1
+                if batch_item.outcome == Outcome.KEPT_UNANIMOUS.value:
+                    item.times_kept += 1
+                    item.last_kept_at = func.now()
+    db.execute(
+        delete(BatchResponse).where(
+            BatchResponse.batch_item_id.in_(
+                select(BatchItem.id).where(BatchItem.batch_id == batch.id)
+            )
+        )
+    )
+    batch.status = apply_batch_close(batch.status)
+    batch.closed_at = func.now()
+    session.last_activity_at = func.now()
+
+
+def _results_context(
+    db: Session, session: VotingSession, batch: Batch, account: Account | None
+) -> dict:
+    """Render data for the results screen: the closed batch's items grouped by
+    outcome with AGGREGATE counts only (yes_count/no_count) — never who voted
+    which way (vote privacy is the strong invariant, CLAUDE.md #4)."""
+    collection = db.get(Collection, session.collection_id) if session.collection_id else None
+    is_host = account is not None and account.id == session.host_account_id
+    rows = []
+    for batch_item in _batch_items(db, batch):
+        data = _option_data(db, session, batch_item)
+        rows.append(
+            {
+                "batch_item_id": batch_item.id,
+                "name": data["name"],
+                "type_label": data["type_label"],
+                "tags": data["tags"],
+                "yes_count": batch_item.yes_count,
+                "no_count": batch_item.no_count,
+                "outcome": batch_item.outcome,
+            }
+        )
+    return {
+        "session": session,
+        "collection_name": collection.name if collection else "Ad hoc session",
+        "is_host": is_host,
+        "batch": batch,
+        "kept_unanimous": [r for r in rows if r["outcome"] == Outcome.KEPT_UNANIMOUS.value],
+        "pending": [r for r in rows if r["outcome"] is None],
+        "not_kept": [r for r in rows if r["outcome"] == Outcome.NOT_KEPT.value],
+    }
+
+
 # --- Creation (host only) ----------------------------------------------------
 
 
@@ -532,8 +633,24 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
             _lobby_context(request, db, session, account, participant),
         )
 
+    open_batch = _open_batch(db, session)
+    if open_batch is None:
+        # No open batch but a closed one exists → the results screen for the
+        # most recent closed batch (M3d). Its per-person votes are already
+        # deleted (§5.5); only the aggregates on batch_item remain.
+        closed_batch = db.scalar(
+            select(Batch)
+            .where((Batch.session_id == session.id) & (Batch.status == "closed"))
+            .order_by(Batch.closed_at.desc(), Batch.id.desc())
+        )
+        if closed_batch is not None:
+            return templates.TemplateResponse(
+                request,
+                "batch_results.html",
+                _results_context(db, session, closed_batch, account),
+            )
+
     if participant is not None:
-        open_batch = _open_batch(db, session)
         responded, total = _progress(db, open_batch, participant)
         next_option = _next_option(db, open_batch, participant)
         if next_option is not None:
@@ -551,7 +668,13 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
         return templates.TemplateResponse(
             request,
             "voting_done.html",
-            {"session": session, "finished": finished, "roster": roster},
+            {
+                "session": session,
+                "finished": finished,
+                "roster": roster,
+                "is_host": is_host,
+                "has_open_batch": open_batch is not None,
+            },
         )
 
     # The host watching without having joined: an overview + htmx poll.
@@ -559,6 +682,7 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
     context = _lobby_context(request, db, session, account, participant)
     context["finished"] = finished
     context["roster"] = roster
+    context["has_open_batch"] = open_batch is not None
     return templates.TemplateResponse(request, "session_lobby.html", context)
 
 
@@ -758,7 +882,114 @@ def vote(
                 choice=choice,
             )
         )
+        # Auto-close (§5.5/§5.6): once every roster member has answered every
+        # option, close the batch in THIS transaction — the redirect then
+        # lands on the results screen. autoflush is off, so the new response
+        # must be flushed before the finished-count query can see it.
+        db.flush()
+        finished, roster = _voting_progress_counts(db, session)
+        if roster > 0 and finished >= roster:
+            _close_batch(db, session, open_batch, manual=False)
     session.last_activity_at = func.now()
+    db.commit()
+    return RedirectResponse(f"/s/{session.code}", status_code=303)
+
+
+# --- Batch close + results (M3d) ---------------------------------------------
+
+
+@router.post("/s/{code}/close")
+def close_batch(
+    request: Request, code: str, db: Annotated[Session, Depends(get_db)]
+):
+    """Host-only MANUAL batch close (§5.5/§5.6, D5): roll up the open batch's
+    outcomes with missing votes counted as 'no', DELETE the per-person vote
+    rows, and redirect to the results screen. Idempotent: a second POST finds
+    no open batch → 404 — the first close already applied exactly once."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    account = require_account(request, db)
+    if session.host_account_id != account.id:
+        raise HTTPException(403, "Only the host can close the batch")
+    batch = _open_batch(db, session)
+    if batch is None:
+        raise HTTPException(404, "No open batch to close")
+    _close_batch(db, session, batch, manual=True)
+    db.commit()
+    return RedirectResponse(f"/s/{session.code}", status_code=303)
+
+
+def _decide_pending_item(
+    db: Session, session: VotingSession, bid: int, biid: int, *, keep: bool
+) -> None:
+    """Set a pending (majority) batch_item's outcome: KEPT_HOST on host keep
+    (incrementing the Item's keep counters once), NOT_KEPT on pass. The
+    batch_item must belong to batch ``bid`` of THIS session, the batch must be
+    'closed', and the outcome must still be NULL — a decided item can't be
+    re-decided (400); foreign or nonexistent ids are 404 (no existence oracle,
+    CLAUDE.md #6)."""
+    batch = db.get(Batch, bid)
+    if batch is None or batch.session_id != session.id:
+        raise HTTPException(404, "Batch not found")
+    batch_item = db.get(BatchItem, biid)
+    if batch_item is None or batch_item.batch_id != batch.id:
+        raise HTTPException(404, "Item not found")
+    if batch.status != "closed":
+        raise HTTPException(400, "Batch isn't closed yet")
+    if batch_item.outcome is not None:
+        raise HTTPException(400, "Already decided")
+    if keep:
+        batch_item.outcome = Outcome.KEPT_HOST.value
+        if batch_item.item_id is not None:
+            item = db.get(Item, batch_item.item_id)
+            if item is not None:
+                item.times_kept += 1
+                item.last_kept_at = func.now()
+    else:
+        batch_item.outcome = Outcome.NOT_KEPT.value
+    session.last_activity_at = func.now()
+
+
+@router.post("/s/{code}/batch/{bid}/items/{biid}/keep")
+def keep_batch_item(
+    request: Request,
+    code: str,
+    bid: int,
+    biid: int,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Host-only accept of a pending majority item (M3d): KEPT_HOST, keep
+    counters incremented once. The outcome-was-NULL guard makes a re-submit a
+    400, never a double increment."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    account = require_account(request, db)
+    if session.host_account_id != account.id:
+        raise HTTPException(403, "Only the host can decide")
+    _decide_pending_item(db, session, bid, biid, keep=True)
+    db.commit()
+    return RedirectResponse(f"/s/{session.code}", status_code=303)
+
+
+@router.post("/s/{code}/batch/{bid}/items/{biid}/pass")
+def pass_batch_item(
+    request: Request,
+    code: str,
+    bid: int,
+    biid: int,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Host-only pass on a pending majority item (M3d): NOT_KEPT, no keep
+    counter change."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    account = require_account(request, db)
+    if session.host_account_id != account.id:
+        raise HTTPException(403, "Only the host can decide")
+    _decide_pending_item(db, session, bid, biid, keep=False)
     db.commit()
     return RedirectResponse(f"/s/{session.code}", status_code=303)
 

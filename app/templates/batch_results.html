@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Results · {{ session.code }} · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <h1 class="page-title">Results</h1>
+  <p class="page-meta">Session {{ session.code }}{% if collection_name %} · {{ collection_name }}{% endif %}</p>
+
+  {% if pending %}
+  {% if is_host %}
+  <section class="card" style="padding:20px;margin-top:20px;background:var(--sp-host-tint);">
+    <h2 class="section-title">Needs your call</h2>
+    <p class="page-meta">A majority said yes to these. Keep or pass each one — aggregate counts only, individual votes stay private.</p>
+    {% for item in pending %}
+    <div style="padding:14px 0;border-bottom:1px solid var(--sp-hairline);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:600;">{{ item.name }}</div>
+          <div class="chip-row" style="margin-top:6px;">
+            <span class="chip">Yes {{ item.yes_count }}</span>
+            <span class="chip">No {{ item.no_count }}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/keep">
+            <button type="submit" class="btn" style="background:var(--sp-host);color:#fff;min-height:44px;padding:0 18px;">Keep</button>
+          </form>
+          <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/pass">
+            <button type="submit" class="btn btn-secondary" style="min-height:44px;padding:0 18px;">Pass</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% else %}
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <h2 class="section-title">The host is reviewing {{ pending|length }} option{% if pending|length != 1 %}s{% endif %}</h2>
+    {% for item in pending %}
+    <div style="padding:14px 0;border-bottom:1px solid var(--sp-hairline);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div style="font-weight:600;">{{ item.name }}</div>
+        <div class="chip-row">
+          <span class="chip">Yes {{ item.yes_count }}</span>
+          <span class="chip">No {{ item.no_count }}</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+  {% endif %}
+
+  {% if kept_unanimous %}
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <h2 class="section-title">Kept — everyone agreed</h2>
+    {% for item in kept_unanimous %}
+    <div style="padding:14px 0;border-bottom:1px solid var(--sp-hairline);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:600;">{{ item.name }}</div>
+          {% if item.type_label %}<span class="chip">{{ item.type_label }}</span>{% endif %}
+        </div>
+        <div class="chip-row">
+          <span class="chip" style="background:var(--sp-accent-tint);color:var(--sp-accent);">Yes {{ item.yes_count }}</span>
+          <span class="chip">No {{ item.no_count }}</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if not_kept %}
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <h2 class="section-title">Not kept</h2>
+    {% for item in not_kept %}
+    <div style="padding:14px 0;border-bottom:1px solid var(--sp-hairline);opacity:0.6;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div style="font-weight:600;">{{ item.name }}</div>
+        <div class="chip-row">
+          <span class="chip">Yes {{ item.yes_count }}</span>
+          <span class="chip">No {{ item.no_count }}</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <p class="empty-state">Starting the next batch and finishing the session arrive in the next release (M3e).</p>
+    {% if not is_host %}
+    <p class="page-meta" style="text-align:center;">Waiting for the host to finish reviewing.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
