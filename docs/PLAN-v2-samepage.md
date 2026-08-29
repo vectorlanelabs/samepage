@@ -1,13 +1,16 @@
 # SamePage — v2 Architecture: Multi-Tenant Decision Platform
 
-> Status: **Proposed 2026-08-28 — awaiting Charlie's approval.** Supersedes the identity, tenancy, and
-> voting-mechanism decisions in `CHARTER.md` and `docs/PLAN-v1-mvp.md` (D2, D16 identity portions, D10,
-> and the M3–M6 task lists). **M3 onward is UNAPPROVED pending this doc.** M0–M2 code stands as the
-> starting point for the M2a/M2b revision below — it is not thrown away, it is generalized.
+> Status: **2026-08-29 — M2a and M2b landed; M3 onward reviewed and revised in light of what building
+> M2a/M2b actually surfaced, still unapproved pending Charlie's sign-off.** Supersedes the identity,
+> tenancy, and voting-mechanism decisions in `CHARTER.md` and `docs/PLAN-v1-mvp.md` (D2, D16 identity
+> portions, D10, and the M3–M6 task lists). M0–M2 code stood as the starting point for M2a/M2b — it was
+> generalized, not thrown away.
 >
 > This is a first architecture pass, not a fully task-broken-out plan — per this project's own convention
 > ("don't design to death"), per-milestone task/acceptance detail gets filled in immediately before that
-> milestone starts, not all at once here.
+> milestone starts, not all at once here. §6, §6.1, and §8's M4–M6 rows were revised on 2026-08-29 to
+> account for what multi-tenancy actually requires (tenant-scoped reporting, per-group API tokens) — these
+> weren't visible until M2a/M2b's account/group model was real.
 
 ## 1. What changed and why
 
@@ -221,6 +224,22 @@ This directly feeds the "discover new recipes based on what similar items succee
 Charlie's own framing — it's a query over existing data, not a new subsystem, once `batch_item`+`tag`
 exist.
 
+**Tenant scoping is load-bearing here, not optional.** Every reporting query must filter through
+`collection.group_id` to groups the requesting account actually belongs to (owner or admin). This didn't
+matter under the old single-household design; it matters now because the database holds other people's
+groups too. A report endpoint that forgets this filter leaks one family's reject rates and meal history to
+another. Locked as a hard requirement for M4, not a nice-to-have.
+
+## 6.1 Single shared database, not database-per-tenant
+
+One SQLite database serves every group on the deployment — the same file M0–M2b already write to.
+Isolation between groups is enforced at the application layer (every tenant-owned table traces back to a
+`group_id`), not at the storage layer. This was implicit in the schema (§5) but is worth stating as a
+locked decision: database-per-tenant would mean per-group backup/restore, per-group migrations, and a
+routing layer to pick the right DB file per request — real infrastructure this deployment doesn't need at
+its current scale (Charlie's VPS, a handful of groups). Revisit only if the platform outgrows a single
+SQLite file, not preemptively.
+
 ## 7. Explicitly still backlog (not blocking M2a/M2b/M3)
 
 - **Pre-reveal ad hoc option submission** — participants add options before the batch is revealed; host
@@ -239,12 +258,12 @@ exist.
 | ID | Milestone | Relationship to old plan | Status |
 |---|---|---|---|
 | M0 | Foundation (FastAPI skeleton, migrations, security middleware) | **Stands as-is** — no identity/tenancy coupling here | [x] landed |
-| **M2a** | **Identity & tenancy**: `Account` (email+password), `Group`/`group_admin`, replace `Person`+PIN entirely | **Replaces M1** in full (PINs, lockout, `Person.is_admin` all removed) | [ ] next |
-| **M2b** | **Generic collections & items**: `Collection`/`Item`/`meal_detail`/scoped `Category`/`Tag`, migrate the 155 meals (§5.1), library UI becomes collection-aware | **Revises M2** (CRUD/seed logic mostly reusable, schema underneath changes) | [ ] |
+| **M2a** | **Identity & tenancy**: `Account` (email+password), `Group`/`group_admin`, replace `Person`+PIN entirely | **Replaces M1** in full (PINs, lockout, `Person.is_admin` all removed) | [x] landed |
+| **M2b** | **Generic collections & items**: `Collection`/`Item`/`meal_detail`/scoped `Category`/`Tag`, migrate the 155 meals (§5.1), library UI becomes collection-aware | **Revises M2** (CRUD/seed logic mostly reusable, schema underneath changes) | [x] landed |
 | M3 | **Session-based voting engine**: group/account-hosted sessions, account-optional participants, `session_target`, ad hoc + library-backed `batch_item`, outcome-only recording | Net-new build against this doc; old M3 spec (§9 of plan v1) is void — roster-freeze/batch-assembly/unanimous+majority *mechanics* carry over, identity plumbing does not | [ ] unapproved until this doc is approved |
-| M4 | **Reporting & discovery** (§6) — supersedes "history & favorites" (broader scope: trend/tag correlation, not just `times_kept`) | Expanded from old M4 | [ ] |
-| M5 | Hardening, deployment docs, backup/restore | Mostly unchanged; env vars renamed (see rename below), multi-tenant backup story unchanged (still one DB file) | [ ] |
-| M6 | External API + MCP | Token scoping changes: per-group tokens likely replace the single household `DD_API_KEY` — resolve at M6 build time | [ ] |
+| M4 | **Reporting & discovery** (§6) — supersedes "history & favorites" (broader scope: trend/tag correlation, not just `times_kept`). **Every query scoped to the requesting account's own groups (§6)** — a new hard requirement multi-tenancy introduces that didn't exist in the old single-household plan. | Expanded from old M4 | [ ] |
+| M5 | Hardening, deployment docs, backup/restore. Single shared SQLite DB (§6.1) — backup/restore story unchanged (still one file). **Open question: does the old `DD_ACCESS_KEY`-style site-wide passphrase gate still make sense** now that real accounts exist and the platform is meant to let other groups self-serve sign up? A blanket site passphrase blocks exactly the "invite a friend's group to join" flow the platform is for. Needs Charlie's call — tracked in REQUESTS.md, not resolved here. | Access-gate question is new; backup/restore mechanics otherwise unchanged | [ ] |
+| M6 | External API + MCP. **Locked change from the old plan: tokens are per-group, not one shared household key.** A single global `DD_API_KEY`/`SP_API_KEY` would let one group's AI tools read every other group's data on the same deployment — a real leak now that other people's groups live in this database, not a hypothetical. Each group's owner generates and can revoke their own group's token; MCP tools operate on generic `item`/`collection` endpoints (not meal-specific), scoped the same way as M4's reporting. "AI lives outside the app" still holds — it now applies per-group, not just to Charlie's own tools. | Token-scoping question from the original table is now a locked decision, not an open item | [ ] |
 
 ## 9. Rename
 

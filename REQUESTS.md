@@ -1,30 +1,69 @@
 # Requests (non-blocking channel)
 
-Wanted-but-not-blocking ideas. The lead picks these up when appropriate, or Charlie decides. **Nothing here is promised.** Add freely.
+Genuinely needs Charlie's judgment — not decidable from the architecture or from what's already been
+built. **Nothing here is promised.** Add freely.
 
-- [ ] **Lunch `both` subset sanity check** — the seed now tags a curated 27-meal lunch-capable subset as `both` (list in `seed/README.md`; resolved from the plan review, option A). If any of those feel wrong for lunch, or meals were missed, say so — it's a one-line edit in the seed curation and a regenerate.
-- [ ] **Track order** — plan runs dinner track first, then lunch. Confirm.
-- [ ] **Over-target keeps** — when a batch agrees on more meals than the week needs, the starter picks which to keep (multi-select). Confirm that's the right behavior.
-- [ ] **Dice ritual** — the D8/D20 roll (the thing being replaced) stays out of the MVP. Optional: resurrect it later as a fun pick among kept meals (already in POST-V1 "later"). Charlie's call.
-- [ ] **Recipe display** — MVP stores recipe links (4 meals) and shows them; the clean cooking view/printing stays post-MVP (v2, with recipe intake). Confirm that's enough for v1.
-- [ ] **CI disabled (per Charlie, 2026-08-26)** — all GitHub Actions workflows removed: error emails on every commit; CI will be re-added when Charlie provides a hosting environment to publish to. Until then, local gates (`uv run ruff check .` + `uv run pytest -q`) are the verification. Root cause of the failing runs was never determined (runs died in ~12s with zero recorded steps and 404 logs — GitHub-side, not the workflow steps, which all pass locally on a clean clone); revisit at re-enable.
-- [ ] **Multi-worker bootstrap guard** — `_bootstrap_lock` is in-process only; a multi-worker uvicorn deployment needs a DB-level singleton-admin guard. Deployment is single-process (M5 will confirm); revisit at M5.
-- [ ] **Login UX** — unauthenticated `/people` returns a bare 403; nicer to redirect to `/login`. Polish pass (M3+).
-- [ ] **Library export** — JSON export of meals + recipes as backup/portability (v1.5 candidate; MVP ships WAL-safe DB backups in M5).
-- [ ] **Admin bootstrap** — plan says the first person created on an empty install becomes admin (there's no signup flow). Confirm that's acceptable, or name an env-var approach you'd prefer.
-- [ ] **Majority rule confirm** — locked as: strict `yes > no`, ties excluded, missing votes = no; host = session starter; aggregate counts only (privacy intact); accepted majority recorded as `kept_by='host'`; unanimous always auto-kept first. Say the word if you want a looser or tighter rule.
-- [ ] **Seeded recipe links (M6)** — plan default is **Option B**: leave the seed as-is and use the 4 links as the first real MCP imports to prove the API/MCP path end-to-end. Option A (parse the links into `recipe_text` at seed time) is available if you'd rather bake them in.
-- [ ] **API auth shape** — single household `DD_API_KEY` (Bearer) is the plan; per-tool tokens can come later.
-- [ ] **Raw votes via API** — default is **no** (aggregates only, consistent with the privacy invariant); say so if your analysis genuinely needs raw per-person data.
+- [ ] **Site access gate vs. open signup.** The original plan had a site-wide passphrase (`DD_ACCESS_KEY`,
+  now `SP_ACCESS_KEY`) gating the whole app before login — reasonable for a single-household app nobody
+  else was meant to reach. Now that the platform is meant to let other groups self-serve sign up (a
+  friend creates their own account, their own group), a blanket site passphrase works against that: they
+  can't even reach the signup page without you handing them a separate passphrase first. Real accounts
+  (M2a) already provide the actual security boundary. Options: drop the site gate entirely and rely on
+  accounts; keep it but scope it to something else (e.g. an invite code required at signup, not a
+  whole-site gate); or keep it as-is if you want the platform to stay closed to anyone you haven't
+  personally let in. This is a real product tradeoff, not an engineering detail — needs your call before
+  M5 builds the deployment story around it.
+- [ ] **Lunch `both` subset sanity check.** The seed tags a curated 27-meal lunch-capable subset as `both`
+  (list in `seed/README.md`). If any of those feel wrong for lunch, or meals were missed, say so — it's a
+  one-line edit in the seed curation and a regenerate. Only you can judge this; no urgency.
+- [ ] **Dice ritual.** The D8/D20 roll (the thing Meal Planner replaced) stays out of scope. Purely
+  optional: resurrect it later as a fun pick among kept meals, if you ever want it. No action needed
+  unless you bring it up.
 
-- [ ] **Login timing side-channel** — `POST /login` returns instantly for an unknown email (no hash computed) but takes ~60ms for a known email with a wrong password (full 600k-iteration PBKDF2 run), live-measured during M2a review. Lets an attacker enumerate valid account emails by response time even though the error message itself is generic. Inherited from the M1 PIN-login code this replaced (same early-return shape), not introduced by M2a — but real and unaddressed. Fix is cheap (always run a dummy hash on the unknown-email path) — worth doing before any public launch.
-- [ ] **Library CRUD gating is interim** — gates `/library` create/edit/archive on "any signed-in account" (not group/collection-scoped). Now that M2b's `Collection`/`Group` link exists, tightening this to "must be an owner/admin of the group that owns this collection" is a small, well-scoped follow-up — do it before any real multi-group usage.
-- [ ] **Single-collection routing is a deliberate M2b simplification** — `/library` always resolves to "the first meal-kind collection that exists," not a specific `collection_id` in the URL. Fine while there's exactly one collection in practice; needs real `/collections/{id}/...` routing once a second collection kind is actually built (things-to-do, games, ...) or once multiple groups each want their own meal collection.
+## Known engineering follow-ups (decided, not blocking, no input needed)
 
-## Resolved (2026-08-26)
+Tracked so they don't get lost — these are settled calls, not open questions.
+
+- [ ] **Login timing side-channel** — `POST /login` returns instantly for an unknown email but takes
+  ~60ms for a known email with a wrong password (full 600k-iteration PBKDF2 run), letting an attacker
+  enumerate valid account emails by response time. Inherited from the old PIN-login code, not new. Fix is
+  cheap (always run a dummy hash on the unknown-email path). Worth doing before any public launch.
+- [ ] **Library CRUD gating is interim** — gates `/library` create/edit/archive on "any signed-in
+  account," not "must be an owner/admin of the group that owns this collection." Fine while there's one
+  group in practice; tighten before real multi-group usage.
+- [ ] **Single-collection routing is a deliberate M2b simplification** — `/library` always resolves to
+  "the first meal-kind collection that exists," not a `collection_id` in the URL. Needs real
+  `/collections/{id}/...` routing once a second collection or a second group's meal collection exists.
+- [ ] **Bare 401s instead of a login redirect** — unauthenticated requests to `/groups`, `/library`
+  mutations, etc. return a bare 401 rather than redirecting to `/login`. Polish pass, whenever convenient.
+- [ ] **Library export** — JSON export of items + recipes as backup/portability. M5 ships DB-level
+  backups regardless; this would be a user-facing export on top. Low priority.
+
+## Resolved
 
 - ~~Batch size default~~ — fixed at 15 (not a setup choice); revisit after real sessions.
-- ~~Lunch starter set~~ — resolved via the curated 27-meal `both` seed subset (plan review #4, option A).
-- ~~Adversarial plan review~~ — fulfilled by `docs/INITIAL-PLAN-REVIEW.md`; all 12 findings accepted and applied.
+- ~~Lunch starter set~~ — resolved via the curated 27-meal `both` seed subset.
+- ~~Adversarial plan review~~ — fulfilled by `docs/INITIAL-PLAN-REVIEW.md`; all 12 findings accepted.
 - ~~Hosting~~ — VPS (Hostinger), decided.
+- ~~Track order~~ — dinner first, then lunch. Working default, never contested; not re-litigating it.
+- ~~Over-target keeps~~ — host/starter picks which to keep when a batch agrees on more than the target.
+  Working default, carried through the v2 design unchanged.
+- ~~Majority rule~~ — strict `yes > no`, ties excluded, host accepts, unanimous always kept first,
+  aggregate counts only. Confirmed by repeated use across the whole design process, not re-asking.
+- ~~Recipe display~~ — built and working (M2/M2b): link and/or free text, shown on the recipe view page.
+- ~~Raw votes via API~~ — no, aggregates only. Now structurally true, not just a policy: the v2 schema
+  (`docs/PLAN-v2-samepage.md` §5.4) never stores a durable per-person vote in the first place.
+- ~~API auth shape~~ — superseded by a real decision, not left open: per-group tokens, not one shared
+  household key. See `docs/PLAN-v2-samepage.md` §8 (M6).
+- ~~Seeded recipe links (M6 Option A vs B)~~ — Option B stands (prove the MCP import path on the 4
+  existing links when M6 is built) unless raised again; not worth Charlie's time to re-confirm a default
+  nobody's objected to.
+- ~~CI disabled~~ — not an open question, a standing decision: off until Charlie provides a hosting
+  target and explicitly re-approves it (`CLAUDE.md` non-negotiable #10). Documented there, not tracked
+  here as pending.
+- ~~Admin bootstrap~~ — obsolete. The old "first person on an empty install becomes admin" concept doesn't
+  exist anymore; M2a's signup is always open, no bootstrap race to guard.
+- ~~Multi-worker bootstrap guard~~ — obsolete for the same reason: the in-process `_bootstrap_lock` it
+  referred to was removed with `Person` in M2a. `account.email`'s `UNIQUE` constraint already makes
+  concurrent signups safe at the database level — no in-process lock needed, multi-worker or not.
 - ~~CLAUDE.md refresh~~ — done.

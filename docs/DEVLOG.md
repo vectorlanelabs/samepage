@@ -208,3 +208,45 @@ checked for after M2a's review caught similar issues.
 
 **Status**: M2a and M2b both landed. Per Charlie's instruction, execution stops here — **M3 (session-based
 voting) is not started.** It remains unapproved pending sign-off on `docs/PLAN-v2-samepage.md`.
+
+## 2026-08-29 — M3–M6 reviewed against what M2a/M2b actually built; REQUESTS.md pruned
+
+Charlie asked for two things: review M3–M6 now that the account/group/collection model is real (not just
+spec'd), and clean out `REQUESTS.md` — most of it was either already decided by how the code turned out,
+or made obsolete by the pivot, and didn't need to sit there as open questions.
+
+**Plan changes** (`docs/PLAN-v2-samepage.md`):
+- **M4 (reporting)**: added a hard requirement that didn't exist in the single-household design — every
+  reporting query must filter through `collection.group_id` to groups the requesting account belongs to.
+  Without it, one group's reject rates and meal history leak to another group on the same deployment. Not
+  optional, not a nice-to-have.
+- **New §6.1**: made explicit that this is one shared SQLite database across every group, not
+  database-per-tenant — isolation is enforced at the application layer via `group_id`, not by storage.
+  This was implicit in the schema but never stated as a decision.
+- **M6 (API/MCP)**: locked a change the old milestone table only flagged as "resolve later" — tokens are
+  per-group, not one shared household key. A single global key would let one group's AI tools read every
+  other group's data on the same deployment now that other people's groups actually live here. Each
+  group's owner generates and can revoke their own group's token.
+- **M5 (deployment)**: surfaced a real open question rather than resolving it unilaterally — does the old
+  `DD_ACCESS_KEY`-style site-wide passphrase still make sense now that real accounts exist and the
+  platform is meant to let other groups self-serve sign up? A blanket site gate works against exactly that
+  flow. Tracked in `REQUESTS.md`, needs Charlie's call before M5 builds the deployment story around it.
+- M3 itself needed no changes — its design already accounted for account-optional, cross-group session
+  participation.
+
+**REQUESTS.md pruned** from 19 mixed items down to 3 that actually need Charlie's judgment (the access-gate
+question above, the lunch `both` subset — household taste, only Charlie can judge — and the optional dice
+ritual). Everything else got a real disposition instead of sitting as an open question:
+- 5 items were **obsolete** — referred to code that no longer exists (`Person`, `_bootstrap_lock`, `/people`,
+  the single-household `DD_API_KEY`) and made no sense to ask about anymore.
+- 6 items were **already decided** by repeated, uncontested use through the whole design process (track
+  order, over-target keeps, majority rule, recipe display, raw-votes-via-API, the M6 recipe-link approach)
+  — re-asking would just be busywork.
+- 4 items were **real engineering follow-ups with no product judgment required** (the login timing
+  side-channel, interim library CRUD gating, single-collection routing, bare-401-instead-of-redirect) —
+  moved to their own section instead of the general request queue, since nobody needs to decide anything,
+  they just need doing eventually.
+
+**Status**: M3 remains unapproved and unbuilt. The one real open question before it starts is the
+access-gate call above — everything else in the plan review is either already locked or doesn't block
+starting M3.
