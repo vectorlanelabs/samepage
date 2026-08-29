@@ -884,3 +884,19 @@ dependency pin to `fastmcp>=3.4,<4`. Suite: **326 passed**, ruff clean.
 
 M0–M6 complete. Same Page is live at https://samepage.vectorlane.dev — public Google signup, the full
 voting engine, reporting, JSON API + MCP, PWA, auto-deploying via CI→Coolify.
+
+## 2026-08-29 — M7 cycle 1 (S1+S2: chrome model + hub) — c7c38b5
+
+Implementer: deepseek-v4-flash (~$1.57 cumulative). Reviewer: claude:sonnet (in-harness agent;
+the `claude` CLI is not authed in this environment — noted for future cycles).
+- Shipped: chrome:"session" mechanism in base.html (session screens chromeless), mobile topbar
+  reduced to brand + avatar-link, "/" → 303 → /collections for signed-in, /collections composed
+  per the hub artboard (greeting, group rows + Manage, last-session labels, kept-picks strip,
+  ink Host + Join-with-code CTAs, mobile sign-out).
+- Review found 2 majors, both live-reproduced: last_kept scoped to collection-bearing groups
+  only (fixed via _owned_groups) and a mobile nav/sign-out dead end on inner pages (fixed:
+  avatar links home, back links added to groups/collection_new; sign-out stays hub-only by
+  design). Dispositions: cross-tenant aggregate test added; N+1 last-session query deferred
+  (trivial scale, follow-up if hubs grow); session-brand markup duplication in 2 templates
+  accepted; greeting is UTC-hour based (server has no user TZ — revisit if households complain).
+- Tests 327 → 339, ruff clean. Not pushed (M7 rule: Charlie pushes).

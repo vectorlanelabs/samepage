@@ -44,8 +44,8 @@ Budget: 14 cycles. Standing decision: breakfast/lunch/dinner multi-select tracks
 
 | ID | Slice (review findings) | Status |
 |---|---|---|
-| S1 | Chrome model: delete mobile topbar nav; per-screen-class chrome (hub = brand+avatar, inner = back+title, session = chromeless); sidebar unchanged on desktop (F1, F11-chrome) | [ ] |
-| S2 | Hub/IA: `/collections` becomes the signed-in home (`/` redirects), composed hub per artboard — greeting, group + switch, card meta, last-session footer, ink Host + Join-with-code CTAs; delete invented `/` hero page (F2) | [ ] |
+| S1 | Chrome model: delete mobile topbar nav; per-screen-class chrome (hub = brand+avatar, inner = back+title, session = chromeless); sidebar unchanged on desktop (F1, F11-chrome) | [x] c7c38b5 |
+| S2 | Hub/IA: `/collections` becomes the signed-in home (`/` redirects), composed hub per artboard — greeting, group + switch, card meta, last-session footer, ink Host + Join-with-code CTAs; delete invented `/` hero page (F2) | [x] c7c38b5 |
 | S3 | Create session: collection radio cards + dashed ad-hoc (collection default), per-track steppers, bottom-pinned Create (F3) | [ ] |
 | S4 | Share screen: `/s/{code}/share` (host-only) — 40px mono code, Copy invite link, native Share, joined count, Go to the lobby; create redirects here (F4) | [ ] |
 | S5 | BUG: session-scoped recipe view for voters (participant/host of that session, item offered in that session); voting card links there (F5) | [ ] |
