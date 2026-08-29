@@ -900,3 +900,18 @@ the `claude` CLI is not authed in this environment — noted for future cycles).
   (trivial scale, follow-up if hubs grow); session-brand markup duplication in 2 templates
   accepted; greeting is UTC-hour based (server has no user TZ — revisit if households complain).
 - Tests 327 → 339, ruff clean. Not pushed (M7 rule: Charlie pushes).
+
+## 2026-08-29 — M7 cycle 2 (S5+S6: voter recipe access + voting screen) — 6181fff
+
+- Shipped: session-scoped recipe view (/s/{code}/recipe/{item_id}; participant-or-host of THIS
+  session + item-offered-in-session, 404 otherwise) fixing the guest-401 bug; voting card
+  recomposed per artboard (context line, progress bar, centered card, pinned 60px Yes/No).
+- Review (sonnet) BLOCKED the first cut with a live repro: recipe views shared the join
+  limiter's 20/60s bucket with post-vote redirects → an ordinary voter 429'd at option ~9 of
+  15. Fix: membership exempts a request from the join limiter (guessers, who can't have
+  membership, stay limited — enforced before the 404 on unknown codes); locked in by an
+  interleaved 15-option regression test running against the real limiter. Nit fixed:
+  _short_date_label deduped into app/templating.py. Clean: XSS, vote privacy, auth scoping,
+  existence oracles (404-only). Accepted as-is: per-cause 404 detail strings (pre-existing
+  app-wide convention).
+- Tests 339 → 348, ruff clean. Not pushed.
