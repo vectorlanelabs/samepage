@@ -32,6 +32,16 @@ Tracked so they don't get lost — these are settled calls, not open questions.
   account-deletion/deactivation path ever lands, a surviving session cookie shows a live-looking
   indicator while every real route 401s. Revisit the context processor in the same slice that adds any
   account-removal capability. (Oscar M2c review, 2026-08-29 — minor, consciously deferred.)
+- [ ] **M6b (MCP server) — paused for your decision (2026-08-29).** The JSON API (M6a) already lets
+  external AI tools read/write a group's library and read its reports over per-group Bearer auth — the
+  "AI lives outside the app" goal is met. An MCP server would wrap those same operations for MCP-native
+  clients, but it needs a heavyweight new runtime dependency (fastmcp + mcp + transitive deps — none
+  installed) and mounts a new protocol into the app, which (a) CLAUDE.md says needs your approval for a
+  new runtime dep, (b) is hard to verify with the existing TestClient discipline so I won't land it
+  unverified overnight, and (c) is novel stack you may want to weigh in on (matches your note about not
+  wanting per-project stack novelty). **Options:** (1) skip MCP — the JSON API is enough; (2) build MCP
+  with FastMCP — say go and I'll add it and verify it against a real MCP client; (3) a lighter MCP
+  approach you prefer. Everything else on the milestone list is done and deployment-ready.
 - [ ] **Over-target trim (D13 strict) deferred by a lead decision (2026-08-29).** M3e implements
   "host decides when to stop": targets show as guidance ("2 of 3 kept"), the host starts the next batch
   while they want more and clicks Finish when satisfied; unanimous keeps are always kept (a batch may

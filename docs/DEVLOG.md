@@ -831,3 +831,30 @@ ownership-transfer is a code-comment TODO (no transfer route exists yet to wire 
 
 Suite: **316 passed**, ruff clean. Next: M6b — wrap these operations as an MCP (FastMCP) server. That
 completes the milestone list.
+
+---
+
+## 2026-08-29 — Pre-release audit clean; M6b (MCP) paused for Charlie; overnight run wrap-up
+
+**Final pre-release whole-codebase audit — clean.** Covered the token/API surface added since the M3
+audit: no token is ever logged or stored in plaintext (SHA-256 hash only); all 5 /api/v1 routes go
+through `require_api_group` (the single per-group scoping choke point); origin exemptions remain only
+`/api/` and `/mcp` (and `/mcp` is exempt-but-404 — no handler, no open hole); the migration chain links
+cleanly 0001→0010 and a blank DB boots through head; `.env` is gitignored and untracked, no secret is
+committed. Suite **316 passed**, ruff clean.
+
+**M6b (MCP) paused for Charlie — a deliberate lead decision.** The JSON API (M6a) already delivers "AI
+lives outside the app." An MCP wrapper needs a heavyweight new runtime dependency (fastmcp/mcp — none
+installed) and a new protocol mounted into the app: CLAUDE.md requires lead approval for a new runtime
+dep, it's hard to verify unattended with the TestClient discipline (I won't land unverified auth-adjacent
+code overnight), and it's exactly the kind of stack-novelty Charlie asked to be consulted on. Recorded in
+REQUESTS.md with three options. This is the loop's re-scope-on-a-blocked-item discipline, not a failure.
+
+**Overnight run summary.** Landed, each lead-verified + reviewed: M2c/M2d (routing + reskin, earlier),
+M5a (Google SSO), M2e (seed purge + create-collection), M3a–M3e (the full voting engine), M4 (reporting),
+M5b (rate limiting), M5c (PWA), M5d (deploy artifacts), M6a (API + tokens); plus two whole-codebase
+audits. The app is **deployment-ready**: sign-in, groups/collections/library, the complete voting engine
+with vote privacy enforced structurally, reporting, a scoped JSON API, PWA install, and Docker/Caddy/
+backup artifacts. README updated to describe what exists. The safety-net cron is cancelled (the build is
+done; the only open item, M6b, needs Charlie's input). Still needed from Charlie before go-live: Google
+OAuth client + domain + CI go-word (REQUESTS.md), and the M6b decision.
