@@ -172,13 +172,29 @@ button { font-family: var(--sp-font-sans); }
 /* Signed-out: no 250px app-shell sidebar. A slim top bar (brand + Sign in)
    carries the chrome at every width, and the page owns the rest. */
 .shell--guest { flex-direction: column; }
-.shell--guest .topbar { display: flex; }
+/* A marketing header, not app chrome: transparent, brand left, sign-in top-right. */
+.shell--guest .topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  border-bottom: none;
+  padding: 18px 24px;
+}
+/* The sidebar nav-link is a full-width block; in the guest header it must be
+   content-width so space-between actually parks Sign in at the right edge. */
+.shell--guest .topbar .nav-link {
+  flex: 0 0 auto;
+  width: auto;
+}
 
 /* ---------- Main content ---------- */
 
-.main { flex: 1; min-width: 0; }
+/* Column flex so the footer sits at the bottom of the viewport, not mid-page. */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .content {
+  flex: 1 0 auto;
   width: min(1080px, 100%);
   margin: 0 auto;
   padding: 28px 24px 48px;
@@ -467,7 +483,7 @@ button { font-family: var(--sp-font-sans); }
 .landing {
   display: grid;
   gap: 22px;
-  align-items: start;
+  align-items: center;
 }
 
 .landing-title {
@@ -490,8 +506,46 @@ button { font-family: var(--sp-font-sans); }
 
 .landing .hero-cta { margin-top: 22px; }
 
-/* Join-by-code is the co-star, not a footnote. */
+/* Join-by-code is the secondary audience (guests with a code) — present, but it
+   must not outshout the primary Host/sign-up action, so its button is secondary. */
 .join-card { padding: 24px 22px; }
+
+/* How-it-works band: fills the fold and gives the page a second beat. */
+.landing-steps {
+  display: grid;
+  gap: 24px;
+  margin-top: 44px;
+  padding-top: 36px;
+  border-top: 1px solid var(--sp-border);
+}
+
+.landing-step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--sp-accent-tint);
+  color: var(--sp-accent);
+  font-family: var(--sp-font-mono);
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.landing-step-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--sp-ink);
+  margin: 14px 0 0;
+}
+
+.landing-step-text {
+  font-size: 14px;
+  color: var(--sp-sub);
+  line-height: 1.55;
+  margin: 6px 0 0;
+}
 
 .join-card-title {
   font-size: 17px;
@@ -521,6 +575,11 @@ button { font-family: var(--sp-font-sans); }
     padding-top: 24px;
   }
   .landing-title { font-size: 40px; }
+  .landing-steps {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 36px;
+    margin-top: 60px;
+  }
 }
 
 /* ---------- Collections hub ---------- */

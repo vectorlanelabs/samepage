@@ -26,20 +26,37 @@
     <h1 class="landing-title">Decide together, without the group chat spiral.</h1>
     <p class="landing-sub">Your group builds a library of meals and ideas, then votes in private, one option at a time. Unanimous yeses are in; the rest is the host's call.</p>
     <div class="hero-cta">
-      <a class="btn btn-ink" href="/login">Host a session</a>
+      <a class="btn btn-primary" href="/login">Host a session</a>
       <a class="btn btn-secondary" href="/login">Sign in</a>
     </div>
   </div>
   <section class="card join-card">
     <h2 class="join-card-title">Joining someone's session?</h2>
-    <p class="join-card-sub">Enter the code the host shared — no account needed.</p>
+    <p class="join-card-sub">Enter the code the host shared. No account needed.</p>
     <form method="get" action="/join"
           onsubmit="var c=this.code.value.trim();if(c){location.href='/s/'+encodeURIComponent(c);}return false;">
       <input type="text" name="code" class="input input--code" placeholder="e.g. plum-42"
              autocomplete="off" autocapitalize="none" spellcheck="false" required>
-      <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Join session</button>
+      <button type="submit" class="btn btn-secondary btn-block" style="margin-top:14px;">Join session</button>
     </form>
   </section>
 </div>
+<section class="landing-steps">
+  <div class="landing-step">
+    <span class="landing-step-badge">1</span>
+    <h3 class="landing-step-title">Build a shared library</h3>
+    <p class="landing-step-text">Your group collects the options worth choosing between. Meals to start, with more kinds coming.</p>
+  </div>
+  <div class="landing-step">
+    <span class="landing-step-badge">2</span>
+    <h3 class="landing-step-title">Host a session</h3>
+    <p class="landing-step-text">Everyone joins from their phone and votes yes or no, one option at a time, in private.</p>
+  </div>
+  <div class="landing-step">
+    <span class="landing-step-badge">3</span>
+    <h3 class="landing-step-title">Land on the same page</h3>
+    <p class="landing-step-text">Unanimous picks are kept automatically. The host calls the close ones. Nobody sees who voted how.</p>
+  </div>
+</section>
 {% endif %}
 {% endblock %}
