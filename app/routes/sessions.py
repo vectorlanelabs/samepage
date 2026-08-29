@@ -25,6 +25,7 @@ by link/code per plan §2 — while every host mutation re-checks
 from __future__ import annotations
 
 import random
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -70,6 +71,11 @@ router = APIRouter()
 ENDED_STATUSES = ("complete", "expired")
 
 TYPE_LABELS = {"dinner": "Dinner", "lunch": "Lunch", "both": "Both"}
+
+# §5.5 rule 3: a lobby/voting session with no activity for this many hours
+# becomes 'expired'. Enforcement is lazy — any route that loads a session
+# first applies the expiry check (no scheduler/background job).
+EXPIRY_HOURS = 24
 
 
 def _owned_groups(db: Session, account: Account) -> list[dict]:
@@ -265,6 +271,27 @@ def _voting_progress_counts(db: Session, session: VotingSession) -> tuple[int, i
     return finished, roster
 
 
+def _track_order(track_label: str) -> tuple[int, str]:
+    """Deterministic track ordering: 'dinner', then 'lunch', then any other
+    label alphabetically. Shared by target progress, batch assembly, and the
+    completion plan."""
+    if track_label == "dinner":
+        return (0, "")
+    if track_label == "lunch":
+        return (1, "")
+    return (2, track_label)
+
+
+def _track_display_label(track_label: str) -> str:
+    """Human label for progress/plan summaries: 'Dinners'/'Lunches' for the
+    meal tracks, any other label capitalized."""
+    if track_label == "dinner":
+        return "Dinners"
+    if track_label == "lunch":
+        return "Lunches"
+    return track_label.capitalize()
+
+
 def _first_track(db: Session, session: VotingSession) -> str | None:
     """The session's first track with a positive target: 'dinner', then
     'lunch', then any other track labels alphabetically. None when the session
@@ -272,15 +299,7 @@ def _first_track(db: Session, session: VotingSession) -> str | None:
     targets = db.scalars(
         select(SessionTarget).where(SessionTarget.session_id == session.id)
     ).all()
-
-    def sort_key(target: SessionTarget) -> tuple[int, str]:
-        if target.track_label == "dinner":
-            return (0, "")
-        if target.track_label == "lunch":
-            return (1, "")
-        return (2, target.track_label)
-
-    for target in sorted(targets, key=sort_key):
+    for target in sorted(targets, key=lambda t: _track_order(t.track_label)):
         if target.target_count > 0:
             return target.track_label
     return None
@@ -304,6 +323,160 @@ def _eligible_item_ids(db: Session, session: VotingSession, track: str) -> list[
             MealDetail.type.in_(("lunch", "both"))
         )
     return list(db.scalars(stmt.order_by(Item.normalized_name, Item.id)).all())
+
+
+def _track_progress(db: Session, session: VotingSession) -> list[dict]:
+    """Per-target progress across the session's batches: for each
+    ``SessionTarget`` row, how many BatchItem outcomes in
+    ('kept_unanimous', 'kept_host') that track has so far, plus
+    ``remaining`` and ``met``. Ordered by ``_track_order`` (dinner, lunch,
+    then others alphabetically). Aggregate/outcome-only — no participant data."""
+    targets = db.scalars(
+        select(SessionTarget).where(SessionTarget.session_id == session.id)
+    ).all()
+    kept_rows = db.execute(
+        select(Batch.track_label, func.count(BatchItem.id))
+        .join(BatchItem, BatchItem.batch_id == Batch.id)
+        .where(
+            (Batch.session_id == session.id)
+            & BatchItem.outcome.in_([Outcome.KEPT_UNANIMOUS.value, Outcome.KEPT_HOST.value])
+        )
+        .group_by(Batch.track_label)
+    ).all()
+    kept_by_track = dict(kept_rows)
+    progress = []
+    for target in sorted(targets, key=lambda t: _track_order(t.track_label)):
+        kept = kept_by_track.get(target.track_label, 0)
+        progress.append(
+            {
+                "track_label": target.track_label,
+                "label": _track_display_label(target.track_label),
+                "target_count": target.target_count,
+                "kept": kept,
+                "remaining": max(0, target.target_count - kept),
+                "met": kept >= target.target_count,
+            }
+        )
+    return progress
+
+
+def _all_targets_met(db: Session, session: VotingSession) -> bool:
+    """True when every track's kept count meets its target (the session has
+    nothing left to vote toward — the host finishes)."""
+    return all(row["met"] for row in _track_progress(db, session))
+
+
+def _already_offered_ids(db: Session, session: VotingSession) -> set[int]:
+    """Every item_id ever offered in ANY batch of this session (across all
+    tracks) — the exclusion set for the next batch's assembly."""
+    return set(
+        db.scalars(
+            select(BatchItem.item_id)
+            .join(Batch, Batch.id == BatchItem.batch_id)
+            .where(Batch.session_id == session.id)
+        ).all()
+    )
+
+
+def _next_batch_assembly(db: Session, session: VotingSession) -> tuple[str | None, list[int]]:
+    """What the next batch would be: ``(track_label, chosen_ids)`` for the
+    first track in order with ``remaining > 0`` whose pool still has un-offered
+    items, or ``(None, [])`` when all targets are met or every remaining
+    track's pool is exhausted (the host then finishes with fewer than target).
+    Preconditions (no open batch, no outcome-NULL pending items) are the
+    ROUTE's job — this helper only does the pool math."""
+    progress = _track_progress(db, session)
+    already_offered = _already_offered_ids(db, session)
+    for row in progress:
+        if row["remaining"] <= 0:
+            continue
+        eligible_ids = _eligible_item_ids(db, session, row["track_label"])
+        chosen = assemble_batch(eligible_ids, already_offered, size=BATCH_SIZE)
+        if chosen:
+            return row["track_label"], chosen
+    return None, []
+
+
+def _expire_if_stale(db: Session, session: VotingSession) -> bool:
+    """Lazy §5.5 rule 3 expiry, applied at the top of every route that loads a
+    session: a 'lobby'/'voting' session with no activity for EXPIRY_HOURS
+    becomes 'expired' — participants are deleted (rule 2), an abandoned open
+    batch's per-person vote rows are deleted (rule 4; the batch stays open and
+    unreported, outcomes NULL/counts 0), and finished_at is stamped. Returns
+    True when it just expired. 'complete' sessions are terminal and never
+    expire. The caller commits nothing further — this helper commits."""
+    if session.status not in ("lobby", "voting"):
+        return False
+    last_activity = session.last_activity_at
+    if last_activity is None:
+        last_activity = session.created_at
+    if last_activity is None:
+        return False
+    if last_activity.tzinfo is None:
+        last_activity = last_activity.replace(tzinfo=UTC)
+    if last_activity >= datetime.now(UTC) - timedelta(hours=EXPIRY_HOURS):
+        return False
+    session.status = apply_transition(session.status, "expired")
+    db.execute(
+        delete(BatchResponse).where(
+            BatchResponse.batch_item_id.in_(
+                select(BatchItem.id).where(
+                    BatchItem.batch_id.in_(
+                        select(Batch.id).where(
+                            (Batch.session_id == session.id) & (Batch.status == "open")
+                        )
+                    )
+                )
+            )
+        )
+    )
+    db.execute(delete(SessionParticipant).where(SessionParticipant.session_id == session.id))
+    session.finished_at = func.now()
+    db.commit()
+    return True
+
+
+def _completion_context(db: Session, session: VotingSession) -> dict:
+    """Render data for the completion view: every KEPT item across all of the
+    session's batches (outcome in ('kept_unanimous', 'kept_host')), joined to
+    Item for the name and grouped by track. Aggregate/outcome only — no
+    participant data exists anymore (§5.5)."""
+    collection = db.get(Collection, session.collection_id) if session.collection_id else None
+    rows = db.execute(
+        select(BatchItem.outcome, Item.name, Batch.track_label)
+        .join(Batch, Batch.id == BatchItem.batch_id)
+        .join(Item, Item.id == BatchItem.item_id)
+        .where(
+            (Batch.session_id == session.id)
+            & BatchItem.outcome.in_([Outcome.KEPT_UNANIMOUS.value, Outcome.KEPT_HOST.value])
+        )
+        .order_by(Batch.track_label, Item.normalized_name, Item.id)
+    ).all()
+    by_track: dict[str, list[dict]] = {}
+    for outcome, name, track in rows:
+        by_track.setdefault(track, []).append(
+            {
+                "name": name,
+                "label": (
+                    "everyone agreed"
+                    if outcome == Outcome.KEPT_UNANIMOUS.value
+                    else "host pick"
+                ),
+            }
+        )
+    kept_groups = [
+        {
+            "track_label": track,
+            "label": _track_display_label(track),
+            "kept_items": items,
+        }
+        for track, items in sorted(by_track.items(), key=lambda kv: _track_order(kv[0]))
+    ]
+    return {
+        "session": session,
+        "collection_name": collection.name if collection else None,
+        "kept_groups": kept_groups,
+    }
 
 
 def _option_data(db: Session, session: VotingSession, batch_item: BatchItem) -> dict:
@@ -410,7 +583,8 @@ def _results_context(
 ) -> dict:
     """Render data for the results screen: the closed batch's items grouped by
     outcome with AGGREGATE counts only (yes_count/no_count) — never who voted
-    which way (vote privacy is the strong invariant, CLAUDE.md #4)."""
+    which way (vote privacy is the strong invariant, CLAUDE.md #4) — plus the
+    session's target progress and what the host can do next (M3e)."""
     collection = db.get(Collection, session.collection_id) if session.collection_id else None
     is_host = account is not None and account.id == session.host_account_id
     rows = []
@@ -427,6 +601,9 @@ def _results_context(
                 "outcome": batch_item.outcome,
             }
         )
+    track_progress = _track_progress(db, session)
+    all_targets_met = all(row["met"] for row in track_progress)
+    next_track, _ = _next_batch_assembly(db, session)
     return {
         "session": session,
         "collection_name": collection.name if collection else "Ad hoc session",
@@ -435,6 +612,9 @@ def _results_context(
         "kept_unanimous": [r for r in rows if r["outcome"] == Outcome.KEPT_UNANIMOUS.value],
         "pending": [r for r in rows if r["outcome"] is None],
         "not_kept": [r for r in rows if r["outcome"] == Outcome.NOT_KEPT.value],
+        "track_progress": track_progress,
+        "all_targets_met": all_targets_met,
+        "next_batch_available": next_track is not None,
     }
 
 
@@ -588,14 +768,20 @@ def join_page(request: Request, code: str | None = None):
 
 @router.get("/s/{code}")
 def session_page(request: Request, code: str, db: Annotated[Session, Depends(get_db)]):
-    """The session front door: ended page for finished sessions, join page for
-    strangers (waiting state while voting), the live lobby for participants
-    and the host, and — once voting — the one-option-at-a-time voting card /
-    done state for participants and a watching overview for a host who never
-    joined."""
+    """The session front door: the completion plan for a finished session, the
+    ended page for an expired one, the join page for strangers (waiting state
+    while voting), the live lobby for participants and the host, and — once
+    voting — the one-option-at-a-time voting card / done state for
+    participants and a watching overview for a host who never joined."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry on load
+    if session.status == "complete":
+        # M3e: the resulting plan is public — anyone with the code sees it.
+        return templates.TemplateResponse(
+            request, "session_complete.html", _completion_context(db, session)
+        )
     if session.status in ENDED_STATUSES:
         return templates.TemplateResponse(
             request, "session_ended.html", {"session": session}
@@ -699,6 +885,7 @@ def join_session(
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
     if session.status in ENDED_STATUSES:
         return templates.TemplateResponse(
             request, "session_ended.html", {"session": session}
@@ -750,6 +937,11 @@ def roster_partial(request: Request, code: str, db: Annotated[Session, Depends(g
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry on load
+    if session.status in ENDED_STATUSES:
+        return templates.TemplateResponse(
+            request, "_session_ended_note.html", {"session": session}
+        )
     account = get_current_account(request, db)
     participant = _viewer_participant(request, db, session)
     viewer_participant_id = participant.id if participant is not None else None
@@ -785,9 +977,12 @@ def start_voting(
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
     account = require_account(request, db)
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can start voting")
+    if session.status in ENDED_STATUSES:
+        raise HTTPException(400, "This session is over.")
     try:
         target_status = apply_transition(session.status, "voting")
     except ValueError:
@@ -857,6 +1052,9 @@ def vote(
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
+    if session.status in ENDED_STATUSES:
+        raise HTTPException(400, "This session is over — no more votes.")
     participant = _viewer_participant(request, db, session)
     if participant is None:
         raise HTTPException(403, "Join the session to vote")
@@ -909,9 +1107,12 @@ def close_batch(
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
     account = require_account(request, db)
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can close the batch")
+    if session.status in ENDED_STATUSES:
+        raise HTTPException(400, "This session is over.")
     batch = _open_batch(db, session)
     if batch is None:
         raise HTTPException(404, "No open batch to close")
@@ -965,9 +1166,12 @@ def keep_batch_item(
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
     account = require_account(request, db)
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can decide")
+    if session.status in ENDED_STATUSES:
+        raise HTTPException(400, "This session is over.")
     _decide_pending_item(db, session, bid, biid, keep=True)
     db.commit()
     return RedirectResponse(f"/s/{session.code}", status_code=303)
@@ -986,10 +1190,120 @@ def pass_batch_item(
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
     account = require_account(request, db)
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can decide")
+    if session.status in ENDED_STATUSES:
+        raise HTTPException(400, "This session is over.")
     _decide_pending_item(db, session, bid, biid, keep=False)
+    db.commit()
+    return RedirectResponse(f"/s/{session.code}", status_code=303)
+
+
+# --- Session progression + teardown (M3e) ------------------------------------
+
+
+@router.post("/s/{code}/next-batch")
+def next_batch(
+    request: Request, code: str, db: Annotated[Session, Depends(get_db)]
+):
+    """Host-only 'start the next batch' (M3e). Preconditions: the session is
+    'voting', no batch is open, and no closed batch still has outcome-NULL
+    (majority-pending) items — otherwise 400 'Finish reviewing the current
+    batch first.' The next batch goes to the first track in order with
+    remaining target > 0 whose pool still has items never offered in ANY
+    previous batch; every remaining track exhausted → 400 (the host finishes
+    with fewer than target — unanimous keeps are always kept)."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
+    account = require_account(request, db)
+    if session.host_account_id != account.id:
+        raise HTTPException(403, "Only the host can start the next batch")
+    if session.status in ENDED_STATUSES:
+        raise HTTPException(400, "This session is over.")
+    if session.status != "voting":
+        raise HTTPException(400, "Session hasn't started voting yet.")
+    if _open_batch(db, session) is not None:
+        raise HTTPException(400, "Finish reviewing the current batch first.")
+    pending = (
+        db.scalar(
+            select(func.count())
+            .select_from(BatchItem)
+            .join(Batch, Batch.id == BatchItem.batch_id)
+            .where((Batch.session_id == session.id) & BatchItem.outcome.is_(None))
+        )
+        or 0
+    )
+    if pending > 0:
+        raise HTTPException(400, "Finish reviewing the current batch first.")
+    track, chosen = _next_batch_assembly(db, session)
+    if track is None:
+        if _all_targets_met(db, session):
+            raise HTTPException(400, "All targets met — finish the session.")
+        raise HTTPException(400, "No more options to vote on — finish the session.")
+    existing_seqs = list(
+        db.scalars(select(Batch.seq).where(Batch.session_id == session.id)).all()
+    )
+    batch = Batch(
+        session_id=session.id,
+        seq=next_seq(existing_seqs),
+        track_label=track,
+        status="open",
+    )
+    db.add(batch)
+    db.flush()
+    for sort_order, item_id in enumerate(chosen):
+        db.add(
+            BatchItem(
+                batch_id=batch.id,
+                item_id=item_id,
+                ad_hoc_label=None,
+                sort_order=sort_order,
+            )
+        )
+    session.last_activity_at = func.now()
+    db.commit()
+    return RedirectResponse(f"/s/{session.code}", status_code=303)
+
+
+@router.post("/s/{code}/finish")
+def finish_session(
+    request: Request, code: str, db: Annotated[Session, Depends(get_db)]
+):
+    """Host-only 'finish the session' (M3e): ends voting/lobby, deletes every
+    participant row (§5.5 rule 2 — display names and account links do not
+    outlive the session), and stamps finished_at. An OPEN batch is closed
+    first (manual close: missing = 'no', D5) so no batch_response rows survive
+    to block participant deletion. Idempotent: a second finish on an already
+    'complete' session is a 303 no-op; an 'expired' session refuses (400)."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
+    account = require_account(request, db)
+    if session.host_account_id != account.id:
+        raise HTTPException(403, "Only the host can finish the session")
+    if session.status == "expired":
+        raise HTTPException(400, "This session is over.")
+    if session.status == "complete":
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # idempotent
+    if session.status not in ("voting", "lobby"):
+        raise HTTPException(400, "Session can't be finished from its current state")
+    open_batch = _open_batch(db, session)
+    if open_batch is not None:
+        _close_batch(db, session, open_batch, manual=True)
+    if session.status == "lobby":
+        # Ending before voting starts is a host decision this slice allows;
+        # the base state machine only exposes lobby → voting/expired, so
+        # apply_transition('lobby', 'complete') would raise.
+        session.status = "complete"
+    else:
+        session.status = apply_transition(session.status, "complete")
+    db.execute(delete(SessionParticipant).where(SessionParticipant.session_id == session.id))
+    session.finished_at = func.now()
     db.commit()
     return RedirectResponse(f"/s/{session.code}", status_code=303)
 
@@ -1003,6 +1317,11 @@ def voting_status_partial(
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry on load
+    if session.status in ENDED_STATUSES:
+        return templates.TemplateResponse(
+            request, "_session_ended_note.html", {"session": session}
+        )
     finished, roster = _voting_progress_counts(db, session)
     return templates.TemplateResponse(
         request, "_voting_status.html", {"finished": finished, "roster": roster}
@@ -1022,9 +1341,12 @@ def remove_participant(
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
     account = require_account(request, db)
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can remove participants")
+    if session.status in ENDED_STATUSES:
+        raise HTTPException(400, "This session is over.")
     if session.status != "lobby":
         raise HTTPException(400, "Can't remove participants after voting starts")
     participant = db.scalar(

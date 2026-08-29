@@ -657,3 +657,37 @@ on a results page**. All passed. Suite: **259 passed**.
 Next: M3e — session progression (remaining-target tracking, start next batch, over-target host selection
 D13, session-complete when targets met, 24h lazy expiry + participant deletion §5.5, session summary).
 This completes the voting engine.
+
+---
+
+## 2026-08-29 — M3e landed: session progression & teardown. THE VOTING ENGINE IS COMPLETE.
+
+Final M3 slice. `POST /next-batch` (host) tracks per-track kept counts (`_track_progress`), picks the
+first track with remaining>0, assembles the next batch excluding every already-offered item, and advances
+to the next track (or refuses with a finish-the-session 400) when a pool is exhausted — guarded so it
+only runs on a fully-resolved batch. `POST /finish` (host) closes any open batch first (so no votes
+survive), transitions voting→complete, sets finished_at, and DELETES all SessionParticipant rows (§5.5:
+participants don't outlive the session); idempotent on an already-complete session. A completion view
+(`session_complete.html`) shows the kept-item plan grouped by track. Lazy 24h expiry (`_expire_if_stale`,
+called at the top of every session route) transitions a stale lobby/voting session to 'expired', purges
+an abandoned open batch's vote rows AND its participants (§5.5 rule 4), and refuses further mutations;
+never touches 'complete'.
+
+**Lead decision (flagged in REQUESTS.md):** strict D13 over-target *trimming* is replaced by
+"host-decides-when-to-stop" — targets are guidance, the host starts batches while they want more and
+finishes when satisfied, unanimous keeps always stand. This honors D13's intent (host controls the
+outcome) without a trim UI; strict trimming is a possible refinement.
+
+Implementation: `deepseek-v4-flash`, dispatch + one --continue. Three residual failures, all **stale
+tests, not product bugs** — proven by fixing the tests and re-verifying the behavior live: (1) a
+`complete` session now shows the plan summary (not the generic ended page) — test split by status;
+(2)/(3) two next-batch tests conflated host + voter into one client and forgot to re-stamp the host
+cookie / mis-unpacked the dinner-only batch — the author had the right pattern in sibling tests. Lead
+verification: a full session run to completion (complete + finished_at, participants deleted, zero
+batch_response, plan lists kept items, idempotent finish) and the expiry path (stale session expired on
+load, abandoned votes + participants purged, mutations refused, fresh session untouched, complete never
+expired). One probe false-positive noted and cleared: "Sam" matched inside "Same Page" in the title, not
+a participant leak. Suite: **276 passed**.
+
+Voting engine M3a–M3e done. Next: a whole-codebase audit of the new session surface (the every-5-slices
+/ pre-milestone discipline), then M4 reporting.

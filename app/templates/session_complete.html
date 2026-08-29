@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Your plan · {{ session.code }} · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <h1 class="page-title">Your plan</h1>
+  <p class="page-meta">Session <span class="sp-code">{{ session.code }}</span>{% if collection_name %} · {{ collection_name }}{% endif %} is complete.</p>
+
+  {% if kept_groups %}
+    {% for group in kept_groups %}
+    <section class="card" style="padding:20px;margin-top:20px;">
+      <h2 class="section-title">{{ group.label }}</h2>
+      {% for item in group.kept_items %}
+      <div style="padding:14px 0;border-bottom:1px solid var(--sp-hairline);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div style="font-weight:600;">{{ item.name }}</div>
+          <span class="chip">{{ item.label }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </section>
+    {% endfor %}
+  {% else %}
+    <section class="card" style="padding:20px;margin-top:20px;">
+      <p class="empty-state">No meals were kept this session.</p>
+    </section>
+  {% endif %}
+
+  <div class="hero-cta">
+    <a class="btn btn-primary" href="/join">Join another session</a>
+  </div>
+</div>
+{% endblock %}

@@ -88,9 +88,24 @@
   {% endif %}
 
   <section class="card" style="padding:20px;margin-top:20px;">
-    <p class="empty-state">Starting the next batch and finishing the session arrive in the next release (M3e).</p>
-    {% if not is_host %}
-    <p class="page-meta" style="text-align:center;">Waiting for the host to finish reviewing.</p>
+    <h2 class="section-title">Progress</h2>
+    <p class="page-meta">
+      {% for row in track_progress %}{{ row.label }}: {{ row.kept }} of {{ row.target_count }}{% if not loop.last %} · {% endif %}{% endfor %}
+    </p>
+    {% if all_targets_met %}
+    <p class="page-meta" style="font-weight:600;">All targets met — finish when ready.</p>
+    {% endif %}
+    {% if is_host %}
+      {% if not all_targets_met and next_batch_available %}
+      <form method="post" action="/s/{{ session.code }}/next-batch" style="margin-top:16px;">
+        <button type="submit" class="btn btn-primary btn-block">Start next batch</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/s/{{ session.code }}/finish" style="margin-top:12px;">
+        <button type="submit" class="btn btn-secondary btn-block">Finish session</button>
+      </form>
+    {% else %}
+      <p class="page-meta" style="text-align:center;">Waiting for the host.</p>
     {% endif %}
   </section>
 </div>

@@ -32,6 +32,12 @@ Tracked so they don't get lost — these are settled calls, not open questions.
   account-deletion/deactivation path ever lands, a surviving session cookie shows a live-looking
   indicator while every real route 401s. Revisit the context processor in the same slice that adds any
   account-removal capability. (Oscar M2c review, 2026-08-29 — minor, consciously deferred.)
+- [ ] **Over-target trim (D13 strict) deferred by a lead decision (2026-08-29).** M3e implements
+  "host decides when to stop": targets show as guidance ("2 of 3 kept"), the host starts the next batch
+  while they want more and clicks Finish when satisfied; unanimous keeps are always kept (a batch may
+  tip the count one past target). The original D13 "host picks which to drop when a batch agrees on more
+  than the target" is NOT built — it needs its own trim UI and the host-stops model already gives the
+  host full control of the outcome. Flag if you want strict trimming; otherwise this stands.
 - [ ] **Library export** — JSON export of items + recipes as backup/portability. M5 ships DB-level
   backups regardless; this would be a user-facing export on top. Low priority.
 - [ ] **Drop `Category.legacy_sheet_index`.** This column persists a meal's position on the old dice
