@@ -464,3 +464,40 @@ the design's token set); six spacing-only inline styles **rejected as a defect**
 permitted by the spec); missing favicon test **fixed** (`test_favicon_served`); no focus-visible
 styling **fixed** (accent-colored `:focus-visible` rules, also replacing the browser default ring).
 Suite: **128 passed**, ruff clean.
+
+---
+
+## 2026-08-29 — M5a landed: pure Google SSO (password auth removed)
+
+Email+password auth is gone. Sign-in is Google OAuth (OIDC) via Authlib behind a `PROVIDERS` registry
+keyed on URL segment — the modularity seam for Apple later (plan §4). New `auth_identity` table
+(UNIQUE(provider,subject)); `account.password_hash` dropped; `app/credentials.py` deleted; `/signup`
+is now a redirect to `/login`; the login page is a single "Continue with Google" (with a
+graceful not-configured degradation when `SP_GOOGLE_CLIENT_ID/SECRET` are unset). Tests authenticate
+by stamping a signed session cookie (`stamp_session` in conftest) and drive the callback through a
+FakeProvider — real Google is never contacted.
+
+Implementation: `deepseek-v4-flash`, spec dispatch + two `--continue` rounds. Lead root-caused and
+fixed the two residual failures (a test cookie-domain misfire I introduced and reverted; the logout
+test rewritten to assert the Set-Cookie deletion header, since a manually-stamped test jar keeps the
+cookie a real browser would drop). Lead smoke test: booted the app on the *populated* preview DB —
+migration 0007 upgraded it cleanly, `/auth/google` 503s unconfigured, `/login` shows the degradation.
+
+Oscar review (Sonnet, security-focused, live repros incl. real-Authlib CSRF/state probing): **ship**.
+Priority probes all clean — no account takeover beyond the inherent single-IdP note (below), no open
+redirect (incl. Unicode/CRLF/backslash variants), Authlib's state validation holds (cold/forged/replayed
+callback all 400, never 500, never signs in), session is a signed stateless cookie (no fixation),
+no secret logged/rendered. Dispositions:
+- (minor) commit-path unguarded → could 500 mid-write — **fixed**: create+link+commit now wrapped with
+  rollback-and-degrade; regression test asserts a commit failure yields 400 and no half-created account.
+- (defense-in-depth) `bool("false")` footgun on a string email_verified claim — **fixed**: explicit
+  `_claim_is_true` coercion (Google sends a real bool, but fail-closed anyway); unit test added.
+- (informational #2) legacy password accounts inherited by whoever later controls their verified email.
+  **Accepted / moot for production**: the production DB launches blank (no legacy accounts exist), so
+  there is no account to inherit. Recorded here because any *migrated* non-blank DB (e.g. the dev
+  preview) does carry pre-SSO accounts — not a concern for the live deploy Charlie specified.
+- (note) migration 0007 downgrade drops auth_identity rows — inherent, not a bug.
+
+Suite: **122 passed**, ruff clean. NEEDS-FROM-CHARLIE (REQUESTS.md): the Google OAuth client
+id/secret + domain before go-live; local testing runs against the FakeProvider / unconfigured
+degradation until then.

@@ -12,6 +12,7 @@ from app.main import _run_migrations
 
 EXPECTED_TABLES = {
     "account",
+    "auth_identity",
     "group",
     "group_admin",
     "collection",

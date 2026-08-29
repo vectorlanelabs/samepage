@@ -33,8 +33,28 @@ class Account(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String, nullable=False)
     display_name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+
+class AuthIdentity(Base):
+    """External SSO identity (M5a): one row per (provider, subject) pair.
+
+    The account is the durable login; this table records WHICH external
+    identity is allowed to sign into it. ``UniqueConstraint(provider,
+    subject)`` means one Google account maps to at most one Same Page
+    account (the email match on callback links a first Google login to an
+    existing account instead of creating a duplicate).
+    """
+
+    __tablename__ = "auth_identity"
+    __table_args__ = (UniqueConstraint("provider", "subject"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("account.id"), nullable=False)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    subject: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 

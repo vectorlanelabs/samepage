@@ -8,13 +8,13 @@ found in the 2026-08-29 review, where an account in two groups could never
 reach the second group's library, is what this URL scheme closes.
 """
 
+from conftest import stamp_session
 from sqlalchemy import func, select
 
-from app.credentials import hash_password
 from app.models import Account, Collection, Group, Item, ItemTag, MealDetail, Tag
 
 
-def _get_or_make_account(db_session, email="admin@example.com", password="testpass123", display_name="Admin"):
+def _get_or_make_account(db_session, email="admin@example.com", display_name="Admin"):
     """Get-or-create so `_make_group` and `_make_account` can be called in either
     order and still refer to the same account row (they share the same default
     email) — every library route now requires the caller to own the group whose
@@ -23,7 +23,7 @@ def _get_or_make_account(db_session, email="admin@example.com", password="testpa
     account = db_session.scalar(select(Account).where(Account.email == email))
     if account is not None:
         return account
-    account = Account(email=email, password_hash=hash_password(password), display_name=display_name)
+    account = Account(email=email, display_name=display_name)
     db_session.add(account)
     db_session.commit()
     return account
@@ -92,12 +92,14 @@ def _make_item(
     return item
 
 
-def _make_account(db_session, email="admin@example.com", password="testpass123", display_name="Admin"):
-    return _get_or_make_account(db_session, email=email, password=password, display_name=display_name)
+def _make_account(db_session, email="admin@example.com", display_name="Admin"):
+    return _get_or_make_account(db_session, email=email, display_name=display_name)
 
 
-def _login(post, email="admin@example.com", password="testpass123"):
-    post("/login", data={"email": email, "password": password})
+def _login(client, db_session, email="admin@example.com"):
+    """Authenticate the TestClient session as the account with `email`."""
+    account = db_session.scalar(select(Account).where(Account.email == email))
+    stamp_session(client, account)
 
 
 def _tags_of(db_session, item_id):
@@ -120,7 +122,7 @@ def test_legacy_library_redirects_to_first_meal_collection(client, post, db_sess
     group = _make_group(db_session)
     first = _make_collection(db_session, group.id, name="First")
     _make_collection(db_session, group.id, name="Second")
-    _login(post)
+    _login(client, db_session)
     resp = client.get("/library", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == f"/collections/{first.id}"
@@ -130,7 +132,7 @@ def test_legacy_library_redirects_to_hub_without_collection(client, post, db_ses
     """An account with no meal collection is 303'd to the collections hub
     instead of an empty library page."""
     _make_group(db_session)  # creates the admin@example.com account, no collection
-    _login(post)
+    _login(client, db_session)
     resp = client.get("/library", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/collections"
@@ -153,7 +155,7 @@ def test_collections_hub_shows_both_groups_collections(client, post, db_session)
     _make_item(db_session, collection_b.id, group_b.id, "B Burgers")
     _make_item(db_session, collection_b.id, group_b.id, "B Salad")
 
-    _login(post)
+    _login(client, db_session)
     resp = client.get("/collections")
     assert resp.status_code == 200
     assert "House A" in resp.text
@@ -186,7 +188,7 @@ def test_collections_hub_keeps_same_named_groups_separate(client, post, db_sessi
 
     assert group_1.id != group_2.id  # sanity: genuinely distinct groups
 
-    _login(post)
+    _login(client, db_session)
     resp = client.get("/collections")
     assert resp.status_code == 200
     # Both collections listed distinctly (each links to its own collection).
@@ -210,7 +212,7 @@ def test_collection_page_shows_only_that_collections_items(client, post, db_sess
     collection_b = _make_collection(db_session, group_b.id)
     _make_item(db_session, collection_b.id, group_b.id, "B Burgers")
 
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection_a.id}")
     assert resp.status_code == 200
     assert "A Tacos" in resp.text
@@ -238,7 +240,7 @@ def test_browse_another_groups_collection_404(client, post, db_session):
     _make_item(db_session, other_collection.id, other_group.id, "Their Secret Casserole")
 
     _make_group(db_session)  # the admin@example.com account/group under test
-    _login(post)
+    _login(client, db_session)
     assert client.get(f"/collections/{other_collection.id}").status_code == 404
     # And a collection id that doesn't exist at all.
     assert client.get("/collections/999999").status_code == 404
@@ -252,7 +254,7 @@ def test_library_page_lists_items(client, post, db_session):
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "Taco Tuesday", tags=["takeout"])
     _make_item(db_session, collection.id, group.id, "Pancakes", type="both")
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}")
     assert resp.status_code == 200
     assert "Meal Library" in resp.text
@@ -274,7 +276,7 @@ def test_library_orders_by_normalized_name_case_insensitively(client, post, db_s
     _make_item(db_session, collection.id, group.id, "Ziti", type="dinner")
     _make_item(db_session, collection.id, group.id, "bacon and eggs", type="both")
     _make_item(db_session, collection.id, group.id, "Apple pie", type="both")
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}")
     assert resp.status_code == 200
     assert resp.text.index("Apple pie") < resp.text.index("bacon and eggs") < resp.text.index("Ziti")
@@ -285,7 +287,7 @@ def test_library_search_filters(client, post, db_session):
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "taco soup", type="both")
     _make_item(db_session, collection.id, group.id, "bacon and eggs", type="both")
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}", params={"q": "taco"})
     assert "taco soup" in resp.text
     assert "bacon and eggs" not in resp.text
@@ -301,7 +303,7 @@ def test_library_type_filter(client, post, db_session):
     _make_item(db_session, collection.id, group.id, "Steak", type="dinner")
     _make_item(db_session, collection.id, group.id, "Quesadillas", type="both")
     _make_item(db_session, collection.id, group.id, "Salad bar", type="lunch")
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}", params={"type": "both"})
     assert "Quesadillas" in resp.text
     assert "Steak" not in resp.text
@@ -317,7 +319,7 @@ def test_library_tag_filter_or_semantics(client, post, db_session):
     _make_item(db_session, collection.id, group.id, "Whataburger", tags=["takeout"])
     _make_item(db_session, collection.id, group.id, "Pizza Rolls", tags=["takeout", "snack"])
     _make_item(db_session, collection.id, group.id, "Homemade bread", tags=["snack"])
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}", params={"tags": "takeout"})
     assert "Whataburger" in resp.text
     assert "Pizza Rolls" in resp.text
@@ -334,7 +336,7 @@ def test_archived_hidden_by_default_visible_with_status(client, post, db_session
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "Old pasta", archived=True)
     _make_item(db_session, collection.id, group.id, "Fresh tacos")
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}")
     assert "Fresh tacos" in resp.text
     assert "Old pasta" not in resp.text
@@ -352,7 +354,7 @@ def test_library_kept_label_and_recipe_link(client, post, db_session):
     item = _make_item(db_session, collection.id, group.id, "Brisket", recipe_text="Slow cook it.")
     item.times_kept = 3
     db_session.commit()
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}")
     assert "Kept 3×" in resp.text
     assert "Recipe →" in resp.text
@@ -371,7 +373,7 @@ def test_library_page_renders_item_with_no_meal_detail(client, post, db_session)
     )
     db_session.add(detail_less)
     db_session.commit()
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}")
     assert resp.status_code == 200
     assert "No Detail Yet" in resp.text
@@ -394,7 +396,7 @@ def test_recipe_view_renders(client, post, db_session):
         recipe_text="Brown the beef. Simmer an hour.",
         source_url="https://example.com/chili",
     )
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}/items/{item.id}")
     assert resp.status_code == 200
     assert "Chili" in resp.text
@@ -410,7 +412,7 @@ def test_recipe_view_empty_state(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     item = _make_item(db_session, collection.id, group.id, "Mystery night")
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}/items/{item.id}")
     assert resp.status_code == 200
     assert "No recipe saved yet" in resp.text
@@ -420,7 +422,7 @@ def test_recipe_view_empty_state(client, post, db_session):
 def test_recipe_view_unknown_404(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
-    _login(post)
+    _login(client, db_session)
     assert client.get(f"/collections/{collection.id}/items/999999").status_code == 404
 
 
@@ -431,7 +433,7 @@ def test_recipe_view_another_groups_collection_404(client, post, db_session):
     other_collection = _make_collection(db_session, other_group.id)
     other_item = _make_item(db_session, other_collection.id, other_group.id, "Their secret recipe")
     _make_group(db_session)  # the admin@example.com account/group under test
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{other_collection.id}/items/{other_item.id}")
     assert resp.status_code == 404
 
@@ -443,7 +445,7 @@ def test_recipe_view_another_groups_item_404(client, post, db_session):
     other_item = _other_groups_item(db_session)
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
-    _login(post)
+    _login(client, db_session)
     assert client.get(f"/collections/{collection.id}/items/{other_item.id}").status_code == 404
 
 
@@ -454,7 +456,7 @@ def test_recipe_view_mismatched_collection_404(client, post, db_session):
     collection_a = _make_collection(db_session, group.id, name="A")
     collection_b = _make_collection(db_session, group.id, name="B")
     item_a = _make_item(db_session, collection_a.id, group.id, "A Tacos")
-    _login(post)
+    _login(client, db_session)
     resp = client.get(f"/collections/{collection_b.id}/items/{item_a.id}")
     assert resp.status_code == 404
 
@@ -482,7 +484,7 @@ def test_create_item(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_account(db_session)
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items",
         data={
@@ -513,7 +515,7 @@ def test_create_item_without_tags_or_recipe(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_account(db_session)
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items",
         data={"name": "Bare meal", "type": "lunch"},
@@ -540,7 +542,7 @@ def test_create_lands_in_url_collection(client, post, db_session):
 
     group_b = _make_group(db_session, group_name="House B")
     collection_b = _make_collection(db_session, group_b.id, name="Meal Planner B")
-    _login(post)
+    _login(client, db_session)
 
     resp = post(
         f"/collections/{collection_b.id}/items",
@@ -558,7 +560,7 @@ def test_create_duplicate_normalized_name_400(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_account(db_session)
-    _login(post)
+    _login(client, db_session)
     _make_item(db_session, collection.id, group.id, "Bacon and Eggs")
     resp = post(
         f"/collections/{collection.id}/items",
@@ -572,7 +574,7 @@ def test_create_invalid_type_400(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_account(db_session)
-    _login(post)
+    _login(client, db_session)
     resp = post(f"/collections/{collection.id}/items", data={"name": "Weird", "type": "brunch"})
     assert resp.status_code == 400
 
@@ -581,7 +583,7 @@ def test_create_empty_name_400(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_account(db_session)
-    _login(post)
+    _login(client, db_session)
     resp = post(f"/collections/{collection.id}/items", data={"name": "   ", "type": "dinner"})
     assert resp.status_code == 400
 
@@ -592,7 +594,7 @@ def test_create_another_groups_collection_404(client, post, db_session):
     other_group = _make_group(db_session, owner_email="other-owner@example.com", group_name="Other Household")
     other_collection = _make_collection(db_session, other_group.id)
     _make_group(db_session)  # the admin@example.com account/group under test
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{other_collection.id}/items",
         data={"name": "Stowaway", "type": "dinner"},
@@ -608,7 +610,7 @@ def test_update_item_rename_and_type(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_account(db_session)
-    _login(post)
+    _login(client, db_session)
     item = _make_item(db_session, collection.id, group.id, "Old Name", type="dinner", tags=["takeout"])
     resp = post(
         f"/collections/{collection.id}/items/{item.id}",
@@ -629,7 +631,7 @@ def test_update_rename_collision_400(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_account(db_session)
-    _login(post)
+    _login(client, db_session)
     _make_item(db_session, collection.id, group.id, "Tacos")
     item = _make_item(db_session, collection.id, group.id, "Other")
     resp = post(
@@ -654,7 +656,7 @@ def test_archive_redirects_to_collection(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     item = _make_item(db_session, collection.id, group.id, "Old pasta")
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items/{item.id}/archive",
         follow_redirects=False,
@@ -667,7 +669,7 @@ def test_cycle_type_redirects_to_collection(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     item = _make_item(db_session, collection.id, group.id, "Steak", type="dinner")
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items/{item.id}/cycle-type",
         follow_redirects=False,
@@ -698,7 +700,7 @@ def test_update_another_groups_collection_404(client, post, db_session):
     other_item = _other_groups_item(db_session)
     other_collection_id = other_item.collection_id
     _make_group(db_session)  # admin@example.com's own group, so they're a real signed-in account
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{other_collection_id}/items/{other_item.id}",
         data={"name": "Hijacked", "type": "dinner"},
@@ -713,7 +715,7 @@ def test_update_another_groups_item_404(client, post, db_session):
     other_item = _other_groups_item(db_session)
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items/{other_item.id}",
         data={"name": "Hijacked", "type": "dinner"},
@@ -730,7 +732,7 @@ def test_update_mismatched_collection_404(client, post, db_session):
     collection_a = _make_collection(db_session, group.id, name="A")
     collection_b = _make_collection(db_session, group.id, name="B")
     item_a = _make_item(db_session, collection_a.id, group.id, "A Tacos")
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection_b.id}/items/{item_a.id}",
         data={"name": "Renamed", "type": "dinner"},
@@ -743,7 +745,7 @@ def test_update_mismatched_collection_404(client, post, db_session):
 def test_archive_another_groups_collection_404(client, post, db_session):
     other_item = _other_groups_item(db_session)
     _make_group(db_session)
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{other_item.collection_id}/items/{other_item.id}/archive",
         follow_redirects=False,
@@ -757,7 +759,7 @@ def test_archive_another_groups_item_404(client, post, db_session):
     other_item = _other_groups_item(db_session)
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items/{other_item.id}/archive",
         follow_redirects=False,
@@ -772,7 +774,7 @@ def test_archive_mismatched_collection_404(client, post, db_session):
     collection_a = _make_collection(db_session, group.id, name="A")
     collection_b = _make_collection(db_session, group.id, name="B")
     item_a = _make_item(db_session, collection_a.id, group.id, "A Tacos")
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection_b.id}/items/{item_a.id}/archive",
         follow_redirects=False,
@@ -788,7 +790,7 @@ def test_unarchive_another_groups_item_404(client, post, db_session):
     other_item = _make_item(db_session, other_collection.id, other_group.id, "Their Archived Recipe", archived=True)
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items/{other_item.id}/unarchive",
         follow_redirects=False,
@@ -802,7 +804,7 @@ def test_cycle_type_another_groups_item_404(client, post, db_session):
     other_item = _other_groups_item(db_session)
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
-    _login(post)
+    _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items/{other_item.id}/cycle-type",
         follow_redirects=False,

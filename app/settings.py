@@ -59,6 +59,15 @@ class Settings:
     api_key: str = field(default_factory=lambda: os.environ.get("SP_API_KEY", ""))
     port: int = field(default_factory=lambda: int(os.environ.get("SP_PORT", "8000")))
     env: str = field(default_factory=lambda: os.environ.get("SP_ENV", "development"))
+    google_client_id: str = field(default_factory=lambda: os.environ.get("SP_GOOGLE_CLIENT_ID", ""))
+    google_client_secret: str = field(default_factory=lambda: os.environ.get("SP_GOOGLE_CLIENT_SECRET", ""))
+    base_url: str = field(default_factory=lambda: os.environ.get("SP_BASE_URL", ""))
+
+    def __post_init__(self) -> None:
+        # SP_BASE_URL wins when set; otherwise derive from the port. Computed
+        # here (after all fields) so the default can reference `port`.
+        if not self.base_url:
+            self.base_url = f"http://localhost:{self.port}"
 
     @property
     def https_only(self) -> bool:

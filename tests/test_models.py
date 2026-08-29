@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db import Base
 from app.models import (
     Account,
+    AuthIdentity,
     Category,
     Collection,
     Group,
@@ -23,7 +24,6 @@ from app.models import (
 def test_account_round_trip(db_session):
     account = Account(
         email="test@example.com",
-        password_hash="pbkdf2-hash",
         display_name="Test User",
     )
     db_session.add(account)
@@ -34,13 +34,12 @@ def test_account_round_trip(db_session):
 
     account_q = db_session.get(Account, account.id)
     assert account_q.email == "test@example.com"
-    assert account_q.password_hash == "pbkdf2-hash"
     assert account_q.display_name == "Test User"
 
 
 def test_group_and_admin_round_trip(db_session):
-    owner = Account(email="owner@example.com", password_hash="hash1", display_name="Owner")
-    admin = Account(email="admin@example.com", password_hash="hash2", display_name="Admin")
+    owner = Account(email="owner@example.com", display_name="Owner")
+    admin = Account(email="admin@example.com", display_name="Admin")
     db_session.add_all([owner, admin])
     db_session.flush()
 
@@ -67,12 +66,12 @@ def test_group_and_admin_round_trip(db_session):
 
 def test_duplicate_account_email_raises_integrity_error(db_session):
     """Duplicate email constraint."""
-    account1 = Account(email="test@example.com", password_hash="hash1", display_name="User 1")
+    account1 = Account(email="test@example.com", display_name="User 1")
     db_session.add(account1)
     db_session.commit()
 
     with pytest.raises(IntegrityError):
-        account2 = Account(email="test@example.com", password_hash="hash2", display_name="User 2")
+        account2 = Account(email="test@example.com", display_name="User 2")
         db_session.add(account2)
         db_session.commit()
     db_session.rollback()
@@ -80,7 +79,7 @@ def test_duplicate_account_email_raises_integrity_error(db_session):
 
 def test_delete_referenced_account_raises_integrity_error(db_session):
     """No cascade deletes: an account referenced by a group cannot be deleted."""
-    account = Account(email="owner@example.com", password_hash="hash", display_name="Owner")
+    account = Account(email="owner@example.com", display_name="Owner")
     db_session.add(account)
     db_session.flush()
     db_session.add(Group(name="Test Group", owner_account_id=account.id))
@@ -93,7 +92,7 @@ def test_delete_referenced_account_raises_integrity_error(db_session):
 
 
 def test_collection_round_trip(db_session):
-    account = Account(email="owner@example.com", password_hash="hash", display_name="Owner")
+    account = Account(email="owner@example.com", display_name="Owner")
     db_session.add(account)
     db_session.flush()
 
@@ -115,7 +114,7 @@ def test_collection_round_trip(db_session):
 
 def test_category_unique_constraint_per_collection(db_session):
     """Categories with the same name can exist in different collections."""
-    account = Account(email="owner@example.com", password_hash="hash", display_name="Owner")
+    account = Account(email="owner@example.com", display_name="Owner")
     db_session.add(account)
     db_session.flush()
 
@@ -144,8 +143,8 @@ def test_category_unique_constraint_per_collection(db_session):
 
 def test_tag_unique_constraint_per_group(db_session):
     """Tags with the same name can exist in different groups."""
-    account1 = Account(email="owner1@example.com", password_hash="hash1", display_name="Owner 1")
-    account2 = Account(email="owner2@example.com", password_hash="hash2", display_name="Owner 2")
+    account1 = Account(email="owner1@example.com", display_name="Owner 1")
+    account2 = Account(email="owner2@example.com", display_name="Owner 2")
     db_session.add_all([account1, account2])
     db_session.flush()
 
@@ -170,7 +169,7 @@ def test_tag_unique_constraint_per_group(db_session):
 
 def test_item_and_meal_detail_round_trip(db_session):
     """Item and MealDetail are 1:1; both persist and reload correctly."""
-    account = Account(email="owner@example.com", password_hash="hash", display_name="Owner")
+    account = Account(email="owner@example.com", display_name="Owner")
     db_session.add(account)
     db_session.flush()
 
@@ -215,7 +214,7 @@ def test_item_and_meal_detail_round_trip(db_session):
 
 def test_item_tag_linkage(db_session):
     """ItemTag links items to group-scoped tags."""
-    account = Account(email="owner@example.com", password_hash="hash", display_name="Owner")
+    account = Account(email="owner@example.com", display_name="Owner")
     db_session.add(account)
     db_session.flush()
 
@@ -253,6 +252,44 @@ def test_item_tag_linkage(db_session):
         select(Tag).join(ItemTag).where(ItemTag.item_id == item.id)
     ).all()
     assert {t.name for t in tags} == {"takeout", "spicy"}
+
+
+def test_auth_identity_round_trip(db_session):
+    """AuthIdentity persists provider/subject/email against its account."""
+    account = Account(email="sso@example.com", display_name="SSO User")
+    db_session.add(account)
+    db_session.commit()
+
+    identity = AuthIdentity(
+        account_id=account.id, provider="google", subject="sub-1", email="sso@example.com"
+    )
+    db_session.add(identity)
+    db_session.commit()
+
+    db_session.expire_all()
+    identity_q = db_session.get(AuthIdentity, identity.id)
+    assert identity_q.account_id == account.id
+    assert identity_q.provider == "google"
+    assert identity_q.subject == "sub-1"
+    assert identity_q.email == "sso@example.com"
+
+
+def test_auth_identity_unique_provider_subject(db_session):
+    """Schema-level guard (test #9): the same (provider, subject) can only
+    ever map to one account — a duplicate insert raises IntegrityError."""
+    account = Account(email="sso@example.com", display_name="SSO User")
+    db_session.add(account)
+    db_session.commit()
+
+    db_session.add(
+        AuthIdentity(account_id=account.id, provider="google", subject="sub-dup", email="sso@example.com")
+    )
+    db_session.commit()
+
+    with pytest.raises(IntegrityError):
+        db_session.add(AuthIdentity(account_id=account.id, provider="google", subject="sub-dup"))
+        db_session.commit()
+    db_session.rollback()
 
 
 def test_invalid_meal_detail_type_rejected_by_check_constraint(tmp_path):

@@ -7,14 +7,11 @@
     {% if error %}
     <p class="form-error">{{ error }}</p>
     {% endif %}
-    <form method="post" action="/login" class="auth-form">
-      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-      <input type="email" name="email" placeholder="Email" required autofocus class="input">
-      <input type="password" name="password" placeholder="Password" autocomplete="off" required class="input">
-      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
-    </form>
-    <p class="auth-switch">New here? <a href="{% if next %}/signup?next={{ next|urlencode }}{% else %}/signup{% endif %}">Create an account</a></p>
+    <p class="auth-sub">Accounts are only for hosting sessions and managing collections — voters just use an invite link.</p>
+    <a class="btn {% if sso_configured %}btn-primary{% else %}btn-secondary{% endif %} btn-block" href="/auth/google{% if next %}?next={{ next|urlencode }}{% endif %}">Continue with Google</a>
+    {% if not sso_configured %}
+    <p class="auth-note">Google sign-in isn't configured on this server yet.</p>
+    {% endif %}
   </section>
-  <p class="auth-note">You only need an account to host sessions or manage collections — voters just use an invite link.</p>
 </div>
 {% endblock %}

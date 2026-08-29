@@ -4,6 +4,8 @@ dependency is overridden to that engine (tests never touch the real DB).
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 import tempfile
 
@@ -15,6 +17,7 @@ os.environ["SP_SECRET"] = "test-secret-for-tests"
 
 import pytest
 from fastapi.testclient import TestClient
+from itsdangerous import TimestampSigner
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
@@ -33,6 +36,14 @@ def make_engine(path):
         cursor.close()
 
     return engine
+
+
+def stamp_session(client, account, secret="test-secret-for-tests"):
+    """Authenticate a TestClient the way SessionMiddleware would after SSO login."""
+    payload = base64.b64encode(
+        json.dumps({"account_id": account.id, "account_name": account.display_name}).encode()
+    )
+    client.cookies.set("session", TimestampSigner(secret).sign(payload).decode())
 
 
 @pytest.fixture()

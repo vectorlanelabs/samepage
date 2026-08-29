@@ -1,16 +1,20 @@
-from app.credentials import hash_password
+from conftest import stamp_session
+from sqlalchemy import select
+
 from app.models import Account, Collection, Group, Item
 
 
-def _make_account(db_session, email="admin@example.com", password="testpass123", display_name="Admin"):
-    account = Account(email=email, password_hash=hash_password(password), display_name=display_name)
+def _make_account(db_session, email="admin@example.com", display_name="Admin"):
+    account = Account(email=email, display_name=display_name)
     db_session.add(account)
     db_session.commit()
     return account
 
 
-def _login(post, email="admin@example.com", password="testpass123"):
-    post("/login", data={"email": email, "password": password})
+def _login(client, db_session, email="admin@example.com"):
+    """Authenticate the TestClient session as the account with `email`."""
+    account = db_session.scalar(select(Account).where(Account.email == email))
+    stamp_session(client, account)
 
 
 def test_home_signed_out_shows_no_data(client):
@@ -36,7 +40,7 @@ def test_home_signed_in_shows_own_counts(client, post, db_session):
     db_session.add(Item(collection_id=collection.id, name="Tacos", normalized_name="tacos"))
     db_session.commit()
 
-    _login(post)
+    _login(client, db_session)
     resp = client.get("/")
     assert resp.status_code == 200
     assert "What's for dinner?" in resp.text
@@ -62,7 +66,7 @@ def test_home_never_shows_another_groups_counts(client, post, db_session):
 
     # A second account with no groups of its own.
     _make_account(db_session)
-    _login(post)
+    _login(client, db_session)
     resp = client.get("/")
     assert "0 meals" in resp.text
     assert "0 groups" in resp.text

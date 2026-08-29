@@ -149,19 +149,16 @@ def test_api_path_with_evil_origin_still_rejected(probe):
     assert mutations == []
 
 
-def test_login_rejects_cross_site_origin(client):
-    resp = client.post(
-        "/login",
-        data={"email": "test@example.com", "password": "testpass123"},
-        headers={"Origin": "https://evil.example"},
-    )
+def test_logout_rejects_cross_site_origin(client):
+    """POST /logout is the app's one remaining mutating form route — a
+    cross-site Origin must be rejected by the middleware before the handler
+    (which would clear the session) ever runs."""
+    resp = client.post("/logout", headers={"Origin": "https://evil.example"})
     assert resp.status_code == 403
     assert resp.json() == {"detail": "CSRF origin mismatch"}
 
 
-def test_login_rejects_absent_origin(client):
-    resp = client.post(
-        "/login", data={"email": "test@example.com", "password": "testpass123"}
-    )
+def test_logout_rejects_absent_origin(client):
+    resp = client.post("/logout")
     assert resp.status_code == 403
     assert resp.json() == {"detail": "CSRF origin required"}

@@ -14,6 +14,9 @@ dependencies = [
     # starlette >=1.x moved itsdangerous to its "full" extra, but
     # starlette.middleware.sessions imports it unconditionally.
     "itsdangerous>=2.0",
+    # SSO (M5a): Google OAuth/OIDC provider; httpx is authlib's async transport.
+    "authlib>=1.3",
+    "httpx>=0.27",
 ]
 
 [dependency-groups]

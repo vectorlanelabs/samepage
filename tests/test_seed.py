@@ -5,7 +5,6 @@ the real DB is never touched."""
 
 from sqlalchemy import func, select
 
-from app.credentials import hash_password
 from app.models import Account, Category, Collection, Group, Item, ItemTag, MealDetail, Tag
 from scripts import seed as seed_module
 
@@ -14,11 +13,7 @@ SEED_PATH = seed_module.DEFAULT_SEED_PATH
 
 def _make_group(db):
     """Create an account and group for seed loading."""
-    account = Account(
-        email="owner@example.com",
-        password_hash=hash_password("testpass123"),
-        display_name="Owner",
-    )
+    account = Account(email="owner@example.com", display_name="Owner")
     db.add(account)
     db.flush()
 
