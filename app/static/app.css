@@ -20,7 +20,10 @@
   --sp-host-tint: #F0EDF9;  /* forward-declared for M3 host-only screens (design README) */
   --sp-danger:    #B65C4E;  /* remove / archive / end */
   --sp-avatar:    #E9E5DD;
-  --sp-shadow:    0 2px 8px rgba(60, 56, 44, 0.05);
+  /* Layered card shadow: crisp 1px contact + soft ambient (Quiet Kitchen v2). */
+  --sp-shadow:    0 1px 2px rgba(43, 46, 62, 0.04), 0 12px 32px rgba(43, 46, 62, 0.07);
+  /* Primary-button depth: contact shadow, accent glow, hairline inset top highlight. */
+  --sp-btn-shadow: 0 1px 2px rgba(43, 46, 62, 0.18), 0 4px 14px rgba(68, 104, 210, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.14);
 
   /* Type (not part of the handoff token block): Hanken Grotesk + IBM Plex Mono. */
   --sp-font-sans: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -37,6 +40,8 @@
     --sp-host: #A69DE0;    --sp-host-tint: #2E2A40;
     --sp-danger: #D48575;  --sp-avatar: #2E2F3A;
     --sp-shadow: none;     /* dark relies on borders, not shadows */
+    /* Dark drops card shadows; the accent button keeps only a faint glow. */
+    --sp-btn-shadow: 0 4px 14px rgba(126, 154, 236, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
 }
 
@@ -91,6 +96,8 @@ button { font-family: var(--sp-font-sans); }
   font-size: 17px;
   color: var(--sp-ink);
   margin-bottom: 22px;
+  white-space: nowrap;
+  flex: none;
 }
 
 .brand-glyph {
@@ -161,6 +168,11 @@ button { font-family: var(--sp-font-sans); }
 /* ---------- Top bar (mobile only) ---------- */
 
 .topbar { display: none; }
+
+/* Signed-out: no 250px app-shell sidebar. A slim top bar (brand + Sign in)
+   carries the chrome at every width, and the page owns the rest. */
+.shell--guest { flex-direction: column; }
+.shell--guest .topbar { display: flex; }
 
 /* ---------- Main content ---------- */
 
@@ -238,9 +250,20 @@ button { font-family: var(--sp-font-sans); }
 .btn-primary {
   background: var(--sp-accent);
   color: #fff;
+  box-shadow: var(--sp-btn-shadow);
 }
 
 .btn-primary:hover { filter: brightness(1.06); }
+
+/* Solid-ink button: used where a primary sits among accent CTAs and needs to
+   read as the lead action without competing on color (e.g. the hub's Host). */
+.btn-ink {
+  background: var(--sp-ink);
+  color: var(--sp-bg);
+  box-shadow: 0 1px 2px rgba(43, 46, 62, 0.18), 0 4px 14px rgba(43, 46, 62, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.btn-ink:hover { filter: brightness(1.12); }
 
 .btn-secondary {
   background: var(--sp-card);
@@ -249,6 +272,11 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .btn-secondary:hover { border-color: var(--sp-ink); }
+
+/* Dark mode: the accent is a light blue, so its buttons take dark ink text. */
+@media (prefers-color-scheme: dark) {
+  .btn-primary { color: #14151B; }
+}
 
 .btn-block { width: 100%; }
 
@@ -356,6 +384,7 @@ button { font-family: var(--sp-font-sans); }
   color: var(--sp-ink);
   font-family: var(--sp-font-sans);
   font-size: 15px;
+  box-shadow: inset 0 1px 2px rgba(43, 46, 62, 0.04);  /* fields read as wells */
 }
 
 .input::placeholder { color: var(--sp-faint); }
@@ -375,7 +404,7 @@ button { font-family: var(--sp-font-sans); }
 .hero-title {
   font-size: 28px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.018em;
   line-height: 1.2;
   color: var(--sp-ink);
   margin: 0;
@@ -424,6 +453,67 @@ button { font-family: var(--sp-font-sans); }
   font-weight: 500;
   color: var(--sp-sub);
   margin-top: 4px;
+}
+
+/* ---------- Signed-out landing ---------- */
+
+.landing {
+  display: grid;
+  gap: 22px;
+  align-items: start;
+}
+
+.landing-title {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--sp-ink);
+  margin: 0;
+}
+
+.landing-sub {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  line-height: 1.6;
+  margin: 12px 0 0;
+  max-width: 32em;
+}
+
+.landing .hero-cta { margin-top: 22px; }
+
+/* Join-by-code is the co-star, not a footnote. */
+.join-card { padding: 24px 22px; }
+
+.join-card-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--sp-ink);
+  margin: 0;
+}
+
+.join-card-sub {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 6px 0 16px;
+}
+
+/* Join codes are set in the mono accent face. */
+.input--code {
+  font-family: var(--sp-font-mono);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+@media (min-width: 860px) {
+  .landing {
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 40px;
+    padding-top: 24px;
+  }
+  .landing-title { font-size: 40px; }
 }
 
 /* ---------- Collections hub ---------- */

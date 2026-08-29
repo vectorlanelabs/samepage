@@ -35,7 +35,8 @@ until a refreshed mark is cut; the old wordmark PNGs are removed.
   --sp-host-tint: #F0EDF9;
   --sp-danger:    #B65C4E;  /* remove / archive / end */
   --sp-avatar:    #E9E5DD;
-  --sp-shadow:    0 2px 8px rgba(60, 56, 44, 0.05);
+  --sp-shadow:    0 1px 2px rgba(43, 46, 62, 0.04), 0 12px 32px rgba(43, 46, 62, 0.07);
+  --sp-btn-shadow: 0 1px 2px rgba(43, 46, 62, 0.18), 0 4px 14px rgba(68, 104, 210, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.14); /* primary buttons; ink buttons swap the blue glow for rgba(43,46,62,0.2) */
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -55,16 +56,19 @@ until a refreshed mark is cut; the old wordmark PNGs are removed.
 
 - One family: **Hanken Grotesk** (Google Fonts; self-hostable). Weights 400 / 500 / 600 / 700.
 - Mono accent: **IBM Plex Mono** 500, used ONLY for join codes (e.g. `PLUM-42`).
-- Scale (phone): screen titles 22–30/700 with `letter-spacing: -0.01em`; option name on the
+- Scale (phone): screen titles 22–30/700 with `letter-spacing: -0.018em`; option name on the
   voting card 34/600; body 14–15/400; labels + meta 12.5–13/500 in `--sp-sub`; never below 12px.
 - No small caps, no letterspaced uppercase, no italics.
+- Microcopy is lean: no reassurance footnotes or caption sub-cues. Account and privacy rules
+  live in the flows themselves, not in captions under buttons.
 
 ## Shape & depth
 
 - Radius: cards 14–18px, buttons/inputs 12px, chips/pills 999px.
 - Borders: 1px `--sp-border` on cards; 1.5px `--sp-border-strong` on inputs and secondary buttons.
-- Shadow: `--sp-shadow` on cards only, never on buttons (exception: the floating "+ Add a meal"
-  pill). Dark mode drops shadows entirely.
+- Shadow: `--sp-shadow` (layered: crisp 1px contact + soft ambient) on cards; `--sp-btn-shadow`
+  on primary buttons only — secondary/danger stay flat. Dark mode drops card shadows (borders
+  carry the layering) and keeps a faint glow on the accent button.
 - Buttons: 56–60px tall on phone (44px min hit target everywhere). Primary = solid accent;
   secondary = white + strong border; the hub's "Host a session" uses solid ink for contrast with
   the accent CTAs around it. Danger actions are text-only in `--sp-danger` — never filled red.
@@ -95,8 +99,7 @@ with text-danger Remove per plan §5.6; starting locks the roster), host results
 section on top with Keep/Pass per item — violet; unanimous below for reference; Start next
 batch primary; End session early as danger text).
 
-**3 · Auth** — sign in / sign up; both carry the reassurance line that accounts are only for
-hosting/managing.
+**3 · Auth** — sign in / sign up.
 
 **4 · Collections & library** — collections hub is the post-login home (`/collections/{id}`);
 library is browse/search/filter with chip filters and kept-count meta; item edit (segmented
@@ -106,8 +109,12 @@ cards + source link + offered/kept footer).
 **5 · Groups** — group list with current marked, members with ★ owner, removable admins,
 invite-by-email row.
 
-**6 · Reporting** — M4 placeholder: striped placeholder blocks with mono captions; copy states
-it is built on outcomes/totals, never individual votes.
+**6 · Reporting** — M4 placeholder: striped placeholder blocks with mono captions; charts
+read from batch outcomes and totals only.
+
+**Landing (signed-out)** — desktop and phone. No app-shell sidebar when signed out; value-prop
+headline left, join-by-code card as the co-star; sign in / create account quiet in the top-right.
+Join code entry posts to the same join flow as an invite link.
 
 **Desktop** — library gets a real desktop layout (250px sidebar nav + table: name / type / tags /
 kept / last kept). Session screens stay a centered 720px single column reusing the phone

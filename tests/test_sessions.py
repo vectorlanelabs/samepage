@@ -2145,8 +2145,11 @@ def test_collections_hub_host_session_button(client, db_session):
 def test_home_join_session_entry_signed_out(client):
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "Join a session" in resp.text
-    assert 'href="/join"' in resp.text
+    # The signed-out landing puts join-by-code inline as the co-star, rather
+    # than linking off to a separate join page.
+    assert "Joining someone's session?" in resp.text
+    assert 'action="/join"' in resp.text
+    assert "Join session" in resp.text
 
 
 def test_home_join_session_entry_signed_in(client, db_session):

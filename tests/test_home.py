@@ -25,7 +25,10 @@ def test_home_signed_out_shows_no_data(client):
     assert resp.status_code == 200
     assert "Same Page" in resp.text
     assert "Sign in" in resp.text
-    assert "Sign up" in resp.text
+    # Signed-out is a landing: value prop + join-by-code as the co-star, no
+    # app data. (Google SSO — there's no separate password sign-up screen.)
+    assert "Decide together" in resp.text
+    assert "Joining someone's session?" in resp.text
     assert "stat-count" not in resp.text  # no count data rendered at all
 
 
