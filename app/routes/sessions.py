@@ -19,7 +19,8 @@ deployment, so they are generated with collision retry against the permanent
 UNIQUE ``session.code`` set and never recycled. ``GET /s/{code}`` and the
 roster/voting-status polls are deliberately public (no auth) — voting is open
 by link/code per plan §2 — while every host mutation re-checks
-``host_account_id`` server-side.
+``host_account_id`` server-side. The two code-entry routes are throttled per
+client IP (20 lookups/minute, M5b: ``app/ratelimit.py``); the polls are not.
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ from app.models import (
 from app.models import (
     Session as VotingSession,
 )
+from app.ratelimit import JOIN_LIMITER, client_ip
 from app.session_logic import (
     BATCH_SIZE,
     Outcome,
@@ -76,6 +78,17 @@ TYPE_LABELS = {"dinner": "Dinner", "lunch": "Lunch", "both": "Both"}
 # becomes 'expired'. Enforcement is lazy — any route that loads a session
 # first applies the expiry check (no scheduler/background job).
 EXPIRY_HOURS = 24
+
+
+def _enforce_join_rate_limit(request: Request) -> None:
+    """Throttle the code-guessing surface (M5b, plan §5.6/§8): 20 code
+    lookups per IP per minute via the in-memory JOIN_LIMITER. Must run BEFORE
+    the DB lookup so a guesser can't even probe whether a code exists. The
+    roster/voting-status polls are deliberately NOT limited here — they fire
+    every 2s from every participant (a normal lobby would 429) and are hit by
+    already-joined clients, not code guessers."""
+    if JOIN_LIMITER.hit(client_ip(request)):
+        raise HTTPException(429, "Too many attempts — slow down.")
 
 
 def _owned_groups(db: Session, account: Account) -> list[dict]:
@@ -773,6 +786,7 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
     while voting), the live lobby for participants and the host, and — once
     voting — the one-option-at-a-time voting card / done state for
     participants and a watching overview for a host who never joined."""
+    _enforce_join_rate_limit(request)  # M5b: throttle code guessing, pre-lookup
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
@@ -882,6 +896,7 @@ def join_session(
     """Join a session by code. No account required; a signed-in viewer's name
     is only a pre-fill (they can join as anyone). The join window is lobby-only
     in M3b — voting sessions show the waiting state, ended sessions refuse."""
+    _enforce_join_rate_limit(request)  # M5b: throttle code guessing, pre-lookup
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")

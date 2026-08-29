@@ -25,6 +25,7 @@ from alembic import command
 from app.routes import auth, collections, groups, home, library, reports, sessions
 from app.security import setup_middleware
 from app.settings import REPO_ROOT, settings
+from app.templating import templates
 
 logger = logging.getLogger("samepage")
 
@@ -78,10 +79,14 @@ def health() -> dict:
 
 
 @app.exception_handler(StarletteHTTPException)
-async def _redirect_unauthenticated(request: Request, exc: StarletteHTTPException):
-    """A 401 on a browser page load redirects to /login instead of a bare JSON
-    error. API-style requests (no ``text/html`` in Accept) keep the default
-    JSON body — relevant once M6's token-authenticated routes exist."""
+async def _handle_http_exceptions(request: Request, exc: StarletteHTTPException):
+    """Browser-friendly bodies for errors a page load can hit. A 429 (the
+    join-by-code rate limiter, M5b) renders the friendly rate-limit page; a
+    401 redirects to /login. API-style requests (no ``text/html`` in Accept)
+    keep the default JSON body — relevant once M6's token-authenticated
+    routes exist."""
+    if exc.status_code == 429 and "text/html" in request.headers.get("accept", ""):
+        return templates.TemplateResponse(request, "rate_limited.html", {}, status_code=429)
     if exc.status_code == 401 and "text/html" in request.headers.get("accept", ""):
         target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
         return RedirectResponse(f"/login?{urlencode({'next': target})}", status_code=303)

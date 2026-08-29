@@ -732,3 +732,26 @@ in reporting.
 
 All feature milestones (M0–M4 + M5a) done. Remaining: M5 (hardening, PWA, backup/restore, Docker/Caddy,
 deploy docs, join-code rate limiting) and M6 (per-group API + MCP).
+
+---
+
+## 2026-08-29 — M5b landed: join-code rate limiting (last pre-deploy security blocker)
+
+New app/ratelimit.py: an in-memory `SlidingWindowLimiter` (dict of key→hit-timestamp deques, injectable
+clock) with `JOIN_LIMITER` = 20 code-lookups per IP per 60s, wired at the top of `GET /s/{code}` and
+`POST /s/{code}/join` (the two routes taking an attacker-supplied code) — over the limit → 429 before the
+DB lookup (a friendly html page for browsers). The 2s roster/voting-status polls and the authenticated
+host/vote actions are deliberately NOT limited, so a real lobby never throttles itself. In-memory is
+sufficient (single-process/single-worker SQLite); X-Forwarded-For is trusted only behind our proxy
+(documented). This closes plan §8 M5's security list — SSO (M5a) already removed the password-guessing
+blockers.
+
+Implementation: `deepseek-v4-flash`. 17 initial failures, all **test-infra, not product**: the module-
+level JOIN_LIMITER singleton accumulated hits across every test in the process (one test-client IP) and
+spuriously tripped — **fixed** with an autouse conftest fixture clearing it per test (real clients start
+with a fresh window). Plus one incorrect unit test (advanced 30s against a 60s window, so "stale" wasn't
+actually stale) — **fixed** to advance past the window. Lead verification: guessing trips 429 after the
+limit (10 of 30 blocked), the html branch shows the friendly page, and 40 rapid roster polls are never
+throttled. Suite: **292 passed**, ruff clean.
+
+Next: M5c PWA packaging, then M5d deployment artifacts (Dockerfile/compose/Caddyfile/backup/deploy docs).

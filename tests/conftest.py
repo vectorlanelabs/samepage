@@ -100,3 +100,16 @@ def post(client):
         return client.post(url, data=data, headers=h, **kwargs)
 
     return _post
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """The join-code rate limiter is a module-level singleton whose hit
+    counters would otherwise accumulate across every test in the process (all
+    from one test-client IP) and spuriously trip. Clear it before each test —
+    each test starts with a fresh window, matching a real fresh client."""
+    from app.ratelimit import JOIN_LIMITER
+
+    JOIN_LIMITER._hits.clear()
+    yield
+    JOIN_LIMITER._hits.clear()
