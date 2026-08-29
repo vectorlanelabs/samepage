@@ -14,44 +14,30 @@
     </div>
   </div>
 
-  <div class="lib-toolbar">
-    <form method="get" action="/collections/{{ collection.id }}" class="lib-search">
-      <input type="text" name="q" value="{{ q }}" placeholder="Search meals…" class="input">
-      <input type="hidden" name="type" value="{{ type }}">
-      <input type="hidden" name="tags" value="{{ tags }}">
-      <input type="hidden" name="status" value="{{ status }}">
-      <button type="submit" class="btn btn-secondary">Search</button>
-    </form>
-    <div class="chip-row">
-      {% for tf in type_filters %}
-      <form method="get" action="/collections/{{ collection.id }}" class="chip-form">
-        <input type="hidden" name="q" value="{{ q }}">
-        <input type="hidden" name="tags" value="{{ tags }}">
-        <input type="hidden" name="status" value="{{ status }}">
-        <button type="submit" name="type" value="{{ tf.value }}" class="chip{% if tf.active %} chip--on{% endif %}">{{ tf.label }}</button>
-      </form>
+  <form method="get" action="/collections/{{ collection.id }}" class="lib-toolbar">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search…" class="input lib-search-input">
+    <select name="type" class="input lib-filter" onchange="this.form.submit()" aria-label="Type">
+      {% for opt in type_options %}
+      <option value="{{ opt.value }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
       {% endfor %}
-    </div>
-    <div class="chip-row">
-      {% for sf in status_filters %}
-      <form method="get" action="/collections/{{ collection.id }}" class="chip-form">
-        <input type="hidden" name="q" value="{{ q }}">
-        <input type="hidden" name="type" value="{{ type }}">
-        <input type="hidden" name="tags" value="{{ tags }}">
-        <button type="submit" name="status" value="{{ sf.value }}" class="chip{% if sf.active %} chip--on{% endif %}">{{ sf.label }}</button>
-      </form>
+    </select>
+    {% if has_tags %}
+    <select name="tags" class="input lib-filter" onchange="this.form.submit()" aria-label="Tag">
+      {% for opt in tag_options %}
+      <option value="{{ opt.value }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
       {% endfor %}
-    </div>
-  </div>
-
-  {% if tag_filters %}
-  <div class="field-label lib-tags-label">Tags</div>
-  <div class="chip-row">
-    {% for tag in tag_filters %}
-    <a href="{{ tag.url }}" class="chip{% if tag.selected %} chip--on{% endif %}">{{ tag.name }}</a>
-    {% endfor %}
-  </div>
-  {% endif %}
+    </select>
+    {% endif %}
+    <select name="status" class="input lib-filter" onchange="this.form.submit()" aria-label="Status">
+      {% for opt in status_options %}
+      <option value="{{ opt.value }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary lib-search-btn">Search</button>
+    {% if any_filter_active %}
+    <a href="{{ clear_url }}" class="text-link lib-clear">Clear</a>
+    {% endif %}
+  </form>
 
   <div class="lib-grid">
   {% for m in meals %}

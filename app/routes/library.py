@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from typing import Annotated
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -484,40 +484,30 @@ def library_page(
         or 0
     )
 
-    def _filter_url(overrides: dict) -> str:
-        params = {"q": q, "type": type, "tags": tags, "status": status}
-        params.update({k: v for k, v in overrides.items() if v is not None})
-        params = {k: v for k, v in params.items() if v}
-        base = f"/collections/{collection.id}"
-        return f"{base}?{urlencode(params)}" if params else base
-
-    def _toggle_tag_url(tag_name: str) -> str:
-        if tag_name in tag_names:
-            new_tags = [t for t in tag_names if t != tag_name]
-        else:
-            new_tags = tag_names + [tag_name]
-        return _filter_url({"tags": ",".join(new_tags)})
-
-    type_filters = [
+    # Filters render as compact dropdowns (v4): one <select> each for type,
+    # status, and tag. Options carry their own selected flag; the form GETs back
+    # to this same page.
+    type_options = [
         {
             "label": "All types" if key == "all" else MEAL_TYPE_LABELS[key],
             "value": "" if key == "all" else key,
-            "active": type == ("" if key == "all" else key),
+            "selected": type == ("" if key == "all" else key),
         }
         for key in ("all", *MEAL_TYPES)
     ]
-    status_filters = [
-        {"label": label, "value": value, "active": status == value}
+    status_options = [
+        {"label": label, "value": value, "selected": status == value}
         for label, value in (("Active", "active"), ("Archived", "archived"), ("All", "all"))
     ]
-    tag_filters = [
-        {
-            "name": tag.name,
-            "url": _toggle_tag_url(tag.name),
-            "selected": tag.name in tag_names,
-        }
+    # Tag filtering keeps its comma-separated OR-capable param, but the dropdown
+    # picks one at a time; a single selected tag round-trips.
+    selected_tag = tag_names[0] if tag_names else ""
+    tag_options = [{"label": "All tags", "value": "", "selected": not selected_tag}] + [
+        {"label": tag.name, "value": tag.name, "selected": tag.name == selected_tag}
         for tag in _all_tags(db, collection.group_id)
     ]
+
+    any_filter_active = bool(q or type or tag_names or status != "active")
 
     return templates.TemplateResponse(
         request,
@@ -532,9 +522,12 @@ def library_page(
             "type": type,
             "tags": tags,
             "status": status,
-            "type_filters": type_filters,
-            "status_filters": status_filters,
-            "tag_filters": tag_filters,
+            "type_options": type_options,
+            "status_options": status_options,
+            "tag_options": tag_options,
+            "has_tags": len(tag_options) > 1,
+            "any_filter_active": any_filter_active,
+            "clear_url": f"/collections/{collection.id}",
         },
     )
 
