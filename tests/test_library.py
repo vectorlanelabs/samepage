@@ -576,7 +576,7 @@ def test_create_item(client, post, db_session):
     assert _ingredients_of(db_session, item.id) == ["a", "b"]  # blank lines dropped
     assert detail.recipe_text == "Do the thing."  # trailing whitespace stripped
     assert detail.source_url == "https://example.com/test"
-    assert resp.headers["location"] == f"/collections/{collection.id}/items/{item.id}/edit"
+    assert resp.headers["location"] == f"/collections/{collection.id}?added=1"
     # Tags incl. the brand-new "weeknight" were created and linked.
     assert _tags_of(db_session, item.id) == {"takeout", "weeknight"}
 
@@ -623,7 +623,7 @@ def test_create_lands_in_url_collection(client, post, db_session):
     item = db_session.scalar(select(Item).where(Item.normalized_name == "b item"))
     assert item is not None
     assert item.collection_id == collection_b.id  # landed in B, not A
-    assert resp.headers["location"] == f"/collections/{collection_b.id}/items/{item.id}/edit"
+    assert resp.headers["location"] == f"/collections/{collection_b.id}?added=1"
 
 
 def test_create_duplicate_normalized_name_400(client, post, db_session):
@@ -688,7 +688,7 @@ def test_update_item_rename_and_type(client, post, db_session):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == f"/collections/{collection.id}/items/{item.id}/edit"
+    assert resp.headers["location"] == f"/collections/{collection.id}/items/{item.id}/edit?saved=1"
     db_session.refresh(item)
     assert item.name == "New Name"
     assert item.normalized_name == "new name"  # recomputed on rename

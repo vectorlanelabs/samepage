@@ -760,6 +760,18 @@ button { font-family: var(--sp-font-sans); }
   margin: 14px 0 0;
 }
 
+/* Success confirmation banner (meal added / changes saved). */
+.flash {
+  margin: 16px 0 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: var(--sp-accent-tint);
+  color: var(--sp-accent);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.flash::before { content: "\2713\00a0"; }  /* ✓ */
+
 /* Segmented type control — Lunch / Dinner / Both. */
 .segmented {
   display: flex;
@@ -1163,3 +1175,91 @@ button { font-family: var(--sp-font-sans); }
 .prose ul { margin: 0 0 12px; padding-left: 20px; }
 .prose li { margin: 0 0 6px; }
 .prose a { color: var(--sp-accent); }
+
+/* ---------- API / MCP token panel ---------- */
+
+.token-reveal {
+  border: 1.5px solid var(--sp-accent);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  background: var(--sp-accent-tint);
+}
+
+.token-reveal-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sp-ink);
+  margin-bottom: 10px;
+}
+
+/* A monospace value with a copy button (token / endpoint URLs). */
+.copy-field {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.copy-value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid var(--sp-border);
+  border-radius: 10px;
+  background: var(--sp-field);
+  font-family: var(--sp-font-mono);
+  font-size: 12.5px;
+  color: var(--sp-ink);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.copy-btn {
+  flex: none;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1.5px solid var(--sp-border-strong);
+  border-radius: 10px;
+  background: var(--sp-card);
+  color: var(--sp-ink);
+  font-family: var(--sp-font-sans);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.copy-btn:hover { border-color: var(--sp-ink); }
+.copy-btn.is-copied { background: var(--sp-accent); color: #fff; border-color: var(--sp-accent); }
+
+.conn-block { margin-top: 4px; }
+
+.doc-block {
+  margin-top: 16px;
+  border-top: 1px solid var(--sp-hairline);
+  padding-top: 12px;
+}
+
+.doc-block summary {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--sp-accent);
+  cursor: pointer;
+}
+
+.doc-body { margin-top: 10px; }
+.doc-body p { font-size: 13.5px; color: var(--sp-sub); line-height: 1.55; margin: 0 0 10px; }
+.doc-body strong { color: var(--sp-ink); }
+
+.doc-code {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--sp-chip-bg);
+  color: var(--sp-ink);
+  font-family: var(--sp-font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-x: auto;
+}

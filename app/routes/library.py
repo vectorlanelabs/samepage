@@ -255,6 +255,7 @@ def _render_edit(
     selected_tags: list[str],
     error: str | None,
     status_code: int = 200,
+    flash: str | None = None,
 ):
     """Render meal_edit.html for a new (item=None) or existing item.
 
@@ -276,6 +277,7 @@ def _render_edit(
                 for t in MEAL_TYPES
             ],
             "error": error,
+            "flash": flash,
         },
         status_code=status_code,
     )
@@ -385,9 +387,11 @@ def library_page(
     type: str = "",
     tags: str = "",
     status: str = "active",
+    added: int = 0,
 ):
     """Collection browse (signed-in accounts only): search (q), type / tag (OR)
-    / status filters, scoped to the collection in the URL."""
+    / status filters, scoped to the collection in the URL. ``?added=1`` (set by
+    the create redirect) shows a "meal added" confirmation banner."""
     account = require_account(request, db)
     collection = _get_owned_collection_or_404(db, account, collection_id)
 
@@ -528,6 +532,7 @@ def library_page(
             "has_tags": len(tag_options) > 1,
             "any_filter_active": any_filter_active,
             "clear_url": f"/collections/{collection.id}",
+            "flash": "Meal added." if added else None,
         },
     )
 
@@ -586,8 +591,10 @@ def edit_meal_page(
     collection_id: int,
     item_id: int,
     db: Annotated[Session, Depends(get_db)],
+    saved: int = 0,
 ):
-    """Edit page for an existing item (signed-in account, own collection)."""
+    """Edit page for an existing item (signed-in account, own collection).
+    ``?saved=1`` (set by the update redirect) shows a "changes saved" banner."""
     account = require_account(request, db)
     collection = _get_owned_collection_or_404(db, account, collection_id)
     item = _get_owned_item_or_404(db, collection, item_id)
@@ -601,6 +608,7 @@ def edit_meal_page(
         _item_form(db, item, detail),
         _item_tags(db, item.id),
         error=None,
+        flash="Changes saved." if saved else None,
     )
 
 
@@ -654,7 +662,9 @@ def create_meal(
     for tag in _resolve_tags(db, collection.group_id, tags):
         db.add(ItemTag(item_id=item.id, tag_id=tag.id))
     db.commit()
-    return RedirectResponse(f"/collections/{collection.id}/items/{item.id}/edit", status_code=303)
+    # Land back in the library so the new meal is visibly there — a redirect to
+    # the edit page looked identical to the add form and read as "nothing saved".
+    return RedirectResponse(f"/collections/{collection.id}?added=1", status_code=303)
 
 
 @router.post("/collections/{collection_id}/items/{item_id}")
@@ -710,7 +720,10 @@ def update_meal(
     detail.source_url = _safe_source_url(form["source_url"]) or None
 
     db.commit()
-    return RedirectResponse(f"/collections/{collection.id}/items/{item.id}/edit", status_code=303)
+    # Stay on the edit page (you may keep editing) but confirm the save.
+    return RedirectResponse(
+        f"/collections/{collection.id}/items/{item.id}/edit?saved=1", status_code=303
+    )
 
 
 @router.post("/collections/{collection_id}/items/{item_id}/archive")

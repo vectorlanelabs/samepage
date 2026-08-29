@@ -7,6 +7,9 @@
     <h1 class="page-title">{% if meal is none %}Add a meal{% else %}Edit {{ meal.name }}{% endif %}</h1>
   </div>
 
+  {% if flash %}
+  <p class="flash">{{ flash }}</p>
+  {% endif %}
   {% if error %}
   <p class="form-error">{{ error }}</p>
   {% endif %}
