@@ -19,8 +19,12 @@ deployment, so they are generated with collision retry against the permanent
 UNIQUE ``session.code`` set and never recycled. ``GET /s/{code}`` and the
 roster/voting-status polls are deliberately public (no auth) — voting is open
 by link/code per plan §2 — while every host mutation re-checks
-``host_account_id`` server-side. The two code-entry routes are throttled per
-client IP (20 lookups/minute, M5b: ``app/ratelimit.py``); the polls are not.
+``host_account_id`` server-side. The code-entry surface is throttled per
+client IP (20 lookups/minute, M5b: ``app/ratelimit.py``) — but only for
+viewers who are NOT participants of, or the host of, the session they're
+hitting: a voter's post-vote redirect and lobby polls must never 429, while a
+code guesser keeps burning the bucket (Slice B fix). The roster/voting-status
+polls are not limited at all.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from __future__ import annotations
 import random
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -56,7 +61,14 @@ from app.models import (
     Session as VotingSession,
 )
 from app.ratelimit import JOIN_LIMITER, client_ip
-from app.routes.library import _item_ingredients, _item_meal_types, _types_label
+from app.routes.library import (
+    _item_ingredients,
+    _item_meal_detail,
+    _item_meal_types,
+    _item_tags,
+    _safe_source_url,
+    _types_label,
+)
 from app.session_logic import (
     BATCH_SIZE,
     Outcome,
@@ -68,7 +80,7 @@ from app.session_logic import (
     make_code,
     next_seq,
 )
-from app.templating import templates
+from app.templating import short_date_label, templates
 
 router = APIRouter()
 
@@ -82,11 +94,13 @@ EXPIRY_HOURS = 24
 
 def _enforce_join_rate_limit(request: Request) -> None:
     """Throttle the code-guessing surface (M5b, plan §5.6/§8): 20 code
-    lookups per IP per minute via the in-memory JOIN_LIMITER. Must run BEFORE
-    the DB lookup so a guesser can't even probe whether a code exists. The
-    roster/voting-status polls are deliberately NOT limited here — they fire
-    every 2s from every participant (a normal lobby would 429) and are hit by
-    already-joined clients, not code guessers."""
+    lookups per IP per minute via the in-memory JOIN_LIMITER. Callers invoke
+    this AFTER the session lookup has either failed (unknown code → the 404
+    still costs a bucket hit) or revealed a stranger (valid code, no
+    membership), so a guesser can't probe codes without paying. A session's
+    participants and host NEVER hit this — their every-2s lobby polls and
+    post-vote redirects land on the same routes and a normal voter would 429
+    by option ~9 of a 15-option batch otherwise."""
     if JOIN_LIMITER.hit(client_ip(request)):
         raise HTTPException(429, "Too many attempts — slow down.")
 
@@ -491,7 +505,10 @@ def _completion_context(db: Session, session: VotingSession) -> dict:
 
 def _option_data(db: Session, session: VotingSession, batch_item: BatchItem) -> dict:
     """Render data for one option on the voting card: name, type label, tags,
-    and the optional recipe link (collection-backed items only in M3c)."""
+    description, and the optional recipe link (collection-backed items only in
+    M3c). The recipe link is session-scoped — ``/s/{code}/recipe/{id}`` — so a
+    guest voter or non-admin participant can actually open it (the old
+    ``/collections/...`` link 401'd guests and 404'd non-owning voters)."""
     item = db.get(Item, batch_item.item_id) if batch_item.item_id is not None else None
     if item is None:
         return {
@@ -499,6 +516,7 @@ def _option_data(db: Session, session: VotingSession, batch_item: BatchItem) -> 
             "name": batch_item.ad_hoc_label or "",
             "type_label": None,
             "tags": [],
+            "description": None,
             "recipe_url": None,
         }
     detail = db.scalar(select(MealDetail).where(MealDetail.item_id == item.id))
@@ -520,8 +538,9 @@ def _option_data(db: Session, session: VotingSession, batch_item: BatchItem) -> 
         "name": item.name,
         "type_label": type_label,
         "tags": tags,
+        "description": item.description,
         "recipe_url": (
-            f"/collections/{session.collection_id}/items/{item.id}" if has_recipe else None
+            f"/s/{session.code}/recipe/{item.id}" if has_recipe else None
         ),
     }
 
@@ -791,11 +810,27 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
     ended page for an expired one, the join page for strangers (waiting state
     while voting), the live lobby for participants and the host, and — once
     voting — the one-option-at-a-time voting card / done state for
-    participants and a watching overview for a host who never joined."""
-    _enforce_join_rate_limit(request)  # M5b: throttle code guessing, pre-lookup
+    participants and a watching overview for a host who never joined.
+
+    Membership-exempt throttling (Slice B fix): the join limiter is enforced
+    ONLY for viewers who are neither a participant of this session nor its
+    host. An unknown code pays a bucket hit before the 404 (guessers can't
+    probe for free), and a stranger who knows a valid code pays before the
+    page renders — but participants and the host never do, because this route
+    is hit by every post-vote redirect and lobby poll.
+    """
     session = _get_session_by_code(db, code)
     if session is None:
+        # Unknown code: the guesser keeps burning the bucket — enforce BEFORE
+        # the 404 so the status code can't be read without paying.
+        _enforce_join_rate_limit(request)
         raise HTTPException(404, "Session not found")
+    account = get_current_account(request, db)
+    participant = _viewer_participant(request, db, session)
+    is_host = account is not None and account.id == session.host_account_id
+    if participant is None and not is_host:
+        # Stranger traffic stays limited; members/hosts skip it entirely.
+        _enforce_join_rate_limit(request)
     _expire_if_stale(db, session)  # lazy §5.5 expiry on load
     if session.status == "complete":
         # M3e: the resulting plan is public — anyone with the code sees it.
@@ -807,9 +842,6 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
             request, "session_ended.html", {"session": session, "chrome": "session"}
         )
 
-    account = get_current_account(request, db)
-    participant = _viewer_participant(request, db, session)
-    is_host = account is not None and account.id == session.host_account_id
     if participant is None and not is_host:
         return templates.TemplateResponse(
             request,
@@ -861,6 +893,12 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
         responded, total = _progress(db, open_batch, participant)
         next_option = _next_option(db, open_batch, participant)
         if next_option is not None:
+            collection = (
+                db.get(Collection, session.collection_id)
+                if session.collection_id is not None
+                else None
+            )
+            group = db.get(Group, session.group_id)
             return templates.TemplateResponse(
                 request,
                 "voting_card.html",
@@ -869,6 +907,8 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
                     "option": _option_data(db, session, next_option),
                     "responded": responded,
                     "total": total,
+                    "collection_name": collection.name if collection else "Ad hoc session",
+                    "group_name": group.name if group else "",
                     "chrome": "session",
                 },
             )
@@ -893,6 +933,104 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
     context["roster"] = roster
     context["has_open_batch"] = open_batch is not None
     return templates.TemplateResponse(request, "session_lobby.html", context)
+
+
+# --- Session recipe view (Slice B) -----------------------------------------
+
+
+def _source_domain(url: str | None) -> str | None:
+    """The source URL's hostname with a leading 'www.' stripped, for the
+    session recipe view's 'Full recipe at {domain}' link label. None when the
+    URL has no hostname (the link is already gated on ``_safe_source_url``)."""
+    if not url:
+        return None
+    hostname = urlsplit(url).hostname
+    if not hostname:
+        return None
+    return hostname.removeprefix("www.")
+
+
+@router.get("/s/{code}/recipe/{item_id}")
+def session_recipe_page(
+    request: Request,
+    code: str,
+    item_id: int,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Session-scoped recipe view (Slice B): where the voting card's recipe
+    link goes.
+
+    The old link pointed at ``/collections/{cid}/items/{iid}``, which required
+    a signed-in owning account — guests got 401 and non-admin voters 404. This
+    view authorizes by session membership instead: a participant of THIS
+    session (the same mechanism ``_viewer_participant`` uses) or the host
+    account may read the recipe for any item offered in this session.
+
+    Security mirrors the other session routes: the route is throttled for
+    viewers who aren't participants of the session or its host
+    (``_enforce_join_rate_limit`` — the code in the URL is a guessing
+    surface; members/hosts skip it, the same membership exemption as
+    ``GET /s/{code}``), unknown sessions are 404, and the item must be
+    offered in THIS session — a ``BatchItem`` row joined to one of the
+    session's batches — which implies it belongs to the session's collection,
+    so no cross-tenant read is possible. Anyone else is 404, never 403 (no
+    existence oracle, CLAUDE.md #6).
+    """
+    session = _get_session_by_code(db, code)
+    if session is None:
+        # Unknown code: guessers keep burning the bucket — enforce BEFORE the
+        # 404 so the status code can't be read without paying.
+        _enforce_join_rate_limit(request)
+        raise HTTPException(404, "Session not found")
+    account = get_current_account(request, db)
+    participant = _viewer_participant(request, db, session)
+    is_host = account is not None and account.id == session.host_account_id
+    if participant is None and not is_host:
+        # Stranger traffic stays limited; members/hosts skip it entirely.
+        _enforce_join_rate_limit(request)
+    _expire_if_stale(db, session)  # lazy §5.5 expiry on load
+    if session.status in ENDED_STATUSES:
+        return templates.TemplateResponse(
+            request, "session_ended.html", {"session": session, "chrome": "session"}
+        )
+
+    if participant is None and not is_host:
+        raise HTTPException(404, "Not a participant of this session")
+
+    # The item must be offered in THIS session (any batch): a BatchItem row
+    # whose batch belongs to the session. At most one row can match (item_id is
+    # unique per batch), and its existence implies the item is in the session's
+    # collection — the join can't reach another tenant's items.
+    batch_item = db.scalar(
+        select(BatchItem)
+        .join(Batch, Batch.id == BatchItem.batch_id)
+        .where((Batch.session_id == session.id) & (BatchItem.item_id == item_id))
+    )
+    if batch_item is None:
+        raise HTTPException(404, "Item not offered in this session")
+
+    item = db.get(Item, item_id)
+    if item is None:
+        raise HTTPException(404, "Item not found")  # defensive — the FK guarantees it
+    detail = _item_meal_detail(db, item.id)
+    return templates.TemplateResponse(
+        request,
+        "session_recipe.html",
+        {
+            "session": session,
+            "item": item,
+            "type_label": _types_label(_item_meal_types(db, item.id)) or None,
+            "tags": _item_tags(db, item.id),
+            "ingredients": _item_ingredients(db, item.id),
+            "recipe_text": detail.recipe_text if detail else None,
+            "safe_source_url": _safe_source_url(detail.source_url if detail else None),
+            "source_domain": _source_domain(detail.source_url) if detail else None,
+            "last_kept_label": (
+                short_date_label(item.last_kept_at) if item.last_kept_at else None
+            ),
+            "chrome": "session",
+        },
+    )
 
 
 @router.post("/s/{code}/join")

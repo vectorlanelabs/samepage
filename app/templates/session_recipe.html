@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ item.name }} · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <a class="back-link" href="/s/{{ session.code }}">← Back to voting</a>
+  <h1 class="page-title recipe-title">{{ item.name }}</h1>
+  <div class="chip-row" style="margin-top:12px;">
+    {% if type_label %}
+    <span class="chip chip--static">{{ type_label }}</span>
+    {% endif %}
+    {% for t in tags %}
+    <span class="chip chip--static">{{ t }}</span>
+    {% endfor %}
+  </div>
+
+  {% if ingredients %}
+  <section class="card recipe-section">
+    <h2 class="recipe-section-title">Ingredients</h2>
+    <ul class="ingredient-list">
+      {% for ing in ingredients %}
+      <li>{{ ing }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if recipe_text %}
+  <section class="card recipe-section">
+    <h2 class="recipe-section-title">Method</h2>
+    <div class="recipe-text">{{ recipe_text }}</div>
+  </section>
+  {% endif %}
+
+  {% if safe_source_url and source_domain %}
+  <a href="{{ safe_source_url }}" target="_blank" rel="noopener" class="text-link recipe-source">Full recipe at {{ source_domain }} ↗</a>
+  {% endif %}
+
+  <div class="recipe-footer">
+    <span>Offered {{ item.times_offered }}× · kept {{ item.times_kept }}×</span>
+    {% if last_kept_label %}
+    <span>Last kept {{ last_kept_label }}</span>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

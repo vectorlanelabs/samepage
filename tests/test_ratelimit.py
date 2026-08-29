@@ -3,13 +3,39 @@
 The limiter is pure in-memory state keyed by string, so every behavior is
 testable with a fake clock. ``client_ip`` is security-relevant header
 plumbing, so its trust-boundary behavior is pinned here too.
+
+One integration regression test lives at the end (Slice B fix): a session
+member must never be join-rate-limited by their own session's card/recipe/
+vote traffic, while a same-IP code guesser still 429s.
 """
 
 from __future__ import annotations
 
+import base64
+import json
 from collections import namedtuple
 
+from conftest import stamp_session
+from itsdangerous import TimestampSigner
+from sqlalchemy import select
+
+from app.models import (
+    Account,
+    Batch,
+    BatchItem,
+    Collection,
+    Group,
+    Item,
+    MealDetail,
+    MealType,
+    SessionParticipant,
+    SessionTarget,
+)
+from app.models import (
+    Session as VotingSession,
+)
 from app.ratelimit import JOIN_LIMITER, SlidingWindowLimiter, client_ip
+from app.session_logic import BATCH_SIZE
 
 Address = namedtuple("Address", ["host", "port"])
 
@@ -114,3 +140,112 @@ def test_client_ip_falls_back_to_direct_peer():
 def test_client_ip_unknown_without_client():
     req = FakeRequest(headers={}, client=None)
     assert client_ip(req) == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Integration: membership exemption on the REAL limiter (Slice B fix)
+# ---------------------------------------------------------------------------
+
+
+def _stamp_participant(client, participant_id: int) -> None:
+    """Point the client's signed session cookie at a participant row (like
+    conftest.stamp_session does for accounts). Clears the jar first — a real
+    browser holds ONE session cookie, but the test client accumulates a second
+    'session' entry (server-set + manually-set) that httpx then can't
+    disambiguate, so the switch silently wouldn't reach the server."""
+    client.cookies.clear()
+    payload = base64.b64encode(json.dumps({"participant_id": participant_id}).encode())
+    client.cookies.set(
+        "session", TimestampSigner("test-secret-for-tests").sign(payload).decode()
+    )
+
+
+def _collection_session(db_session, item_count: int = BATCH_SIZE):
+    """A lobby session backed by a collection with ``item_count`` dinner items
+    (every one with recipe_text, so the voting card links each one), its host
+    account, and one guest participant — all built directly (no HTTP) so the
+    test controls who the client is at each step."""
+    host = Account(email="host@example.com", display_name="Host")
+    db_session.add(host)
+    db_session.flush()
+    group = Group(name="Test Group", owner_account_id=host.id)
+    db_session.add(group)
+    db_session.flush()
+    collection = Collection(group_id=group.id, kind="meal", name="Meal Planner")
+    db_session.add(collection)
+    db_session.flush()
+    for i in range(item_count):
+        item = Item(
+            collection_id=collection.id,
+            name=f"Meal {i:02d}",
+            normalized_name=f"meal {i:02d}",
+        )
+        db_session.add(item)
+        db_session.flush()
+        db_session.add(MealType(item_id=item.id, meal_type="dinner"))
+        db_session.add(MealDetail(item_id=item.id, recipe_text=f"Method {i:02d}."))
+    session = VotingSession(
+        code="rate-limit-15",
+        status="lobby",
+        group_id=group.id,
+        host_account_id=host.id,
+        collection_id=collection.id,
+    )
+    db_session.add(session)
+    db_session.flush()
+    db_session.add(
+        SessionTarget(session_id=session.id, track_label="dinner", target_count=1)
+    )
+    guest = SessionParticipant(session_id=session.id, account_id=None, display_name="Guest")
+    db_session.add(guest)
+    db_session.commit()
+    return session, host, guest
+
+
+def test_session_member_exempt_while_guessing_still_limited(client, post, db_session):
+    """Slice B fix, regression with the REAL limiter (no mid-test clear): a
+    participant looping a 15-option batch — card → recipe → vote, 45 requests
+    in one window — is never 429, while >20 GETs of unknown codes from the
+    same IP still hits 429. Both halves run in ONE test so the member traffic
+    and the guessing share the same window (the autouse clearing fixture can't
+    reset the limiter between them)."""
+    session, host, guest = _collection_session(db_session, item_count=BATCH_SIZE)
+    stamp_session(client, host)
+    resp = post(f"/s/{session.code}/start", follow_redirects=False)
+    assert resp.status_code == 303
+
+    # The guest participant loops all 15 options: card → recipe → vote.
+    _stamp_participant(client, guest.id)
+    batch = db_session.scalar(
+        select(Batch).where((Batch.session_id == session.id) & (Batch.status == "open"))
+    )
+    assert batch is not None
+    batch_items = list(
+        db_session.scalars(
+            select(BatchItem)
+            .where(BatchItem.batch_id == batch.id)
+            .order_by(BatchItem.sort_order, BatchItem.id)
+        ).all()
+    )
+    assert len(batch_items) == BATCH_SIZE == 15
+    for index, batch_item in enumerate(batch_items):
+        card = client.get(f"/s/{session.code}")
+        assert card.status_code == 200, card.status_code
+        assert f"{index + 1} of {BATCH_SIZE}" in card.text
+        # The card links this option's recipe (every item has recipe_text).
+        assert f'href="/s/{session.code}/recipe/{batch_item.item_id}"' in card.text
+        recipe = client.get(f"/s/{session.code}/recipe/{batch_item.item_id}")
+        assert recipe.status_code == 200, recipe.status_code
+        voted = post(
+            f"/s/{session.code}/vote",
+            data={"batch_item_id": str(batch_item.id), "choice": "yes"},
+            follow_redirects=False,
+        )
+        assert voted.status_code == 303, voted.status_code
+
+    # The member's 45 hits never touched the limiter — the bucket is empty,
+    # so the same IP's code guessing is still throttled from scratch: 20
+    # unknown-code GETs 404 (each burning a hit), the 21st 429.
+    statuses = [client.get(f"/s/wrong-code-{i}").status_code for i in range(21)]
+    assert statuses[:20] == [404] * 20
+    assert statuses[20] == 429

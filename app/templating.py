@@ -11,6 +11,7 @@ session copy cannot go stale. If that ever changes, revisit this shortcut.
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Request
@@ -18,6 +19,17 @@ from fastapi.templating import Jinja2Templates
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+def short_date_label(value: datetime) -> str:
+    """'%b %-d'-style label ('Aug 8'), built portably from '%b %d'.
+
+    strftime's '%-d' is platform-specific (GNU vs BSD), so strip the leading
+    zero from the day ourselves.
+    """
+    month, day = value.strftime("%b %d").split()
+    return f"{month} {day.lstrip('0')}"
+
 
 
 def _static_version(name: str) -> str:

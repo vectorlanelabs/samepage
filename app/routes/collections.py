@@ -31,21 +31,11 @@ from app.models import (
     Session as VotingSession,
 )
 from app.session_logic import Outcome
-from app.templating import templates
+from app.templating import short_date_label, templates
 
 router = APIRouter()
 
 KEPT_OUTCOMES = [Outcome.KEPT_UNANIMOUS.value, Outcome.KEPT_HOST.value]
-
-
-def _short_date_label(value: datetime) -> str:
-    """'%b %-d'-style label ('Aug 8'), built portably from '%b %d'.
-
-    strftime's '%-d' is platform-specific (GNU vs BSD), so strip the leading
-    zero from the day ourselves.
-    """
-    month, day = value.strftime("%b %d").split()
-    return f"{month} {day.lstrip('0')}"
 
 
 def _greeting(account: Account) -> str:
@@ -129,7 +119,7 @@ def collections_page(request: Request, db: Annotated[Session, Depends(get_db)]):
                 "name": collection_name,
                 "active_count": active_count,
                 "last_session_label": (
-                    _short_date_label(last_session_at) if last_session_at else None
+                    short_date_label(last_session_at) if last_session_at else None
                 ),
             }
         )
@@ -166,7 +156,7 @@ def collections_page(request: Request, db: Annotated[Session, Depends(get_db)]):
             )
             last_kept = {
                 "count": kept_count,
-                "label": _short_date_label(last_complete.finished_at or last_complete.created_at),
+                "label": short_date_label(last_complete.finished_at or last_complete.created_at),
             }
 
     return templates.TemplateResponse(

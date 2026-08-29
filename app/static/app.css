@@ -971,6 +971,103 @@ button { font-family: var(--sp-font-sans); }
   color: var(--sp-faint);
 }
 
+/* ---------- Voting card (M7 S6) ---------- */
+
+/* The vote screen is a full-height flex column: header + progress on top, the
+   option card centered in the growing middle, Yes/No pinned to the bottom.
+   calc(100dvh - 60px) fits inside .content--session's padding (≤60px total)
+   so a short option never pushes the page into scroll on a phone. */
+.vote-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: calc(100dvh - 60px);
+}
+
+.vote-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.vote-context {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--sp-sub);
+}
+
+.vote-count {
+  flex: none;
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.vote-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sp-border);
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.vote-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--sp-accent);
+}
+
+.vote-middle {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  margin: 18px 0 22px;
+}
+
+.vote-card {
+  padding: 32px 26px;
+  text-align: left;
+}
+
+.vote-name {
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.018em;
+  color: var(--sp-ink);
+  margin: 0;
+}
+
+/* Chips first (when present) → the name needs air; ad hoc options start the
+   card with the name alone. */
+.chip-row + .vote-name { margin-top: 16px; }
+
+.vote-desc {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--sp-sub);
+  margin: 10px 0 0;
+}
+
+.vote-recipe { margin: 6px 0 0; }
+
+/* Yes above No, stacked full-width; 60px tall at every width (the mobile
+   media query's 56px override is lower specificity). */
+.vote-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.vote-actions .btn { min-height: 60px; }
+
 /* ---------- Groups ---------- */
 
 .create-row {
@@ -1174,8 +1271,12 @@ button { font-family: var(--sp-font-sans); }
     font-size: 16.5px;
   }
 
-  /* Session flow: full-height column so templates can pin CTAs to the bottom. */
-  .content--session { min-height: 100dvh; }
+  /* Session flow: full-height column so templates can pin CTAs to the bottom.
+     Session screens also shed the mobile .content bottom gutter (104px — sized
+     for the library's floating add button): a compact 16/18/24 padding keeps
+     the total vertical chrome ≤ 60px, so a .vote-screen of
+     calc(100dvh - 60px) fits a 390x844 viewport without scroll. */
+  .content--session { min-height: 100dvh; padding: 16px 18px 24px; }
 
   .hub-signout { display: block; }
 

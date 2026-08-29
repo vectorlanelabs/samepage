@@ -910,8 +910,9 @@ def test_start_twice_creates_one_batch(client, post, db_session):
 
 
 def test_voting_card_progresses_through_options(client, post, db_session):
-    """A joined participant sees one option at a time ('Option 1 of N'), with
-    type label + tags, and advances to option 2 after voting."""
+    """A joined participant sees one option at a time ('1 of N' in the header,
+    progress bar below), with type label + tags and a session-scoped recipe
+    link, and advances to option 2 after voting."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
     collection = _make_collection(db_session, group.id)
@@ -933,11 +934,18 @@ def test_voting_card_progresses_through_options(client, post, db_session):
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Option 1 of 3" in page.text
+    assert "1 of 3" in page.text
     assert "Apple" in page.text
     assert "Dinner" in page.text
     assert "quick" in page.text
-    assert f'href="/collections/{collection.id}/items/{apple.id}"' in page.text
+    # The recipe link is session-scoped (Slice B) — the old owner-only
+    # /collections/... link 401'd guests and 404'd non-owning voters.
+    assert f'href="/s/{session.code}/recipe/{apple.id}"' in page.text
+    assert "/collections/" not in page.text
+    # Composed voting screen: context line, progress bar, stacked vote forms.
+    assert "Meal Planner · Household" in page.text
+    assert 'class="vote-progress"' in page.text
+    assert f'action="/s/{session.code}/vote"' in page.text
     assert 'name="batch_item_id"' in page.text
     assert 'name="choice"' in page.text
 
@@ -952,8 +960,148 @@ def test_voting_card_progresses_through_options(client, post, db_session):
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Option 2 of 3" in page.text
+    assert "2 of 3" in page.text
     assert "Banana" in page.text
+
+
+# ---------------------------------------------------------------------------
+# Slice B: session-scoped recipe view (/s/{code}/recipe/{item_id})
+# ---------------------------------------------------------------------------
+
+
+def _recipe_session_setup(
+    db_session,
+    host_email: str = "host@example.com",
+    extra_items: int = 0,
+) -> tuple[VotingSession, Item, Collection]:
+    """A 'voting' session with an open batch containing one recipe item, built
+    directly (no POST /start) so the test controls who is signed in / joined.
+
+    ``extra_items`` adds that many more dinner items to the collection that are
+    NOT offered in the session's batch (for the not-offered 404 test)."""
+    host = _get_or_make_account(db_session, host_email, "Host")
+    group = _make_group(db_session, "Household", host.email)
+    collection = _make_collection(db_session, group.id, "Meal Planner")
+    apple = _make_item(
+        db_session, collection.id, "Apple", type="dinner", recipe_text="Boil water."
+    )
+    for i in range(extra_items):
+        _make_item(db_session, collection.id, f"Extra {i}", type="dinner")
+    session = _make_session(
+        db_session, group.id, host.id, status="voting", collection_id=collection.id
+    )
+    db_session.add(SessionTarget(session_id=session.id, track_label="dinner", target_count=1))
+    batch = Batch(session_id=session.id, seq=1, track_label="dinner", status="open")
+    db_session.add(batch)
+    db_session.flush()
+    db_session.add(
+        BatchItem(batch_id=batch.id, item_id=apple.id, ad_hoc_label=None, sort_order=0)
+    )
+    db_session.commit()
+    return session, apple, collection
+
+
+def test_session_recipe_guest_participant_200(client, db_session):
+    """A guest voter mid-vote can open the recipe link from the voting card:
+    the session-scoped route renders the item name + Method in session chrome
+    (no app-shell sidebar) — the old /collections link 401'd guests."""
+    session, apple, _ = _recipe_session_setup(db_session)
+    sam = SessionParticipant(session_id=session.id, account_id=None, display_name="Sam")
+    db_session.add(sam)
+    db_session.commit()
+    _stamp_participant(client, sam.id)  # guest: participant cookie, no account
+
+    # The voting card's recipe link is session-scoped (Slice B).
+    card = client.get(f"/s/{session.code}")
+    assert card.status_code == 200
+    assert f'href="/s/{session.code}/recipe/{apple.id}"' in card.text
+    assert "/collections/" not in card.text
+
+    page = client.get(f"/s/{session.code}/recipe/{apple.id}")
+    assert page.status_code == 200
+    assert "Apple" in page.text
+    assert "Method" in page.text
+    assert "Boil water." in page.text
+    assert "Offered 0× · kept 0×" in page.text
+    assert 'class="sidebar"' not in page.text
+    assert f'href="/s/{session.code}"' in page.text  # back to voting
+
+
+def test_session_recipe_host_never_joined_200(client, db_session):
+    """The host account (who never joined as a participant) may open the
+    session recipe."""
+    session, apple, _ = _recipe_session_setup(db_session)
+    _login(client, db_session, "host@example.com")
+    page = client.get(f"/s/{session.code}/recipe/{apple.id}")
+    assert page.status_code == 200
+    assert "Apple" in page.text
+    assert "Method" in page.text
+
+
+def test_session_recipe_non_participant_404(client, db_session):
+    """A client that never joined (fresh jar, knows the exact URL) gets 404 —
+    never 403, no existence oracle (CLAUDE.md #6)."""
+    session, apple, _ = _recipe_session_setup(db_session)
+    resp = client.get(f"/s/{session.code}/recipe/{apple.id}")
+    assert resp.status_code == 404
+
+
+def test_session_recipe_other_session_participant_404(client, db_session):
+    """A participant of a DIFFERENT session is not a participant of this one —
+    their participant id must not unlock this session's recipes."""
+    session_a, apple, _ = _recipe_session_setup(db_session)
+    other = _get_or_make_account(db_session, "other@example.com", "Other")
+    group_b = _make_group(db_session, "Other Household", other.email)
+    session_b = _make_session(db_session, group_b.id, other.id)
+    sam = SessionParticipant(session_id=session_b.id, account_id=None, display_name="Sam")
+    db_session.add(sam)
+    db_session.commit()
+    _stamp_participant(client, sam.id)  # joined session_b, not session_a
+
+    resp = client.get(f"/s/{session_a.code}/recipe/{apple.id}")
+    assert resp.status_code == 404
+
+
+def test_session_recipe_item_not_offered_404(client, db_session):
+    """A real item in the session's collection that was never offered in any
+    batch of THIS session is 404 (only offered items are readable)."""
+    session, _, _ = _recipe_session_setup(db_session, extra_items=1)
+    extra = db_session.scalar(select(Item).where(Item.name == "Extra 0"))
+    assert extra is not None
+    _login(client, db_session, "host@example.com")
+    resp = client.get(f"/s/{session.code}/recipe/{extra.id}")
+    assert resp.status_code == 404
+
+
+def test_session_recipe_cross_tenant_404(client, db_session):
+    """An item from another group's collection (never offered in this session)
+    is 404 — no cross-tenant reads possible."""
+    session, _, _ = _recipe_session_setup(db_session)
+    other = _get_or_make_account(db_session, "other@example.com", "Other")
+    group_b = _make_group(db_session, "Other Household", other.email)
+    collection_b = _make_collection(db_session, group_b.id, "Their meals")
+    pasta = _make_item(db_session, collection_b.id, "Pasta", type="dinner", recipe_text="Boil.")
+    _login(client, db_session, "host@example.com")
+    resp = client.get(f"/s/{session.code}/recipe/{pasta.id}")
+    assert resp.status_code == 404
+
+
+def test_session_recipe_unknown_code_404(client):
+    assert client.get("/s/ghost-0000/recipe/1").status_code == 404
+
+
+def test_session_recipe_ended_session_renders_ended_page(client, db_session):
+    """An expired session's recipe URL shows the ended page (like the other
+    session pages), not the recipe."""
+    session, apple, _ = _recipe_session_setup(db_session)
+    session.status = "expired"
+    session.finished_at = func.now()
+    db_session.commit()
+    _login(client, db_session, "host@example.com")
+    page = client.get(f"/s/{session.code}/recipe/{apple.id}")
+    assert page.status_code == 200
+    assert "This session has ended." in page.text
+    assert "Method" not in page.text
 
 
 def test_vote_records_once_and_first_vote_stands(client, post, db_session):
