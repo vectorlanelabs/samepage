@@ -17,6 +17,8 @@ dependencies = [
     # SSO (M5a): Google OAuth/OIDC provider; httpx is authlib's async transport.
     "authlib>=1.3",
     "httpx>=0.27",
+    # MCP server (M6b): the external AI-tool surface, mounted at /mcp.
+    "fastmcp>=3.4,<4",
 ]
 
 [dependency-groups]

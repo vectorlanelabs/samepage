@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from alembic import command
+from app.mcp_server import mcp_app
 from app.routes import api, auth, collections, groups, home, library, pages, reports, sessions
 from app.security import setup_middleware
 from app.settings import REPO_ROOT, settings
@@ -63,7 +64,8 @@ def _run_migrations(db_path: str | None = None) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _run_migrations()
-    yield
+    async with mcp_app.lifespan(app):
+        yield
 
 
 app = FastAPI(title="Same Page", lifespan=lifespan)
@@ -113,3 +115,5 @@ app.include_router(reports.router)
 app.include_router(sessions.router)
 app.include_router(api.router)
 app.include_router(pages.router)
+
+app.mount("/mcp", mcp_app)

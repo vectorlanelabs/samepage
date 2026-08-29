@@ -858,3 +858,29 @@ with vote privacy enforced structurally, reporting, a scoped JSON API, PWA insta
 backup artifacts. README updated to describe what exists. The safety-net cron is cancelled (the build is
 done; the only open item, M6b, needs Charlie's input). Still needed from Charlie before go-live: Google
 OAuth client + domain + CI go-word (REQUESTS.md), and the M6b decision.
+
+---
+
+## 2026-08-29 — M6b landed: MCP server. Milestone list complete.
+
+Wrapped the M6a operations as an MCP server (FastMCP 3.4) so an AI client can manage a group's library
+by talking to `/mcp` — Charlie's actual use case ("tell my LLM to add this recipe"). New app/mcp_server.py
+with five tools (list_collections, list_items, add_item, update_item, get_report), each resolving the
+caller's group from the same per-group Bearer token M6a issues (`get_http_headers(include={"authorization"})`
+→ hash_token → ApiToken → Group) as the single scoping choke point; cross-group access raises ToolError,
+mirroring the API's 404. No session/vote/participant tools; no per-person data. Mounted at `/mcp` with the
+FastMCP lifespan combined into the app's migration lifespan (the known integration gotcha — solved with
+`async with mcp_app.lifespan(app): yield`). Origin middleware already exempts `/mcp` (Bearer-authed).
+
+Implementation: `deepseek-v4-flash`; it stalled investigating the lifespan mechanism until handed the exact
+pattern, then finished clean. Honest notes it surfaced: fastmcp resolved to 3.x (lifespan pattern works
+there); `get_http_headers` strips `authorization` unless `include=` names it; the in-memory client can't
+forge HTTP headers so header-auth is unit-tested via monkeypatch while the mount is verified to boot/serve.
+Lead verification (direct, via the in-memory Client with monkeypatched headers): a group-A token sees only
+A's collections, add_item works end to end, and all four cross-group calls (list_items/get_report/add_item/
+update_item on B's data) raise ToolError with no DB change; no-token raises; B's data untouched. HTTP mount
+confirmed serving (GET/POST `/mcp/` → 406, not 404; POST not 403 → CSRF-exempt as intended). Tightened the
+dependency pin to `fastmcp>=3.4,<4`. Suite: **326 passed**, ruff clean.
+
+M0–M6 complete. Same Page is live at https://samepage.vectorlane.dev — public Google signup, the full
+voting engine, reporting, JSON API + MCP, PWA, auto-deploying via CI→Coolify.
