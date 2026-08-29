@@ -10,12 +10,28 @@ session copy cannot go stale. If that ever changes, revisit this shortcut.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+def _static_version(name: str) -> str:
+    """A short content hash for a static file, for cache-busting its URL.
+
+    Static assets sit behind a CDN (Cloudflare) with a long TTL, so a bare
+    /static/app.css keeps serving the stale file for hours after a deploy. A
+    ?v=<content-hash> query param makes each change a fresh URL — the CDN
+    caches each version immutably, and a new version is fetched immediately.
+    """
+    try:
+        return hashlib.sha256((STATIC_DIR / name).read_bytes()).hexdigest()[:10]
+    except OSError:
+        return "0"
 
 
 def _current_account(request: Request) -> dict:
@@ -31,3 +47,9 @@ templates = Jinja2Templates(
     directory=TEMPLATES_DIR,
     context_processors=[_current_account],
 )
+
+# Content-hashed versions for cache-busted static URLs (computed once at import).
+templates.env.globals["static_v"] = {
+    "app.css": _static_version("app.css"),
+    "htmx.min.js": _static_version("htmx.min.js"),
+}
