@@ -32,35 +32,23 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      # Coolify is only reachable on Charlie's tailnet (private), so a public
-      # GitHub runner can't hit the deploy webhook directly. Join the tailnet
-      # first when a Tailscale auth key is configured; without it, the deploy
-      # step reports honestly and the deploy stays a manual Coolify action.
+      # Coolify is private (only reachable on the tailnet), so the runner joins
+      # the tailnet with an ephemeral auth key before hitting the deploy API.
       - name: Connect to Tailscale
-        if: ${{ secrets.TS_OAUTH_CLIENT_ID != '' }}
         uses: tailscale/github-action@v3
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
+          authkey: ${{ secrets.TS_AUTHKEY }}
       - name: Trigger Coolify deploy
         env:
           URL: ${{ secrets.COOLIFY_WEBHOOK_URL }}
           TOKEN: ${{ secrets.COOLIFY_TOKEN }}
-          HAVE_TS: ${{ secrets.TS_OAUTH_CLIENT_ID != '' }}
         run: |
-          if [ -z "$URL" ] || [ "$HAVE_TS" != "true" ]; then
-            echo "::warning::Auto-deploy not wired yet — Coolify is Tailnet-only and the runner"
-            echo "can't reach it without Tailscale. The tested code is on main; deploy it with a"
-            echo "Redeploy in Coolify, or add TS_OAUTH_CLIENT_ID/TS_OAUTH_SECRET (+ the Tailnet"
-            echo "COOLIFY_WEBHOOK_URL) to enable this step."
-            exit 0
-          fi
-          # On the tailnet now — trigger the deploy (fire-and-forget: the build
-          # runs on Coolify independently of this connection).
-          AUTH=""; [ -n "$TOKEN" ] && AUTH="-H Authorization:Bearer $TOKEN"
-          code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' $AUTH "$URL" || echo "000")
+          # On the tailnet now — call Coolify's deploy API (Bearer = a Deploy-
+          # scoped token). Fire-and-forget: the build runs on Coolify
+          # independently of this request, so a 2xx means "accepted", not "built".
+          code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" "$URL" || echo "000")
           case "$code" in
             2*) echo "Coolify deploy triggered (HTTP $code).";;
-            *)  echo "::warning::Coolify webhook returned $code — check the URL/reachability. Deploy manually if needed.";;
+            *)  echo "::error::Coolify deploy API returned $code — deploy NOT triggered."; exit 1;;
           esac
