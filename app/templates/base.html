@@ -5,12 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Same Page{% endblock %}</title>
 <link rel="icon" href="/static/favicon.png">
-<link rel="apple-touch-icon" href="/static/favicon.png">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#4468D2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Same Page">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/htmx.min.js" defer></script>
+<script>
+  // Register the service worker (served at /sw.js for app-wide scope) — makes
+  // the app installable. Best-effort; failure just means no install prompt.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/sw.js").catch(function () {});
+    });
+  }
+</script>
 </head>
 <body>
 <div class="shell">

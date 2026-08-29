@@ -782,3 +782,28 @@ ok, /login renders). docker-compose.yml parses as valid YAML. Suite still 292 gr
 Note: the GitHub Actions deploy pipeline is deliberately NOT created — CI stays off until Charlie gives
 the domain + go-word (CLAUDE.md #10, REQUESTS.md). These artifacts are the hand-deploy path and the basis
 for that pipeline when it's approved. Remaining: M5c PWA packaging, then M6 API/MCP.
+
+---
+
+## 2026-08-29 — M5c landed: PWA packaging (installable to home screen)
+
+Fulfills the mobile-first "app on the home screen" promise (plan §9). Lead-authored (assets + config):
+- Square icons generated from the favicon via sips (192, 512, and a maskable 512), padded onto the app's
+  cream background.
+- `app/static/manifest.webmanifest`: name/short_name "Same Page", display standalone, start_url /,
+  theme_color #4468D2 (the accent), background #F6F4F0 (the cream), the three icons.
+- `app/static/sw.js`: a deliberately network-first service worker with a pass-through fetch handler — the
+  minimum for installability, with NO offline caching (the app is server-rendered and its session/vote
+  data must never be served stale; documented). Served from a new `GET /sw.js` root route so its scope is
+  the whole app (a worker under /static/ would only control /static/).
+- base.html: manifest link, theme-color, apple-mobile-web-app meta, apple-touch-icon → icon-192, and a
+  best-effort service-worker registration.
+
+Lead verification (live TestClient): manifest served + valid JSON (standalone), sw.js at root with a JS
+content-type and a fetch handler, all three icons served as image/png, and the page links the manifest +
+sets theme-color + registers the worker. Added tests/test_static.py cases pinning all of it so a future
+change can't silently break installability. Suite: **295 passed**, ruff clean.
+
+M5 is functionally complete (M5a SSO, M5b rate limiting, M5c PWA, M5d deploy artifacts). Only M6
+(per-group API + MCP) remains. The app is deployment-ready pending Charlie's Google OAuth client, domain,
+and CI go-word (REQUESTS.md).

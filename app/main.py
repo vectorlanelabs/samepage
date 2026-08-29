@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 from alembic.config import Config
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -76,6 +76,17 @@ app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "st
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/sw.js", include_in_schema=False)
+def service_worker() -> FileResponse:
+    """Serve the PWA service worker from the root so its scope is the whole
+    app (a worker under /static/ would only control /static/)."""
+    return FileResponse(
+        Path(__file__).resolve().parent / "static" / "sw.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.exception_handler(StarletteHTTPException)
