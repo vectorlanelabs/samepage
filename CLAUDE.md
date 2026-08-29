@@ -38,7 +38,7 @@ The app exists to replace ad-hoc negotiation with private group voting — it wa
 7. **State transitions are idempotent** — double-submit close/keep/next/finish must apply exactly once.
 8. **One slice, one commit**, conventional messages (`feat:`, `fix:`, `test:`, `chore:`).
 9. Follow the lead's delegation contract exactly: stated files, do-NOT list, verification commands with expected outputs, honest-failure escape hatch.
-10. **NEVER create, push, or retry a CI workflow.** CI is out-of-scope for this project and is NOT owned by the implementer or the dev-loop. Do not add, modify, or push any `.github/workflows/` file, do not enable Actions, and do not push extra commits to retry a CI failure. CI does not start until Charlie specifies a hosting/deploy target and explicitly approves it. If anything references CI, flag it in REQUESTS.md and move on — never chase a green CI. (Charlie's GitHub is a free account; retrying failed CI burns Actions minutes and risks locking him out.)
+10. **CI is now authorized (Charlie, 2026-08-29) and live** — `.github/workflows/deploy.yml` runs the test suite on every push/PR and, on a green push to `main`, triggers a Coolify redeploy of production (`samepage.vectorlane.dev`). This lifts the prior no-CI hold. Still applies: keep the workflow lean, and **never push extra commits just to retry a red CI run** — fix the cause or leave it (Charlie's GitHub is a free account; retry-spam burns Actions minutes). The implementer does not modify `.github/` — the workflow is lead-owned; flag CI issues in REQUESTS.md rather than editing it.
 
 ## Files you own / never touch
 

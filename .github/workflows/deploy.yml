@@ -1,0 +1,53 @@
+name: CI + Deploy
+
+# Runs the test suite on every push and PR; on a green push to main, triggers a
+# Coolify redeploy of the production app. Authorized by Charlie 2026-08-29
+# (lifts the prior no-CI hold). Kept lean to conserve Actions minutes.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Install dependencies (incl. dev)
+        run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check .
+      - name: Tests
+        run: uv run pytest -q
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify deploy
+        env:
+          URL: ${{ secrets.COOLIFY_WEBHOOK_URL }}
+          TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: |
+          if [ -z "$URL" ]; then
+            echo "::notice::COOLIFY_WEBHOOK_URL not set — skipping deploy trigger."
+            echo "Add COOLIFY_WEBHOOK_URL (and COOLIFY_TOKEN if the webhook needs a bearer token)"
+            echo "in repo Settings → Secrets and variables → Actions, then re-run or push again."
+            exit 0
+          fi
+          # Coolify deploy webhook. TOKEN is sent as a bearer header when set;
+          # a plain URL-token webhook works with TOKEN left empty.
+          if [ -n "$TOKEN" ]; then
+            curl -fsSL --retry 2 -X GET "$URL" -H "Authorization: Bearer $TOKEN"
+          else
+            curl -fsSL --retry 2 -X GET "$URL"
+          fi
+          echo "Coolify deploy triggered."
