@@ -46,7 +46,7 @@ jobs:
           # On the tailnet now — call Coolify's deploy API (Bearer = a Deploy-
           # scoped token). Fire-and-forget: the build runs on Coolify
           # independently of this request, so a 2xx means "accepted", not "built".
-          code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' \
+          code=$(curl -sS -m 30 -X POST -o /dev/null -w '%{http_code}' \
             -H "Authorization: Bearer $TOKEN" "$URL" || echo "000")
           case "$code" in
             2*) echo "Coolify deploy triggered (HTTP $code).";;
