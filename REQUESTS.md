@@ -14,14 +14,24 @@ Tracked so they don't get lost — these are settled calls, not open questions.
   login-rate-limiting, timing-side-channel, and signup-email-oracle blockers), plus join-by-code rate
   limiting once M3 sessions exist. Until M5a lands, the password endpoints stay un-throttled — one
   more reason nothing gets publicly deployed before M5a.
+- [ ] **NEEDED FROM CHARLIE before go-live — Google OAuth client + domain.** (1) In Google Cloud
+  Console: create a project (or reuse one) → "APIs & Services" → "OAuth consent screen" (External,
+  app name "Same Page", your email; no scopes beyond the defaults; publish) → "Credentials" →
+  "Create credentials → OAuth client ID → Web application"; add the authorized redirect URI
+  `https://<your-domain>/auth/google/callback` (and `http://localhost:8000/auth/google/callback`
+  for local testing). Provide the client ID and secret as `SP_GOOGLE_CLIENT_ID` /
+  `SP_GOOGLE_CLIENT_SECRET` env vars (never commit them). (2) The production domain itself — needed
+  here, in Caddy, and in the deploy pipeline. (3) The explicit go-word for creating the GitHub
+  Actions workflow once (2) exists.
+- [ ] **Seed data removed from HEAD, not from git history** (Charlie 2026-08-29: no seeding, no
+  XLSX, no dice provenance in the repo). The files are deleted from the current tree; git history
+  still contains them. If history must be scrubbed too, that is a destructive rewrite — Charlie's
+  explicit call, not assumed.
 - [ ] **Phantom account indicator on a stale session** — `app/templating.py` trusts the session's
   `account_name` without a DB check (deliberate: no DB hit per render; names aren't editable). If an
   account-deletion/deactivation path ever lands, a surviving session cookie shows a live-looking
   indicator while every real route 401s. Revisit the context processor in the same slice that adds any
   account-removal capability. (Oscar M2c review, 2026-08-29 — minor, consciously deferred.)
-- [ ] **`reference/D20 Dinner Decider.xlsx`** — dormant legacy source data, unreferenced since the dice
-  purge. Flagged 2026-08-29 for Charlie: delete it too, or keep as archive? (Deleting source data is
-  Charlie's call, not assumed.)
 - [ ] **Library export** — JSON export of items + recipes as backup/portability. M5 ships DB-level
   backups regardless; this would be a user-facing export on top. Low priority.
 - [ ] **Drop `Category.legacy_sheet_index`.** This column persists a meal's position on the old dice
@@ -35,6 +45,9 @@ Tracked so they don't get lost — these are settled calls, not open questions.
 
 ## Resolved
 
+- ~~reference/D20 Dinner Decider.xlsx~~ — resolved 2026-08-29 by Charlie: delete it, along with the
+  entire seed pipeline (seed/, scripts/seed.py + build_seed.py, test_seed.py) and
+  `Category.legacy_sheet_index`. Production launches with a blank, unseeded database. Cycle B.
 - ~~Bare 401s instead of a login redirect~~ — fixed 2026-08-29 (`main.py` 401 handler redirects browser
   navigations to `/login?next=...`; tests in `tests/test_auth.py`).
 - ~~Library CRUD gating is interim~~ — effectively closed by the 2026-08-29 tenancy fixes:
