@@ -755,3 +755,30 @@ limit (10 of 30 blocked), the html branch shows the friendly page, and 40 rapid 
 throttled. Suite: **292 passed**, ruff clean.
 
 Next: M5c PWA packaging, then M5d deployment artifacts (Dockerfile/compose/Caddyfile/backup/deploy docs).
+
+---
+
+## 2026-08-29 — M5d landed: deployment artifacts (lead-authored)
+
+Deployment config is a lead responsibility and correctness is high-stakes, so I wrote these directly
+(exact knowledge of the app's runtime — entrypoint, env, port, volume, the Host-header CSRF requirement):
+- **Dockerfile**: python:3.12-slim + uv (`uv sync --frozen --no-dev`), non-root uid 10001, single uvicorn
+  worker with `--proxy-headers`, DB on a `/data` volume (never in the image), health at /health.
+- **docker-compose.yml**: `app` (internal-only, `expose` not `ports` — 8000 never hits the host) +
+  `caddy` (80/443, its own cert volume). Secrets via `.env` (`SP_SECRET`, `SP_DOMAIN`, Google id/secret),
+  fail-fast `${VAR:?}` guards. App healthcheck.
+- **Caddyfile**: `{$SP_DOMAIN}` auto-TLS, reverse_proxy to app:8000 forwarding the original Host (the
+  CSRF-critical bit), streaming left unbuffered for future SSE.
+- **deploy/backup.sh**: WAL-safe `sqlite3 .backup` (not cp), integrity-check, retention prune.
+- **deploy/restore-check.sh**: restores the newest backup to scratch, asserts Alembic head + core tables
+  queryable — "a backup you've never restored is a hope."
+- **docs/DEPLOY.md** + **.dockerignore**.
+
+Lead verification (live): built a real WAL-mode migrated DB and ran backup.sh → consistent snapshot,
+integrity ok; restore-check.sh → restores at alembic rev 0009, core tables queryable. Booted the app
+under production env (SP_ENV=production → https_only Secure cookies on, base_url from SP_BASE_URL, /health
+ok, /login renders). docker-compose.yml parses as valid YAML. Suite still 292 green, ruff clean.
+
+Note: the GitHub Actions deploy pipeline is deliberately NOT created — CI stays off until Charlie gives
+the domain + go-word (CLAUDE.md #10, REQUESTS.md). These artifacts are the hand-deploy path and the basis
+for that pipeline when it's approved. Remaining: M5c PWA packaging, then M6 API/MCP.
