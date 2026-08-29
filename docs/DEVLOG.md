@@ -564,3 +564,37 @@ two shipped rules mutation-tested and their tests killed the mutants. Findings, 
   **deferred** (covered at the SQL level; a route-level test lands when M3d writes ad-hoc rows).
 
 Suite: **195 passed**, ruff clean. Next: M3b — session creation, join-by-code, lobby, host controls, SSE.
+
+---
+
+## 2026-08-29 — M3b landed: session creation, join-by-code, live lobby
+
+Second M3 slice. A host creates a voting session (new app/routes/sessions.py); people join by code
+with no account; everyone waits in a live lobby that refreshes via htmx polling; the host starts voting
+or removes a participant. New pure helper `make_code` (WORD-#### over a 32-word list, collision retry
+against the permanent UNIQUE code, injectable random.Random for testability). Plan §5 tenancy invariants
+enforced at creation: host must own/admin the group (require_group_admin, 404 no oracle) and a chosen
+collection must belong to that group (404). §5.6 rules honored: join window is lobby-only (voting-phase
+visitor gets a waiting state, not a ballot), participant removal is host-only and lobby-only and never
+the host's own row, and start-voting is idempotent (apply_transition no-op on double-submit).
+
+**Live-lobby mechanism decision (lead): htmx polling, not SSE.** The design brief permitted either;
+polling is far more robust with SQLite (no long-lived connections holding DB sessions, no async
+generators), it's plain server-rendered endpoints, and it matches the no-SPA rule. `GET /s/{code}/roster`
+returns just the roster partial, polled every 2s; host Remove buttons render only for the host. SSE
+stays a possible future optimization no screen currently needs.
+
+Implementation: `deepseek-v4-flash`, dispatch + one --continue. Lead verification: read the full
+468-line route module; a multi-user live smoke (host creates → anonymous phone joins → host-only remove
+buttons → idempotent double start → mid-voting late join correctly blocked, no row added); and a
+defensive correctness review run inline by the lead (no subagent — see below): cross-tenant group_id
+→ 404, foreign collection → 404, no-targets → 400, display_name XSS escaped in both the lobby and the
+polled roster partial, non-host remove → 403. Suite: **234 passed** (39 new), ruff clean.
+
+Process note: earlier M3 reviews were run via Sonnet subagents with offensive-security-framed prompts;
+that framing tripped a safety classifier (Charlie has auto model-switching off, so it stalled rather
+than degrading). Adjusted: reviews now use defensive framing and run inline as the lead. Session model
+switched to Opus 4.8 mid-run at Charlie's direction; state lives in the repo/DEVLOG so the handoff is
+clean. Recorded as a standing rule in the lead's memory.
+
+Next: M3c — the voting flow (one-option-at-a-time card, submit vote, batch auto-close detection).

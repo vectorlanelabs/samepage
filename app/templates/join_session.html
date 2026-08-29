@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Join {{ session.code }} · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <h1 class="page-title">Join session</h1>
+  <p class="page-meta">Code: <span class="sp-code">{{ session.code }}</span></p>
+
+  {% if session.status == 'voting' %}
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <p class="empty-state">Voting has already started — ask the host.</p>
+  </section>
+  {% else %}
+  {% if error %}
+  <p class="form-error">{{ error }}</p>
+  {% endif %}
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <form method="post" action="/s/{{ session.code }}/join">
+      <div class="field-label">Your name</div>
+      <input type="text" name="display_name" value="{{ posted_name or prefill_name }}" class="input"
+             placeholder="e.g. Sam" maxlength="80" required autofocus>
+      {% if prefill_name %}
+      <p class="page-meta">Signed in as {{ prefill_name }} — you can join as someone else if you like.</p>
+      {% endif %}
+      <button type="submit" class="btn btn-primary" style="margin-top:14px;">Join</button>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

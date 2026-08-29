@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Host a Session · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <a class="back-link" href="/collections">← Collections</a>
+
+  <h1 class="page-title">Host a session</h1>
+
+  {% if not groups %}
+  <p class="empty-state"><a href="/groups">Create a group first.</a></p>
+  {% else %}
+  {% if error %}
+  <p class="form-error">{{ error }}</p>
+  {% endif %}
+
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <form method="post" action="/sessions">
+      <div class="field-label">Group</div>
+      <select name="group_id" required class="input">
+        {% for g in groups %}
+        <option value="{{ g.id }}"{% if selected_group_id == g.id %} selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="field-label">What are you voting on?</div>
+      <select name="collection_id" class="input">
+        <option value="">Ad hoc (no collection)</option>
+        {% for g in groups %}
+        <optgroup label="{{ g.name }}">
+          {% for c in g.collections %}
+          <option value="{{ c.id }}"{% if selected_collection_id == c.id %} selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+      <p class="page-meta">Ad hoc sessions use free-typed options instead of a collection.</p>
+
+      <div class="field-label">Dinners</div>
+      <input type="number" name="dinners" value="{{ dinners }}" min="0" class="input">
+
+      <div class="field-label">Lunches</div>
+      <input type="number" name="lunches" value="{{ lunches }}" min="0" class="input">
+      <p class="page-meta">How many of each should the group keep this session? Set at least one.</p>
+
+      <div class="field-label">Picks (ad hoc)</div>
+      <input type="number" name="picks" value="{{ picks }}" min="0" class="input">
+      <p class="page-meta">For ad hoc sessions: how many options should the group pick?</p>
+
+      <button type="submit" class="btn btn-primary" style="margin-top:22px;">Host session</button>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

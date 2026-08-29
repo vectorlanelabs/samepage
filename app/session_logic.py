@@ -18,6 +18,7 @@ Design notes:
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from enum import Enum
 
@@ -190,3 +191,58 @@ def apply_batch_close(status: str) -> str:
     if status == "open" or status == "closed":
         return "closed"
     raise ValueError(f"illegal batch close from status {status!r}")
+
+
+# --- Session code generation (M3b) ------------------------------------------
+
+WORDLIST: tuple[str, ...] = (
+    "amber",
+    "basil",
+    "cedar",
+    "cobalt",
+    "coral",
+    "daisy",
+    "ember",
+    "fern",
+    "ginger",
+    "harbor",
+    "indigo",
+    "ivory",
+    "jade",
+    "lemon",
+    "lilac",
+    "maple",
+    "mango",
+    "meadow",
+    "olive",
+    "onyx",
+    "opal",
+    "pepper",
+    "plum",
+    "poppy",
+    "quartz",
+    "raven",
+    "rowan",
+    "sable",
+    "sage",
+    "teal",
+    "umber",
+    "willow",
+)
+
+
+def make_code(existing: set[str], rand: random.Random) -> str:
+    """Generate a unique ``word-nnnn`` session code, with collision retry.
+
+    ``rand`` is a ``random.Random`` instance passed IN — this function never
+    touches the global random module, so callers/tests control the seed. Codes
+    are permanent and unique forever (never recycled): the caller persists the
+    code against the UNIQUE ``session.code`` column, and ``existing`` is the
+    set of codes already in use. Retries up to 100 times; raises RuntimeError
+    when the code space is exhausted.
+    """
+    for _ in range(100):
+        code = f"{rand.choice(WORDLIST)}-{rand.randint(0, 9999):04d}"
+        if code not in existing:
+            return code
+    raise RuntimeError("could not generate a unique session code")

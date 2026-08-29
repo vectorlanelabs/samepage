@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Join a Session · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <section class="card hero-card hero-card--center">
+    <h1 class="page-title">Join a session</h1>
+    <p class="hero-sub">Got a code from your host? Enter it to join the lobby — no account needed.</p>
+    <form method="get" action="/join"
+          onsubmit="var c=this.code.value.trim();if(c){location.href='/s/'+encodeURIComponent(c);}return false;">
+      <input type="text" name="code" class="input" placeholder="e.g. amber-1234"
+             autocomplete="off" autocapitalize="none" spellcheck="false" required autofocus>
+      <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Join</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

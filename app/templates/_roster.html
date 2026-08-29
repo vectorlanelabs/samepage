@@ -1,0 +1,21 @@
+{% if participants %}
+<p class="page-meta" style="margin-top:0;">Waiting room · {{ participant_count }} joined</p>
+<ul style="list-style:none;margin:0;padding:0;">
+  {% for p in participants %}
+  <li style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--sp-hairline);">
+    <span>
+      {{ p.display_name }}
+      {% if p.is_you %}<span class="chip">you</span>{% endif %}
+      {% if p.is_host_row %}<span class="chip">host</span>{% endif %}
+    </span>
+    {% if is_host and not p.is_host_row %}
+    <form class="inline-form" method="post" action="/s/{{ session.code }}/participants/{{ p.id }}/remove">
+      <button type="submit" class="danger-text">Remove</button>
+    </form>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-state">Nobody has joined yet — share the code above.</p>
+{% endif %}
