@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="SamePage — Meal Planner", lifespan=lifespan)
+app = FastAPI(title="SamePage", lifespan=lifespan)
 
 setup_middleware(app)
 

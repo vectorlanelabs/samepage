@@ -1,7 +1,7 @@
 [project]
 name = "samepage"
 version = "0.2.0"
-description = "SamePage: a multi-tenant consensus-voting platform. Meal Planner (private yes/no voting batches until the week's dinners and lunches are planned) is its first collection."
+description = "SamePage: a platform for groups to keep a shared database of options and vote on them privately until everyone agrees. A shared meal library is the first thing built on it."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

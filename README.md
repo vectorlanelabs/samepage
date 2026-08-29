@@ -1,62 +1,37 @@
 # SamePage
 
-**SamePage** is a multi-tenant consensus-voting platform for families and friend groups: a group of people
-agree on something — what's for dinner, what to do this weekend, which game to play — through private
-batch voting instead of a spreadsheet, a dice roll, or an argument. **Meal Planner** is its first module,
-described below. Full platform architecture: [`docs/PLAN-v2-samepage.md`](docs/PLAN-v2-samepage.md).
-Identity/tenancy (accounts, groups) and the generic collections model are being built now (M2a/M2b);
-session-based voting itself (M3) has not started.
+SamePage is a platform for a household or a friend group to keep a shared database of options and vote on them privately until everyone agrees. Full architecture: [`docs/PLAN-v2-samepage.md`](docs/PLAN-v2-samepage.md).
 
-## Meal Planner
+## What's actually built right now
 
-A module for planning a week of meals that everyone will actually eat — replacing the D8/D20 spreadsheet-and-dice ritual, which narrows the list but never solves the decision problem.
+- **Accounts and groups.** Anyone can sign up with email and password. Any account can create a group and becomes its owner; the owner can add other admins.
+- **A shared meal library.** Once a group exists, an admin runs the seed loader to load 155 household meals (recipe links included) into that group's library. Meals can be browsed, searched, filtered, tagged, added, edited, and archived.
+- **No voting yet.** The plan calls for batches of options and private yes/no votes until a group agrees, but that part isn't built. That's the next milestone.
 
-## What it does
+## The voting mechanic (designed, not built)
 
-The household runs a **weekly planning session**:
+A group sets a target: how many meals for the week, how many weekend options to settle on, whatever fits the collection. The app serves a batch of options, the same list to everyone. Each person votes yes or no, privately, and nobody sees anyone else's vote, before or after. Options everyone said yes to are kept automatically; options with a majority get shown to the host, who can accept them too. The app serves another batch and repeats until the target is met.
 
-1. Someone starts a session and sets how many **dinners** and **lunches** the week needs.
-2. The app serves a batch of **15 meal options** — the same list for every participant.
-3. Each person votes **yes / no** privately.
-4. Meals where **everyone said yes** are kept for the week; meals with a **majority** are shown too, and the **host can accept** any of them.
-5. The app serves another batch, and repeats, **until the week's targets are met**.
+The meal library is the first thing built on this mechanic. It's meant to work for anything a group needs to decide together: what to do this weekend, which game to play, where to eat.
 
-Votes stay private — individual votes are never shown, before or after a batch closes. Only the outcome is revealed: the meals everyone agreed on. Every kept meal is recorded (`times_kept`), which is how favorites will be determined from actual use.
+## Docs
 
-The output is the week's meal plan, which then feeds grocery planning done elsewhere. **Meal Planner does not build the grocery list.**
+- [`CHARTER.md`](CHARTER.md) — scope, non-goals, locked decisions (partially superseded — see its banner)
+- [`ROADMAP.md`](ROADMAP.md) — milestone status
+- [`docs/PLAN-v2-samepage.md`](docs/PLAN-v2-samepage.md) — current architecture: accounts, groups, collections, how voting will work
+- [`docs/DEVLOG.md`](docs/DEVLOG.md) — what actually shipped, in order
+- Legacy spreadsheet (the original household meal data) — [`reference/D20 Dinner Decider.xlsx`](reference/D20%20Dinner%20Decider.xlsx), provenance in [`reference/README.md`](reference/README.md)
 
-## What's in v1
+## Run it locally
 
-- Pre-seeded meal library (155 meals from the household spreadsheet, including its recipe links; lunch-capable meals tagged for the lunch track)
-- Household profiles (name + PIN, no accounts)
-- Weekly planning sessions: lunch/dinner targets → iterative yes/no batches → unanimous-yes keeps (host may accept majority-yes meals) until the week is planned
-- Kept-meal records and session history
-- Manual meal add/edit/archive
-- **External API + MCP server** (token-authenticated) — your AI tools import meals/recipes and query history/trends; **AI never runs inside the app**
+```
+uv sync
+uv run alembic upgrade head
+uv run uvicorn app.main:app
+```
 
-The meal library is expected to become the family's recipe keeper over time — it's durable data, backed up on the server.
+Then, in the browser: sign up, create a group, and note its id from the URL (`/groups/<id>`). Load the meal library into that group:
 
-## What's after v1
-
-- **v1.5** — recency-weighted batches, stale-meal suggestions, per-person constraints, planned-week view, meal photos, recipe-use experience (cooking view, printing), looser keep rules if needed
-- **v2** — external intelligence: recipe parsing (photo or link → recipe), discovery, and trend analysis run in **your AI tools** through the app's API/MCP — no AI code or LLM keys in the product
-- **Later** — grocery-list generation, pantry mode, multi-household hosting, mobile apps, integrations
-
-Full intent statements: [`docs/POST-V1.md`](docs/POST-V1.md).
-
-## Project docs
-
-- **Charter** — [`CHARTER.md`](CHARTER.md) — scope, non-goals, locked decisions, definition of done, stop criteria *(pending approval)*
-- **Roadmap** — [`ROADMAP.md`](ROADMAP.md) — milestone status
-- **v1 MVP build plan** — [`docs/PLAN-v1-mvp.md`](docs/PLAN-v1-mvp.md) — data model, routes, session algorithm, seed spec, M0–M5
-- **Post-MVP stubs** — [`docs/POST-V1.md`](docs/POST-V1.md)
-- **Original concept** — [`docs/ORIGINAL-CONCEPT.md`](docs/ORIGINAL-CONCEPT.md) — the full narrative that started this project (preserved; not operative)
-- **Legacy spreadsheet (read-only seed source)** — [`reference/D20 Dinner Decider.xlsx`](reference/D20%20Dinner%20Decider.xlsx), provenance in [`reference/README.md`](reference/README.md)
-
-## Run it
-
-_Setup and run instructions land with M5 (local dev: `uv sync` → `uv run alembic upgrade head` → `uv run python -m scripts.seed` → `uv run uvicorn app.main:app`; production: VPS behind HTTPS per `docs/PLAN-v1-mvp.md` §7.1). Note: `uv run scripts/seed.py` (as a bare script) fails with `ModuleNotFoundError: No module named 'app'` — run it as a module (`python -m scripts.seed`) as shown above; worth fixing properly at M5._
-
-## Success criterion
-
-Meal Planner succeeds if the household can answer **"what are we eating tonight?"** faster, with less negotiation, while gradually building a better list of meals everyone can actually agree on.
+```
+uv run python -m scripts.seed <group_id>
+```
