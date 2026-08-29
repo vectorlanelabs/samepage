@@ -10,6 +10,9 @@ from app.db import Base
 from app.models import (
     Account,
     AuthIdentity,
+    Batch,
+    BatchItem,
+    BatchResponse,
     Category,
     Collection,
     Group,
@@ -17,6 +20,9 @@ from app.models import (
     Item,
     ItemTag,
     MealDetail,
+    Session,
+    SessionParticipant,
+    SessionTarget,
     Tag,
 )
 
@@ -312,3 +318,146 @@ def test_invalid_meal_detail_type_rejected_by_check_constraint(tmp_path):
             )
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Voting-engine tables (M3a, plan §5): session/batch chain + constraints
+# ---------------------------------------------------------------------------
+
+def _seed_session_chain(db_session):
+    """Account → group → collection → item → session → batch, committed."""
+    account = Account(email="host@example.com", display_name="Host")
+    db_session.add(account)
+    db_session.flush()
+
+    group = Group(name="Test Group", owner_account_id=account.id)
+    db_session.add(group)
+    db_session.flush()
+
+    collection = Collection(group_id=group.id, kind="meal", name="Meal Planner")
+    db_session.add(collection)
+    db_session.flush()
+
+    item = Item(collection_id=collection.id, name="Pasta", normalized_name="pasta")
+    db_session.add(item)
+    db_session.flush()
+
+    session = Session(code="ABCDEF", status="lobby", group_id=group.id, host_account_id=account.id)
+    db_session.add(session)
+    db_session.flush()
+
+    batch = Batch(session_id=session.id, seq=1, track_label="dinner")
+    db_session.add(batch)
+    db_session.commit()
+    return {
+        "account": account,
+        "group": group,
+        "collection": collection,
+        "item": item,
+        "session": session,
+        "batch": batch,
+    }
+
+
+def test_session_batch_chain_round_trip(db_session):
+    """The full M3a chain persists and reloads: Session → SessionTarget →
+    SessionParticipant → Batch → BatchItem (item + ad hoc) → BatchResponse."""
+    chain = _seed_session_chain(db_session)
+    session = chain["session"]
+    batch = chain["batch"]
+
+    target = SessionTarget(session_id=session.id, track_label="dinner", target_count=3)
+    participant = SessionParticipant(session_id=session.id, display_name="Sam")
+    db_session.add_all([target, participant])
+    db_session.flush()
+
+    item_option = BatchItem(batch_id=batch.id, item_id=chain["item"].id, sort_order=0)
+    adhoc_option = BatchItem(batch_id=batch.id, ad_hoc_label="Pizza place", sort_order=1)
+    db_session.add_all([item_option, adhoc_option])
+    db_session.flush()
+
+    response = BatchResponse(
+        batch_item_id=item_option.id,
+        session_participant_id=participant.id,
+        choice="yes",
+    )
+    db_session.add(response)
+    db_session.commit()
+
+    db_session.expire_all()
+
+    session_q = db_session.get(Session, session.id)
+    assert session_q.code == "ABCDEF"
+    assert session_q.status == "lobby"
+    assert session_q.group_id == chain["group"].id
+    assert session_q.host_account_id == chain["account"].id
+    assert session_q.finished_at is None
+
+    target_q = db_session.get(SessionTarget, target.id)
+    assert target_q.track_label == "dinner"
+    assert target_q.target_count == 3
+
+    participant_q = db_session.get(SessionParticipant, participant.id)
+    assert participant_q.display_name == "Sam"
+
+    batch_q = db_session.get(Batch, batch.id)
+    assert batch_q.seq == 1
+    assert batch_q.status == "open"  # default
+
+    item_option_q = db_session.get(BatchItem, item_option.id)
+    assert item_option_q.item_id == chain["item"].id
+    assert item_option_q.ad_hoc_label is None
+    assert item_option_q.yes_count == 0
+    assert item_option_q.outcome is None
+
+    adhoc_option_q = db_session.get(BatchItem, adhoc_option.id)
+    assert adhoc_option_q.ad_hoc_label == "Pizza place"
+    assert adhoc_option_q.item_id is None
+
+    response_q = db_session.get(BatchResponse, response.id)
+    assert response_q.choice == "yes"
+    assert response_q.batch_item_id == item_option.id
+
+
+def test_batch_item_check_rejects_both_null(db_session):
+    """CHECK ck_batch_item_one_of: exactly one of item_id / ad_hoc_label."""
+    chain = _seed_session_chain(db_session)
+    with pytest.raises(IntegrityError):
+        db_session.add(BatchItem(batch_id=chain["batch"].id, item_id=None, ad_hoc_label=None))
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_batch_item_check_rejects_both_set(db_session):
+    """CHECK ck_batch_item_one_of: both item_id and ad_hoc_label is invalid."""
+    chain = _seed_session_chain(db_session)
+    with pytest.raises(IntegrityError):
+        db_session.add(
+            BatchItem(batch_id=chain["batch"].id, item_id=chain["item"].id, ad_hoc_label="Also a label")
+        )
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_batch_item_partial_unique_index_rejects_duplicate_item(db_session):
+    """uq_batch_item_item: the same item appears at most once per batch."""
+    chain = _seed_session_chain(db_session)
+    db_session.add(BatchItem(batch_id=chain["batch"].id, item_id=chain["item"].id, sort_order=0))
+    db_session.commit()
+
+    with pytest.raises(IntegrityError):
+        db_session.add(BatchItem(batch_id=chain["batch"].id, item_id=chain["item"].id, sort_order=1))
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_batch_item_partial_unique_index_rejects_duplicate_adhoc_label(db_session):
+    """uq_batch_item_adhoc: the same ad hoc label appears at most once per batch."""
+    chain = _seed_session_chain(db_session)
+    db_session.add(BatchItem(batch_id=chain["batch"].id, ad_hoc_label="Pizza place"))
+    db_session.commit()
+
+    with pytest.raises(IntegrityError):
+        db_session.add(BatchItem(batch_id=chain["batch"].id, ad_hoc_label="Pizza place"))
+        db_session.commit()
+    db_session.rollback()

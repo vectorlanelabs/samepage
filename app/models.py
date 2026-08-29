@@ -17,11 +17,13 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -139,5 +141,124 @@ class MealDetail(Base):
     ingredients: Mapped[str | None] = mapped_column(Text, nullable=True)
     recipe_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class Session(Base):
+    """A voting session (plan §5): host-run, join-by-code, status per §5.6.
+
+    ``status`` is app-enforced ('lobby'|'voting'|'complete'|'expired'),
+    never a DB enum. ``last_activity_at`` feeds the §5.5 24-hour
+    inactivity expiry rule.
+    """
+
+    __tablename__ = "session"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    group_id: Mapped[int] = mapped_column(ForeignKey("group.id"), nullable=False)
+    host_account_id: Mapped[int] = mapped_column(ForeignKey("account.id"), nullable=False)
+    collection_id: Mapped[int | None] = mapped_column(ForeignKey("collection.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class SessionTarget(Base):
+    """One track's keep-target per session (generalizes lunch/dinner targets)."""
+
+    __tablename__ = "session_target"
+    __table_args__ = (
+        CheckConstraint("target_count > 0", name="ck_session_target_positive"),
+        UniqueConstraint("session_id", "track_label", name="uq_session_target"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("session.id"), nullable=False)
+    track_label: Mapped[str] = mapped_column(String, nullable=False)
+    target_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class SessionParticipant(Base):
+    """Someone who joined a specific session — ephemeral, deleted at finish
+    (§5.5). ``account_id`` is set only if logged in at join time (pre-fill
+    only, confers no permission)."""
+
+    __tablename__ = "session_participant"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("session.id"), nullable=False)
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("account.id"), nullable=True)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+
+class Batch(Base):
+    """One round of options within a session. ``status``: 'open'|'closed'
+    (§5.6)."""
+
+    __tablename__ = "batch"
+    __table_args__ = (UniqueConstraint("session_id", "seq", name="uq_batch_seq"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("session.id"), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    track_label: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="open")
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class BatchItem(Base):
+    """One option in a batch — the durable outcome record (aggregate counts
+    only, no person id; §5.4). Exactly one of ``item_id`` / ``ad_hoc_label``
+    is set (DB CHECK). The partial unique indexes (mirrored in migration
+    0009) stop the same item or label appearing twice in one batch."""
+
+    __tablename__ = "batch_item"
+    __table_args__ = (
+        CheckConstraint("(item_id IS NULL) != (ad_hoc_label IS NULL)", name="ck_batch_item_one_of"),
+        Index(
+            "uq_batch_item_item",
+            "batch_id",
+            "item_id",
+            unique=True,
+            sqlite_where=text("item_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_batch_item_adhoc",
+            "batch_id",
+            "ad_hoc_label",
+            unique=True,
+            sqlite_where=text("ad_hoc_label IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("batch.id"), nullable=False)
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("item.id"), nullable=True)
+    ad_hoc_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    yes_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    no_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    outcome: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class BatchResponse(Base):
+    """One participant's in-batch vote — EPHEMERAL: deleted in the same
+    transaction that closes its batch (§5.5). The unique constraint means
+    each participant answers each option exactly once."""
+
+    __tablename__ = "batch_response"
+    __table_args__ = (
+        UniqueConstraint("batch_item_id", "session_participant_id", name="uq_batch_response"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    batch_item_id: Mapped[int] = mapped_column(ForeignKey("batch_item.id"), nullable=False)
+    session_participant_id: Mapped[int] = mapped_column(
+        ForeignKey("session_participant.id"), nullable=False
+    )
+    choice: Mapped[str] = mapped_column(String, nullable=False)
+    responded_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 

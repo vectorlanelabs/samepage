@@ -531,3 +531,36 @@ filtering a populated collection) — restored the distinction via a `collection
 regression test pinning both messages. Suite: **126 passed**, ruff clean.
 
 M0–M2e + M5a complete. Next: M3 voting engine.
+
+---
+
+## 2026-08-29 — M3a landed: voting schema + pure session logic (TDD)
+
+First slice of the M3 voting engine. Added the six tables from plan §5 (session, session_target,
+session_participant, batch, batch_item, batch_response) via migration 0009 — including the CHECK
+"(item_id IS NULL) != (ad_hoc_label IS NULL)" and the two partial unique indexes that the revised §5
+specified (SQLite raw-SQL, since op.create_index can't express a WHERE) — and a PURE `app/session_logic.py`
+(no DB, no models import) holding every consensus rule: batch assembly, unanimity over the frozen roster,
+strict majority (yes>no, ties excluded), classify(), manual-close missing-as-no, over-target selection
+(D13), and the idempotent session/batch transition tables (CLAUDE.md #7). Built tests-first per
+non-negotiable #2 — 67 new logic tests plus schema-constraint tests.
+
+Implementation: `deepseek-v4-flash`, single dispatch (capped mid-verify on a ruff import-sort nit the
+lead fixed). Lead verification: read the full module, fresh-boot through 0009 confirming all six tables
++ both partial indexes exist on a blank DB.
+
+Oscar review (Sonnet, aimed at rule CORRECTNESS not just crashes): **approve** — exhaustive grid check
+of classify() over every (yes,no,roster) up to roster=4 matched the product rule exactly; idempotency
+table fuzzed over every (current,target) pair (complete/expired correctly terminal, closed can't reopen);
+migration constraints probed live (both-null/both-set rejected, dup (batch,item) rejected, two distinct
+ad-hoc labels allowed, per-participant-per-item vote uniqueness enforced, down/up on populated DB clean);
+two shipped rules mutation-tested and their tests killed the mutants. Findings, dispositioned:
+- (major) `resolve_missing_as_no` could synthesize a negative no from a corrupted yes count (>roster) with
+  no guard, while `is_unanimous` guards the same shape — inconsistent, and a negative no would corrupt the
+  durable outcome record — **fixed**: raises ValueError outside [0, roster_size], regression test added.
+- (nit) `assemble_batch` negative-size slice footgun — **fixed**: raises on nonpositive size (reconciled
+  the implementer's own now-stale size=0-returns-empty test to expect the raise); regression test added.
+- (nit) missing "two distinct ad-hoc labels allowed" ORM-level test — verified live by the reviewer;
+  **deferred** (covered at the SQL level; a route-level test lands when M3d writes ad-hoc rows).
+
+Suite: **195 passed**, ruff clean. Next: M3b — session creation, join-by-code, lobby, host controls, SSE.

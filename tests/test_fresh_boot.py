@@ -21,6 +21,12 @@ EXPECTED_TABLES = {
     "item",
     "item_tag",
     "meal_detail",
+    "session",
+    "session_target",
+    "session_participant",
+    "batch",
+    "batch_item",
+    "batch_response",
     "alembic_version",
 }
 
