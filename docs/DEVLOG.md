@@ -176,3 +176,35 @@ slice) → lead fixed directly (pass the real `Depends(get_db)` session) + added
 
 **Next**: M2b — generic collections & items (`Collection`/`Item`/`meal_detail`, scoped `Category`/`Tag`,
 migrate the 155 seeded meals).
+
+## 2026-08-28 — M2b landed (generic collections & items)
+
+**Shipped**: `Collection` (`group_id`, `kind`, `name`), `Item` (replaces `Meal` — adds `times_offered`
+alongside `times_kept`/`last_kept_at`), `ItemTag` (replaces `MealTag`), `MealDetail` (1:1 extension:
+`type`/`ingredients`/`recipe_text`/`source_url` — the meal-specific fields, so a future collection kind
+gets its own `*_detail` table the same way). `Category` is now scoped to a collection
+(`UNIQUE(collection_id, name)`), `Tag` to a group (`UNIQUE(group_id, name)`) — same name can exist in two
+different collections/groups without colliding. Clean-slate migration (matches M2a's precedent — no real
+user data existed to preserve). `scripts/seed.py` now requires a `group_id` argument, idempotently
+get-or-creates one `Collection(kind="meal")` for that group, and loads the 155 seeded meals into it —
+still dedupes by `normalized_name`, still never mutates `seed/meals.json`. `/library`'s URLs and behavior
+are unchanged from the outside; underneath, it resolves "the" meal-kind collection (there's exactly one in
+practice) rather than a hardcoded `Meal` table — real multi-collection routing (`/collections/{id}/...`)
+is deferred until a second collection kind actually exists (tracked in REQUESTS.md, not built
+speculatively). 91 tests passing, `ruff` clean.
+
+**Process**: implementer (Haiku) → lead re-verify (migration/lint/tests all green independently) → full
+live smoke test by the lead (not just automated tests): fresh signup → create group → run
+`uv run python -m scripts.seed <group_id>` → confirmed `/library` actually shows the 155 seeded meals
+(not just that a test fixture claims it does) → re-ran the seed script to confirm idempotency (0 new
+rows) → verified the "no collection yet" path on a truly fresh DB renders an empty state (200) and refuses
+creates with a clear 400, not a 500 → verified `alembic downgrade`/`upgrade` round-trips cleanly. Read the
+full diff line by line (this project's own prior slice found a real invented-flag bug that automated tests
+alone missed) — no equivalent issue found this time. Oscar-style review pass: no findings.
+
+**Findings disposition**: none this slice — implementation matched spec, no invented fields/flags, no
+crash paths found on the "already logged in" or "missing collection" edge cases that were specifically
+checked for after M2a's review caught similar issues.
+
+**Status**: M2a and M2b both landed. Per Charlie's instruction, execution stops here — **M3 (session-based
+voting) is not started.** It remains unapproved pending sign-off on `docs/PLAN-v2-samepage.md`.

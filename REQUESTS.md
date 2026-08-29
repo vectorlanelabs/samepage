@@ -18,7 +18,8 @@ Wanted-but-not-blocking ideas. The lead picks these up when appropriate, or Char
 - [ ] **Raw votes via API** — default is **no** (aggregates only, consistent with the privacy invariant); say so if your analysis genuinely needs raw per-person data.
 
 - [ ] **Login timing side-channel** — `POST /login` returns instantly for an unknown email (no hash computed) but takes ~60ms for a known email with a wrong password (full 600k-iteration PBKDF2 run), live-measured during M2a review. Lets an attacker enumerate valid account emails by response time even though the error message itself is generic. Inherited from the M1 PIN-login code this replaced (same early-return shape), not introduced by M2a — but real and unaddressed. Fix is cheap (always run a dummy hash on the unknown-email path) — worth doing before any public launch.
-- [ ] **Library CRUD gating is interim** — M2a gates `/library` create/edit/archive on "any signed-in account" (not group/collection-scoped) because collections aren't group-owned yet. M2b should tighten this to "must be an owner/admin of the group that owns this collection."
+- [ ] **Library CRUD gating is interim** — gates `/library` create/edit/archive on "any signed-in account" (not group/collection-scoped). Now that M2b's `Collection`/`Group` link exists, tightening this to "must be an owner/admin of the group that owns this collection" is a small, well-scoped follow-up — do it before any real multi-group usage.
+- [ ] **Single-collection routing is a deliberate M2b simplification** — `/library` always resolves to "the first meal-kind collection that exists," not a specific `collection_id` in the URL. Fine while there's exactly one collection in practice; needs real `/collections/{id}/...` routing once a second collection kind is actually built (things-to-do, games, ...) or once multiple groups each want their own meal collection.
 
 ## Resolved (2026-08-26)
 

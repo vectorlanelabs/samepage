@@ -14,10 +14,12 @@ EXPECTED_TABLES = {
     "account",
     "group",
     "group_admin",
+    "collection",
     "category",
     "tag",
-    "meal",
-    "meal_tag",
+    "item",
+    "item_tag",
+    "meal_detail",
     "alembic_version",
 }
 

@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Group, Meal
+from app.models import Group, Item
 
 router = APIRouter()
 
@@ -20,8 +20,8 @@ templates = Jinja2Templates(directory=Path(__file__).resolve().parents[1] / "tem
 
 @router.get("/")
 def home(request: Request, db: Annotated[Session, Depends(get_db)]):
-    active_meal_count = db.scalar(
-        select(func.count()).select_from(Meal).where(Meal.is_active.is_(True))
+    active_item_count = db.scalar(
+        select(func.count()).select_from(Item).where(Item.archived_at.is_(None))
     ) or 0
     active_group_count = db.scalar(
         select(func.count()).select_from(Group)
@@ -30,7 +30,7 @@ def home(request: Request, db: Annotated[Session, Depends(get_db)]):
         request,
         "home.html",
         {
-            "active_meal_count": active_meal_count,
+            "active_meal_count": active_item_count,
             "active_group_count": active_group_count,
         },
     )

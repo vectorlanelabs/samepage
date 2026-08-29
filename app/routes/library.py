@@ -1,10 +1,11 @@
-"""Meal library routes (M2, T2.1–T2.2): browse/search/filter, create, edit,
+"""Item library routes (M2b, T2.1–T2.2): browse/search/filter, create, edit,
 archive/unarchive, type cycle, and the recipe view.
 
 The library list and the recipe view are public — the household reaches them
 from any device. Create/edit/archive/cycle-type require a signed-in account
-(``require_account``) — an interim M2a policy; proper "must be an admin of
-the owning group" gating lands with M2b once collections are group-scoped.
+(``require_account``) — an interim M2a/M2b policy; proper "must be an admin of
+the owning group" gating lands in a future slice once group-scoping is fully
+wired.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_account, require_account
 from app.db import get_db
-from app.models import Meal, MealTag, Tag
+from app.models import Collection, Item, ItemTag, MealDetail, Tag
 
 router = APIRouter()
 
@@ -50,26 +51,42 @@ def _type_pill_style(meal_type: str, interactive: bool = False) -> str:
     )
 
 
-def _get_meal_or_404(db: Session, meal_id: int) -> Meal:
-    meal = db.get(Meal, meal_id)
-    if meal is None:
-        raise HTTPException(404, "No such meal")
-    return meal
+def _get_meal_collection(db: Session) -> Collection | None:
+    """Get the meal-kind collection, or None if none exists."""
+    return db.scalar(
+        select(Collection)
+        .where(Collection.kind == "meal")
+        .order_by(Collection.id)
+        .limit(1)
+    )
 
 
-def _meal_tags(db: Session, meal_id: int) -> list[str]:
+def _get_item_or_404(db: Session, item_id: int) -> Item:
+    item = db.get(Item, item_id)
+    if item is None:
+        raise HTTPException(404, "No such item")
+    return item
+
+
+def _item_tags(db: Session, item_id: int) -> list[str]:
     return list(
         db.scalars(
             select(Tag.name)
-            .join(MealTag, MealTag.tag_id == Tag.id)
-            .where(MealTag.meal_id == meal_id)
+            .join(ItemTag, ItemTag.tag_id == Tag.id)
+            .where(ItemTag.item_id == item_id)
             .order_by(Tag.name)
         ).all()
     )
 
 
-def _has_recipe(meal: Meal) -> bool:
-    return bool(meal.source_url or meal.recipe_text or (meal.ingredients or "").strip())
+def _item_meal_detail(db: Session, item_id: int) -> MealDetail | None:
+    return db.scalar(select(MealDetail).where(MealDetail.item_id == item_id))
+
+
+def _has_recipe(detail: MealDetail | None) -> bool:
+    if detail is None:
+        return False
+    return bool(detail.source_url or detail.recipe_text or (detail.ingredients or "").strip())
 
 
 def _safe_source_url(url: str | None) -> str | None:
@@ -82,23 +99,26 @@ def _safe_source_url(url: str | None) -> str | None:
     return url
 
 
-def _all_tags(db: Session) -> list[Tag]:
-    return list(db.scalars(select(Tag).order_by(Tag.name)).all())
+def _all_tags(db: Session, group_id: int) -> list[Tag]:
+    """All tags scoped to a group."""
+    return list(db.scalars(select(Tag).where(Tag.group_id == group_id).order_by(Tag.name)).all())
 
 
 def _render_edit(
     request: Request,
     db: Session,
-    meal: Meal | None,
+    group_id: int,
+    item: Item | None,
+    detail: MealDetail | None,
     form: dict,
     selected_tags: list[str],
     error: str | None,
     status_code: int = 200,
 ):
-    """Render meal_edit.html for a new (meal=None) or existing meal.
+    """Render meal_edit.html for a new (item=None) or existing item.
 
     ``form`` holds the current field values (name/type/ingredients/
-    instructions/source_url) — from the meal for GETs, from the submitted
+    instructions/source_url) — from the item/detail for GETs, from the submitted
     POST body for 400 re-renders so nothing the user typed is lost.
     """
     meal_type = form["type"] if form["type"] in VALID_TYPES else "dinner"
@@ -107,10 +127,10 @@ def _render_edit(
         request,
         "meal_edit.html",
         {
-            "meal": meal,
+            "meal": item,  # keep template var name for compatibility
             "form": form,
             "selected_tags": selected_tags,
-            "all_tags": _all_tags(db),
+            "all_tags": _all_tags(db, group_id),
             "error": error,
             "track_label": TYPE_LABELS[meal_type],
             "track_style": (
@@ -133,13 +153,24 @@ def _empty_form(type: str = "dinner") -> dict:
     }
 
 
-def _meal_form(meal: Meal) -> dict:
+def _item_form(item: Item, detail: MealDetail | None) -> dict:
+    if detail is None:
+        detail_type = "dinner"
+        ingredients = ""
+        instructions = ""
+        source_url = ""
+    else:
+        detail_type = detail.type
+        ingredients = detail.ingredients or ""
+        instructions = detail.recipe_text or ""
+        source_url = detail.source_url or ""
+
     return {
-        "name": meal.name,
-        "type": meal.type,
-        "ingredients": meal.ingredients or "",
-        "instructions": meal.recipe_text or "",
-        "source_url": meal.source_url or "",
+        "name": item.name,
+        "type": detail_type,
+        "ingredients": ingredients,
+        "instructions": instructions,
+        "source_url": source_url,
     }
 
 
@@ -158,8 +189,8 @@ def _clean_form(
     }
 
 
-def _resolve_tags(db: Session, raw_tags: list[str]) -> list[Tag]:
-    """Create any missing tags (household tags are freely created) and return
+def _resolve_tags(db: Session, group_id: int, raw_tags: list[str]) -> list[Tag]:
+    """Create any missing tags (group-scoped tags are freely created) and return
     the Tag rows in submitted order, deduped by name."""
     tags: list[Tag] = []
     seen: set[str] = set()
@@ -168,16 +199,20 @@ def _resolve_tags(db: Session, raw_tags: list[str]) -> list[Tag]:
         if not name or name in seen:
             continue
         seen.add(name)
-        tag = db.scalar(select(Tag).where(Tag.name == name))
+        tag = db.scalar(
+            select(Tag).where((Tag.group_id == group_id) & (Tag.name == name))
+        )
         if tag is None:
-            tag = Tag(name=name)
+            tag = Tag(group_id=group_id, name=name)
             db.add(tag)
             db.flush()
         tags.append(tag)
     return tags
 
 
-def _validate_form(form: dict, db: Session, exclude_meal_id: int | None = None) -> str | None:
+def _validate_form(
+    form: dict, db: Session, collection_id: int, exclude_item_id: int | None = None
+) -> str | None:
     """Return an error message, or None when the form is valid."""
     if not form["name"]:
         return "Name is required."
@@ -186,11 +221,13 @@ def _validate_form(form: dict, db: Session, exclude_meal_id: int | None = None) 
     if form["source_url"] and _safe_source_url(form["source_url"]) is None:
         return "Source URL must start with http:// or https://."
     normalized = _normalize_name(form["name"])
-    collision = select(Meal.id).where(Meal.normalized_name == normalized)
-    if exclude_meal_id is not None:
-        collision = collision.where(Meal.id != exclude_meal_id)
+    collision = select(Item.id).where(
+        (Item.collection_id == collection_id) & (Item.normalized_name == normalized)
+    )
+    if exclude_item_id is not None:
+        collision = collision.where(Item.id != exclude_item_id)
     if db.scalar(collision) is not None:
-        return "A meal with that name already exists."
+        return "An item with that name already exists in this collection."
     return None
 
 
@@ -207,60 +244,95 @@ def library_page(
     current = get_current_account(request, db)
     can_edit = current is not None
 
+    # Resolve the meal collection; if none exists, show empty state.
+    collection = _get_meal_collection(db)
+    if collection is None:
+        return templates.TemplateResponse(
+            request,
+            "library.html",
+            {
+                "meals": [],
+                "active_count": 0,
+                "archived_count": 0,
+                "can_edit": can_edit,
+                "q": q,
+                "type": type,
+                "tags": tags,
+                "status": status,
+                "type_filters": [],
+                "status_filters": [],
+                "tag_filters": [],
+                "no_collection": True,
+            },
+        )
+
     type = type if type in VALID_TYPES else ""
     status = status if status in ("active", "archived", "all") else "active"
     tag_names = [t.strip() for t in tags.split(",") if t.strip()]
 
-    stmt = select(Meal)
+    stmt = select(Item).where(Item.collection_id == collection.id)
     if q:
         like = f"%{q}%"
-        stmt = stmt.where(Meal.name.ilike(like) | Meal.normalized_name.ilike(like))
+        stmt = stmt.where(Item.name.ilike(like) | Item.normalized_name.ilike(like))
     if type:
-        stmt = stmt.where(Meal.type == type)
+        # Join to meal_detail to filter by type.
+        stmt = (
+            stmt.join(MealDetail, MealDetail.item_id == Item.id)
+            .where(MealDetail.type == type)
+        )
     if tag_names:
-        meal_ids = db.scalars(
-            select(MealTag.meal_id)
-            .join(Tag, Tag.id == MealTag.tag_id)
+        item_ids = db.scalars(
+            select(ItemTag.item_id)
+            .join(Tag, Tag.id == ItemTag.tag_id)
             .where(Tag.name.in_(tag_names))
             .distinct()
         ).all()
-        stmt = stmt.where(Meal.id.in_(meal_ids))
+        stmt = stmt.where(Item.id.in_(item_ids))
     if status == "active":
-        stmt = stmt.where(Meal.archived_at.is_(None))
+        stmt = stmt.where(Item.archived_at.is_(None))
     elif status == "archived":
-        stmt = stmt.where(Meal.archived_at.is_not(None))
-    meals = db.scalars(stmt.order_by(Meal.name)).all()
+        stmt = stmt.where(Item.archived_at.is_not(None))
+    items = db.scalars(stmt.order_by(Item.name)).all()
 
-    meal_tags = db.execute(
-        select(MealTag.meal_id, Tag.name).join(Tag, Tag.id == MealTag.tag_id)
+    # Fetch all meal details and tags for the items.
+    item_details = {}
+    for item in items:
+        item_details[item.id] = _item_meal_detail(db, item.id)
+
+    item_tags = db.execute(
+        select(ItemTag.item_id, Tag.name).join(Tag, Tag.id == ItemTag.tag_id)
     ).all()
-    tags_by_meal: dict[int, list[str]] = defaultdict(list)
-    for meal_id, tag_name in meal_tags:
-        tags_by_meal[meal_id].append(tag_name)
+    tags_by_item: dict[int, list[str]] = defaultdict(list)
+    for item_id, tag_name in item_tags:
+        tags_by_item[item_id].append(tag_name)
 
     rows = [
         {
-            "id": meal.id,
-            "name": meal.name,
-            "type_label": TYPE_LABELS[meal.type],
-            "type_style": _type_pill_style(meal.type, interactive=can_edit),
-            "tags": sorted(tags_by_meal.get(meal.id, [])),
-            "kept_label": f"Kept {meal.times_kept}×" if meal.times_kept > 0 else None,
-            "has_recipe": _has_recipe(meal),
-            "archived": meal.archived_at is not None,
+            "id": item.id,
+            "name": item.name,
+            "type_label": TYPE_LABELS[item_details.get(item.id, MealDetail()).type or "dinner"],
+            "type_style": _type_pill_style(item_details.get(item.id, MealDetail()).type or "dinner", interactive=can_edit),
+            "tags": sorted(tags_by_item.get(item.id, [])),
+            "kept_label": f"Kept {item.times_kept}×" if item.times_kept > 0 else None,
+            "has_recipe": _has_recipe(item_details.get(item.id)),
+            "archived": item.archived_at is not None,
         }
-        for meal in meals
+        for item in items
     ]
 
     active_count = (
         db.scalar(
-            select(func.count()).select_from(Meal).where(Meal.archived_at.is_(None))
+            select(func.count()).select_from(Item).where(
+                (Item.collection_id == collection.id) & (Item.archived_at.is_(None))
+            )
         )
         or 0
     )
     archived_count = (
         db.scalar(
-            select(func.count()).select_from(Meal).where(Meal.archived_at.is_not(None))
+            select(func.count()).select_from(Item).where(
+                (Item.collection_id == collection.id) & (Item.archived_at.is_not(None))
+            )
         )
         or 0
     )
@@ -296,7 +368,7 @@ def library_page(
             "url": _toggle_tag_url(tag.name),
             "selected": tag.name in tag_names,
         }
-        for tag in _all_tags(db)
+        for tag in _all_tags(db, collection.group_id)
     ]
 
     return templates.TemplateResponse(
@@ -324,49 +396,68 @@ def new_meal_page(
     db: Annotated[Session, Depends(get_db)],
     type: str = "dinner",
 ):
-    """Blank edit page for a new meal (admin-only). ``?type=`` presets the
+    """Blank edit page for a new item (admin-only). ``?type=`` presets the
     track; the in-form cycle button drives it from there."""
     require_account(request, db)
+    collection = _get_meal_collection(db)
+    if collection is None:
+        raise HTTPException(400, "No meal collection exists yet. An admin needs to seed the library first.")
     return _render_edit(
-        request, db, None, _empty_form(type), [], error=None
+        request, db, collection.group_id, None, None, _empty_form(type), [], error=None
     )
 
 
-@router.get("/library/{meal_id}")
+@router.get("/library/{item_id}")
 def recipe_view(
-    request: Request, meal_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Public recipe view: name, type/tags, ingredients (bulleted), then
     instructions, then the optional original-source link."""
-    meal = _get_meal_or_404(db, meal_id)
+    item = _get_item_or_404(db, item_id)
+    detail = _item_meal_detail(db, item.id)
     ingredients = [
         line.strip()
-        for line in (meal.ingredients or "").splitlines()
+        for line in (detail.ingredients or "" if detail else "").splitlines()
         if line.strip()
     ]
+
+    # Template expects meal.recipe_text, so attach it to item for template compat.
+    item.recipe_text = detail.recipe_text if detail else None
+
     return templates.TemplateResponse(
         request,
         "recipe.html",
         {
-            "meal": meal,
-            "tags": _meal_tags(db, meal.id),
-            "type_label": TYPE_LABELS[meal.type],
-            "type_style": _type_pill_style(meal.type),
+            "meal": item,  # keep template var name for compatibility
+            "tags": _item_tags(db, item.id),
+            "type_label": TYPE_LABELS[detail.type if detail else "dinner"],
+            "type_style": _type_pill_style(detail.type if detail else "dinner"),
             "ingredients": ingredients,
-            "safe_source_url": _safe_source_url(meal.source_url),
+            "safe_source_url": _safe_source_url(detail.source_url if detail else None),
         },
     )
 
 
-@router.get("/library/{meal_id}/edit")
+@router.get("/library/{item_id}/edit")
 def edit_meal_page(
-    request: Request, meal_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
-    """Edit page for an existing meal (admin-only)."""
+    """Edit page for an existing item (admin-only)."""
     require_account(request, db)
-    meal = _get_meal_or_404(db, meal_id)
+    item = _get_item_or_404(db, item_id)
+    detail = _item_meal_detail(db, item.id)
+    collection = db.get(Collection, item.collection_id)
+    if collection is None:
+        raise HTTPException(500, "Collection not found")
     return _render_edit(
-        request, db, meal, _meal_form(meal), _meal_tags(db, meal.id), error=None
+        request,
+        db,
+        collection.group_id,
+        item,
+        detail,
+        _item_form(item, detail),
+        _item_tags(db, item.id),
+        error=None,
     )
 
 
@@ -381,37 +472,50 @@ def create_meal(
     instructions: Annotated[str, Form()] = "",
     source_url: Annotated[str, Form()] = "",
 ):
-    """Create a meal (admin-only). 303 to the new meal's edit page."""
+    """Create an item (admin-only). 303 to the new item's edit page."""
     require_account(request, db)
+    collection = _get_meal_collection(db)
+    if collection is None:
+        raise HTTPException(400, "No meal collection exists yet. An admin needs to seed the library first.")
+
     tags = tags or []
     form = _clean_form(name, type, ingredients, instructions, source_url)
-    error = _validate_form(form, db)
+    error = _validate_form(form, db, collection.id)
     if error is not None:
         return _render_edit(
-            request, db, None, form, _tag_names(tags), error, status_code=400
+            request, db, collection.group_id, None, None, form, _tag_names(tags), error, status_code=400
         )
-    meal = Meal(
+    item = Item(
+        collection_id=collection.id,
         name=form["name"],
         normalized_name=_normalize_name(form["name"]),
+        description=None,
+        is_active=True,
+    )
+    db.add(item)
+    db.flush()
+
+    # Create meal_detail row.
+    detail = MealDetail(
+        item_id=item.id,
         type=form["type"],
         ingredients=form["ingredients"] or None,
         recipe_text=form["instructions"] or None,
         source_url=_safe_source_url(form["source_url"]) or None,
-        is_active=True,
     )
-    db.add(meal)
-    db.flush()
-    for tag in _resolve_tags(db, tags):
-        db.add(MealTag(meal_id=meal.id, tag_id=tag.id))
+    db.add(detail)
+
+    for tag in _resolve_tags(db, collection.group_id, tags):
+        db.add(ItemTag(item_id=item.id, tag_id=tag.id))
     db.commit()
-    return RedirectResponse(f"/library/{meal.id}/edit", status_code=303)
+    return RedirectResponse(f"/library/{item.id}/edit", status_code=303)
 
 
-@router.post("/library/{meal_id}")
+@router.post("/library/{item_id}")
 def update_meal(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
-    meal_id: int,
+    item_id: int,
     name: Annotated[str, Form()],
     type: Annotated[str, Form()],
     tags: Annotated[list[str] | None, Form()] = None,
@@ -419,62 +523,85 @@ def update_meal(
     instructions: Annotated[str, Form()] = "",
     source_url: Annotated[str, Form()] = "",
 ):
-    """Update a meal (admin-only): rename recomputes normalized_name; the
-    collision check excludes this meal itself."""
+    """Update an item (admin-only): rename recomputes normalized_name; the
+    collision check excludes this item itself."""
     require_account(request, db)
     tags = tags or []
-    meal = _get_meal_or_404(db, meal_id)
+    item = _get_item_or_404(db, item_id)
+    detail = _item_meal_detail(db, item.id)
+    collection = db.get(Collection, item.collection_id)
+    if collection is None:
+        raise HTTPException(500, "Collection not found")
+
     form = _clean_form(name, type, ingredients, instructions, source_url)
-    error = _validate_form(form, db, exclude_meal_id=meal.id)
+    error = _validate_form(form, db, collection.id, exclude_item_id=item.id)
     if error is not None:
         return _render_edit(
-            request, db, meal, form, _tag_names(tags), error, status_code=400
+            request,
+            db,
+            collection.group_id,
+            item,
+            detail,
+            form,
+            _tag_names(tags),
+            error,
+            status_code=400,
         )
-    meal.name = form["name"]
-    meal.normalized_name = _normalize_name(form["name"])
-    meal.type = form["type"]
-    meal.ingredients = form["ingredients"] or None
-    meal.recipe_text = form["instructions"] or None
-    meal.source_url = _safe_source_url(form["source_url"]) or None
-    db.execute(delete(MealTag).where(MealTag.meal_id == meal.id))
-    for tag in _resolve_tags(db, tags):
-        db.add(MealTag(meal_id=meal.id, tag_id=tag.id))
+    item.name = form["name"]
+    item.normalized_name = _normalize_name(form["name"])
+    db.execute(delete(ItemTag).where(ItemTag.item_id == item.id))
+    for tag in _resolve_tags(db, collection.group_id, tags):
+        db.add(ItemTag(item_id=item.id, tag_id=tag.id))
+
+    # Update meal_detail.
+    if detail is None:
+        detail = MealDetail(item_id=item.id)
+        db.add(detail)
+    detail.type = form["type"]
+    detail.ingredients = form["ingredients"] or None
+    detail.recipe_text = form["instructions"] or None
+    detail.source_url = _safe_source_url(form["source_url"]) or None
+
     db.commit()
-    return RedirectResponse(f"/library/{meal.id}/edit", status_code=303)
+    return RedirectResponse(f"/library/{item.id}/edit", status_code=303)
 
 
-@router.post("/library/{meal_id}/archive")
+@router.post("/library/{item_id}/archive")
 def archive_meal(
-    request: Request, meal_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Archive (admin-only, reversible — never deleted, D16)."""
     require_account(request, db)
-    meal = _get_meal_or_404(db, meal_id)
-    meal.archived_at = func.now()
+    item = _get_item_or_404(db, item_id)
+    item.archived_at = func.now()
     db.commit()
     return RedirectResponse("/library", status_code=303)
 
 
-@router.post("/library/{meal_id}/unarchive")
+@router.post("/library/{item_id}/unarchive")
 def unarchive_meal(
-    request: Request, meal_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
-    """Restore an archived meal (admin-only)."""
+    """Restore an archived item (admin-only)."""
     require_account(request, db)
-    meal = _get_meal_or_404(db, meal_id)
-    meal.archived_at = None
+    item = _get_item_or_404(db, item_id)
+    item.archived_at = None
     db.commit()
     return RedirectResponse("/library", status_code=303)
 
 
-@router.post("/library/{meal_id}/cycle-type")
+@router.post("/library/{item_id}/cycle-type")
 def cycle_type(
-    request: Request, meal_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Type cycle dinner → lunch → both → dinner (admin-only)."""
     require_account(request, db)
-    meal = _get_meal_or_404(db, meal_id)
-    meal.type = TYPE_CYCLE[meal.type]
+    item = _get_item_or_404(db, item_id)
+    detail = _item_meal_detail(db, item.id)
+    if detail is None:
+        detail = MealDetail(item_id=item.id, type="dinner")
+        db.add(detail)
+    detail.type = TYPE_CYCLE[detail.type]
     db.commit()
     return RedirectResponse("/library", status_code=303)
 

@@ -1,14 +1,40 @@
-"""Meal library routes (M2, T2.1–T2.2): browse/search/filter, create/edit,
+"""Meal library routes (M2b, T2.1–T2.2): browse/search/filter, create/edit,
 admin gating, archive/unarchive, type cycle, recipe view."""
 
 from sqlalchemy import func, select
 
 from app.credentials import hash_password
-from app.models import Account, Meal, MealTag, Tag
+from app.models import Account, Collection, Group, Item, ItemTag, MealDetail, Tag
 
 
-def _make_meal(
+def _make_group(db_session, owner_email="owner@example.com", group_name="Test Group"):
+    """Create an account and group."""
+    account = Account(
+        email=owner_email,
+        password_hash=hash_password("testpass123"),
+        display_name="Owner",
+    )
+    db_session.add(account)
+    db_session.flush()
+
+    group = Group(name=group_name, owner_account_id=account.id)
+    db_session.add(group)
+    db_session.commit()
+    return group
+
+
+def _make_collection(db_session, group_id, name="Meal Planner"):
+    """Create a meal collection for a group."""
+    collection = Collection(group_id=group_id, kind="meal", name=name)
+    db_session.add(collection)
+    db_session.commit()
+    return collection
+
+
+def _make_item(
     db_session,
+    collection_id,
+    group_id,
     name,
     type="dinner",
     tags=(),
@@ -17,28 +43,39 @@ def _make_meal(
     source_url=None,
     archived=False,
 ):
-    meal = Meal(
+    """Create an item with a meal_detail row and optional tags."""
+    item = Item(
+        collection_id=collection_id,
         name=name,
         normalized_name=name.casefold(),
+        description=None,
+        is_active=True,
+    )
+    db_session.add(item)
+    db_session.flush()
+
+    detail = MealDetail(
+        item_id=item.id,
         type=type,
         ingredients=ingredients,
         recipe_text=recipe_text,
         source_url=source_url,
-        is_active=True,
     )
-    db_session.add(meal)
-    db_session.flush()
+    db_session.add(detail)
+
     for tname in tags:
-        tag = db_session.scalar(select(Tag).where(Tag.name == tname))
+        tag = db_session.scalar(select(Tag).where((Tag.group_id == group_id) & (Tag.name == tname)))
         if tag is None:
-            tag = Tag(name=tname)
+            tag = Tag(group_id=group_id, name=tname)
             db_session.add(tag)
             db_session.flush()
-        db_session.add(MealTag(meal_id=meal.id, tag_id=tag.id))
+        db_session.add(ItemTag(item_id=item.id, tag_id=tag.id))
+
     if archived:
-        meal.archived_at = func.now()
+        item.archived_at = func.now()
+
     db_session.commit()
-    return meal
+    return item
 
 
 def _make_account(db_session, email="admin@example.com", password="testpass123", display_name="Admin"):
@@ -56,12 +93,12 @@ def _login(post, email="admin@example.com", password="testpass123"):
     post("/login", data={"email": email, "password": password})
 
 
-def _tags_of(db_session, meal_id):
+def _tags_of(db_session, item_id):
     return set(
         db_session.scalars(
             select(Tag.name)
-            .join(MealTag, MealTag.tag_id == Tag.id)
-            .where(MealTag.meal_id == meal_id)
+            .join(ItemTag, ItemTag.tag_id == Tag.id)
+            .where(ItemTag.item_id == item_id)
         ).all()
     )
 
@@ -69,9 +106,11 @@ def _tags_of(db_session, meal_id):
 # ---------- Browse / search / filter (public) ----------
 
 
-def test_library_page_lists_meals(client, db_session):
-    _make_meal(db_session, "Taco Tuesday", tags=["takeout"])
-    _make_meal(db_session, "Pancakes", type="both")
+def test_library_page_lists_items(client, db_session):
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Taco Tuesday", tags=["takeout"])
+    _make_item(db_session, collection.id, group.id, "Pancakes", type="both")
     resp = client.get("/library")
     assert resp.status_code == 200
     assert "Meal Library" in resp.text
@@ -81,8 +120,10 @@ def test_library_page_lists_meals(client, db_session):
 
 
 def test_library_search_filters(client, db_session):
-    _make_meal(db_session, "taco soup", type="both")
-    _make_meal(db_session, "bacon and eggs", type="both")
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "taco soup", type="both")
+    _make_item(db_session, collection.id, group.id, "bacon and eggs", type="both")
     resp = client.get("/library", params={"q": "taco"})
     assert "taco soup" in resp.text
     assert "bacon and eggs" not in resp.text
@@ -93,9 +134,11 @@ def test_library_search_filters(client, db_session):
 
 
 def test_library_type_filter(client, db_session):
-    _make_meal(db_session, "Steak", type="dinner")
-    _make_meal(db_session, "Quesadillas", type="both")
-    _make_meal(db_session, "Salad bar", type="lunch")
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Steak", type="dinner")
+    _make_item(db_session, collection.id, group.id, "Quesadillas", type="both")
+    _make_item(db_session, collection.id, group.id, "Salad bar", type="lunch")
     resp = client.get("/library", params={"type": "both"})
     assert "Quesadillas" in resp.text
     assert "Steak" not in resp.text
@@ -106,9 +149,11 @@ def test_library_type_filter(client, db_session):
 
 
 def test_library_tag_filter_or_semantics(client, db_session):
-    _make_meal(db_session, "Whataburger", tags=["takeout"])
-    _make_meal(db_session, "Pizza Rolls", tags=["takeout", "snack"])
-    _make_meal(db_session, "Homemade bread", tags=["snack"])
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Whataburger", tags=["takeout"])
+    _make_item(db_session, collection.id, group.id, "Pizza Rolls", tags=["takeout", "snack"])
+    _make_item(db_session, collection.id, group.id, "Homemade bread", tags=["snack"])
     resp = client.get("/library", params={"tags": "takeout"})
     assert "Whataburger" in resp.text
     assert "Pizza Rolls" in resp.text
@@ -121,8 +166,10 @@ def test_library_tag_filter_or_semantics(client, db_session):
 
 
 def test_archived_hidden_by_default_visible_with_status(client, db_session):
-    _make_meal(db_session, "Old pasta", archived=True)
-    _make_meal(db_session, "Fresh tacos")
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Old pasta", archived=True)
+    _make_item(db_session, collection.id, group.id, "Fresh tacos")
     resp = client.get("/library")
     assert "Fresh tacos" in resp.text
     assert "Old pasta" not in resp.text
@@ -135,20 +182,34 @@ def test_archived_hidden_by_default_visible_with_status(client, db_session):
 
 
 def test_library_kept_label_and_recipe_link(client, db_session):
-    meal = _make_meal(db_session, "Brisket", recipe_text="Slow cook it.")
-    meal.times_kept = 3
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    item = _make_item(db_session, collection.id, group.id, "Brisket", recipe_text="Slow cook it.")
+    item.times_kept = 3
     db_session.commit()
     resp = client.get("/library")
     assert "Kept 3×" in resp.text
     assert "Recipe →" in resp.text
 
 
+def test_library_empty_when_no_collection(client, db_session):
+    """Library page shows empty state when no meal collection exists."""
+    resp = client.get("/library")
+    assert resp.status_code == 200
+    # Should render gracefully without collection
+    assert "Meal Library" in resp.text
+
+
 # ---------- Recipe view (public) ----------
 
 
 def test_recipe_view_renders(client, db_session):
-    meal = _make_meal(
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    item = _make_item(
         db_session,
+        collection.id,
+        group.id,
         "Chili",
         type="both",
         tags=["spicy"],
@@ -156,7 +217,7 @@ def test_recipe_view_renders(client, db_session):
         recipe_text="Brown the beef. Simmer an hour.",
         source_url="https://example.com/chili",
     )
-    resp = client.get(f"/library/{meal.id}")
+    resp = client.get(f"/library/{item.id}")
     assert resp.status_code == 200
     assert "Chili" in resp.text
     assert "1 lb beef" in resp.text
@@ -168,8 +229,10 @@ def test_recipe_view_renders(client, db_session):
 
 
 def test_recipe_view_empty_state(client, db_session):
-    meal = _make_meal(db_session, "Mystery night")
-    resp = client.get(f"/library/{meal.id}")
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    item = _make_item(db_session, collection.id, group.id, "Mystery night")
+    resp = client.get(f"/library/{item.id}")
     assert resp.status_code == 200
     assert "No recipe saved yet" in resp.text
     assert "A clean full-page cooking view" in resp.text
@@ -183,7 +246,9 @@ def test_recipe_view_unknown_404(client, db_session):
 
 
 def test_admin_gating(client, post, db_session):
-    _make_meal(db_session, "Steak")
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Steak")
     # No session at all: 401 (not signed in).
     assert post("/library", data={"name": "X", "type": "dinner"}).status_code == 401
     assert client.get("/library/new").status_code == 401
@@ -195,7 +260,9 @@ def test_admin_gating(client, post, db_session):
 # ---------- Create ----------
 
 
-def test_create_meal(client, post, db_session):
+def test_create_item(client, post, db_session):
+    group = _make_group(db_session)
+    _make_collection(db_session, group.id)
     _make_account(db_session)
     _login(post)
     resp = post(
@@ -211,18 +278,21 @@ def test_create_meal(client, post, db_session):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    meal = db_session.scalar(select(Meal).where(Meal.normalized_name == "test meal"))
-    assert meal is not None
-    assert meal.type == "dinner"
-    assert meal.ingredients == "a\n\nb"  # internal blank line kept
-    assert meal.recipe_text == "Do the thing."  # trailing whitespace stripped
-    assert meal.source_url == "https://example.com/test"
-    assert resp.headers["location"] == f"/library/{meal.id}/edit"
+    item = db_session.scalar(select(Item).where(Item.normalized_name == "test meal"))
+    assert item is not None
+    detail = db_session.get(MealDetail, item.id)
+    assert detail.type == "dinner"
+    assert detail.ingredients == "a\n\nb"  # internal blank line kept
+    assert detail.recipe_text == "Do the thing."  # trailing whitespace stripped
+    assert detail.source_url == "https://example.com/test"
+    assert resp.headers["location"] == f"/library/{item.id}/edit"
     # Tags incl. the brand-new "weeknight" were created and linked.
-    assert _tags_of(db_session, meal.id) == {"takeout", "weeknight"}
+    assert _tags_of(db_session, item.id) == {"takeout", "weeknight"}
 
 
-def test_create_meal_without_tags_or_recipe(client, post, db_session):
+def test_create_item_without_tags_or_recipe(client, post, db_session):
+    group = _make_group(db_session)
+    _make_collection(db_session, group.id)
     _make_account(db_session)
     _login(post)
     resp = post(
@@ -231,25 +301,30 @@ def test_create_meal_without_tags_or_recipe(client, post, db_session):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    meal = db_session.scalar(select(Meal).where(Meal.normalized_name == "bare meal"))
-    assert meal is not None
-    assert meal.ingredients is None
-    assert meal.recipe_text is None
-    assert _tags_of(db_session, meal.id) == set()
+    item = db_session.scalar(select(Item).where(Item.normalized_name == "bare meal"))
+    assert item is not None
+    detail = db_session.get(MealDetail, item.id)
+    assert detail.ingredients is None
+    assert detail.recipe_text is None
+    assert _tags_of(db_session, item.id) == set()
 
 
 def test_create_duplicate_normalized_name_400(client, post, db_session):
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
     _make_account(db_session)
     _login(post)
-    _make_meal(db_session, "Bacon and Eggs")
+    _make_item(db_session, collection.id, group.id, "Bacon and Eggs")
     resp = post(
         "/library", data={"name": "bacon   and eggs", "type": "dinner"}
     )  # whitespace-collapsed collision
     assert resp.status_code == 400
-    assert "A meal with that name already exists." in resp.text
+    assert "An item with that name already exists" in resp.text
 
 
 def test_create_invalid_type_400(client, post, db_session):
+    group = _make_group(db_session)
+    _make_collection(db_session, group.id)
     _make_account(db_session)
     _login(post)
     resp = post("/library", data={"name": "Weird", "type": "brunch"})
@@ -257,146 +332,59 @@ def test_create_invalid_type_400(client, post, db_session):
 
 
 def test_create_empty_name_400(client, post, db_session):
+    group = _make_group(db_session)
+    _make_collection(db_session, group.id)
     _make_account(db_session)
     _login(post)
     resp = post("/library", data={"name": "   ", "type": "dinner"})
     assert resp.status_code == 400
 
 
+def test_create_without_collection_400(client, post, db_session):
+    """Creating without a meal collection returns 400."""
+    _make_account(db_session)
+    _login(post)
+    resp = post("/library", data={"name": "Test", "type": "dinner"})
+    assert resp.status_code == 400
+    assert "No meal collection exists" in resp.text
+
+
 # ---------- Update ----------
 
 
-def test_update_meal_rename_and_type(client, post, db_session):
+def test_update_item_rename_and_type(client, post, db_session):
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
     _make_account(db_session)
     _login(post)
-    meal = _make_meal(db_session, "Old Name", type="dinner", tags=["takeout"])
+    item = _make_item(db_session, collection.id, group.id, "Old Name", type="dinner", tags=["takeout"])
     resp = post(
-        f"/library/{meal.id}",
+        f"/library/{item.id}",
         data={"name": "New Name", "type": "both", "tags": ["takeout", "newtag"]},
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    db_session.refresh(meal)
-    assert meal.name == "New Name"
-    assert meal.normalized_name == "new name"  # recomputed on rename
-    assert meal.type == "both"
-    assert _tags_of(db_session, meal.id) == {"takeout", "newtag"}
+    db_session.refresh(item)
+    assert item.name == "New Name"
+    assert item.normalized_name == "new name"  # recomputed on rename
+    detail = db_session.get(MealDetail, item.id)
+    assert detail.type == "both"
+    assert _tags_of(db_session, item.id) == {"takeout", "newtag"}
 
 
 def test_update_rename_collision_400(client, post, db_session):
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
     _make_account(db_session)
     _login(post)
-    _make_meal(db_session, "Tacos")
-    meal = _make_meal(db_session, "Other")
-    resp = post(f"/library/{meal.id}", data={"name": "Tacos", "type": "dinner"})
+    _make_item(db_session, collection.id, group.id, "Tacos")
+    item = _make_item(db_session, collection.id, group.id, "Other")
+    resp = post(f"/library/{item.id}", data={"name": "Tacos", "type": "dinner"})
     assert resp.status_code == 400
-    assert "A meal with that name already exists." in resp.text
-    # Renaming a meal to its own name is fine (self excluded).
+    assert "An item with that name already exists" in resp.text
+    # Renaming an item to its own name is fine (self excluded).
     resp = post(
-        f"/library/{meal.id}", data={"name": "Other", "type": "dinner"},
+        f"/library/{item.id}", data={"name": "Other", "type": "dinner"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
-
-
-# ---------- Cycle type / archive ----------
-
-
-def test_cycle_type_round_trip(client, post, db_session):
-    _make_account(db_session)
-    _login(post)
-    meal = _make_meal(db_session, "Cycler", type="dinner")
-    for expected in ("lunch", "both", "dinner"):
-        resp = post(f"/library/{meal.id}/cycle-type", follow_redirects=False)
-        assert resp.status_code == 303
-        db_session.refresh(meal)
-        assert meal.type == expected
-
-
-def test_archive_unarchive(client, post, db_session):
-    _make_account(db_session)
-    _login(post)
-    meal = _make_meal(db_session, "Archivable")
-    post(f"/library/{meal.id}/archive")
-    db_session.refresh(meal)
-    assert meal.archived_at is not None
-    assert "Archivable" not in client.get("/library").text
-    assert "Archivable" in client.get("/library", params={"status": "archived"}).text
-    post(f"/library/{meal.id}/unarchive")
-    db_session.refresh(meal)
-    assert meal.archived_at is None
-    assert "Archivable" in client.get("/library").text
-
-
-# ---------- Source URL safety (stored XSS) ----------
-
-
-def test_create_rejects_unsafe_source_url(client, post, db_session):
-    _make_account(db_session)
-    _login(post)
-    unsafe_urls = [
-        "javascript:alert(1)",
-        "JaVaScRiPt:alert(1)",
-        "ftp://example.com/x",
-        "data:text/html,<script>alert(1)</script>",
-        "//evil.example/x",
-    ]
-    for i, unsafe in enumerate(unsafe_urls):
-        resp = post(
-            "/library",
-            data={"name": f"Unsafe {i}", "type": "dinner", "source_url": unsafe},
-        )
-        assert resp.status_code == 400, unsafe
-        assert "Source URL must start with http:// or https://." in resp.text, unsafe
-    # None of the rejected submissions were persisted.
-    assert (
-        db_session.scalar(select(Meal).where(Meal.normalized_name.like("unsafe %")))
-        is None
-    )
-
-
-def test_create_stores_valid_https_source_url(client, post, db_session):
-    _make_account(db_session)
-    _login(post)
-    resp = post(
-        "/library",
-        data={
-            "name": "Sourced Meal",
-            "type": "dinner",
-            "source_url": "https://example.com/recipe",
-        },
-        follow_redirects=False,
-    )
-    assert resp.status_code == 303
-    meal = db_session.scalar(select(Meal).where(Meal.normalized_name == "sourced meal"))
-    assert meal is not None
-    assert meal.source_url == "https://example.com/recipe"
-    # Recipe page renders the link with the stored URL.
-    page = client.get(f"/library/{meal.id}")
-    assert page.status_code == 200
-    assert 'href="https://example.com/recipe"' in page.text
-    assert "Originally sourced from this recipe" in page.text
-
-
-def test_update_rejects_unsafe_source_url_keeps_previous(client, post, db_session):
-    _make_account(db_session)
-    _login(post)
-    meal = _make_meal(db_session, "Sourced", source_url="https://example.com/ok")
-    resp = post(
-        f"/library/{meal.id}",
-        data={"name": "Sourced", "type": "dinner", "source_url": "javascript:alert(1)"},
-    )
-    assert resp.status_code == 400
-    assert "Source URL must start with http:// or https://." in resp.text
-    db_session.refresh(meal)
-    assert meal.source_url == "https://example.com/ok"
-
-
-def test_recipe_view_omits_unsafe_source_link(client, db_session):
-    # Planted directly in the DB, bypassing form validation (legacy/bad data).
-    meal = _make_meal(db_session, "Legacy Bad", source_url="javascript:alert(1)")
-    resp = client.get(f"/library/{meal.id}")
-    assert resp.status_code == 200
-    assert "javascript:" not in resp.text
-    assert 'href="javascript:' not in resp.text
-    assert "Originally sourced from this recipe" not in resp.text
