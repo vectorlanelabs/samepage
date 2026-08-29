@@ -2,7 +2,7 @@
 {% block title %}{{ meal.name }} · Same Page{% endblock %}
 {% block content %}
 <div style="background:var(--dd-card);border-radius:var(--dd-radius-card);padding:40px;box-shadow:var(--dd-shadow-card);">
-  <a href="/library" style="border:none;background:none;color:var(--dd-text-muted);font:700 13px var(--dd-font-body);cursor:pointer;">← Back to library</a>
+  <a href="/collections/{{ collection.id }}" style="border:none;background:none;color:var(--dd-text-muted);font:700 13px var(--dd-font-body);cursor:pointer;">← Back to library</a>
   <h1 style="font:600 30px/1.2 var(--dd-font-display);color:var(--dd-text);margin:14px 0 0;">{{ meal.name }}</h1>
   <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center;">
     <span style="{{ type_style }}">{{ type_label }}</span>

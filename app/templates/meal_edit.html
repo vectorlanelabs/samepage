@@ -3,7 +3,7 @@
 {% block content %}
 <div style="background:var(--dd-card);border-radius:var(--dd-radius-card);padding:32px;box-shadow:var(--dd-shadow-card);">
   <div style="display:flex;align-items:center;gap:10px;">
-    <a href="/library" style="border:none;background:none;color:var(--dd-text-muted);font:700 13px var(--dd-font-body);cursor:pointer;">← Back</a>
+    <a href="/collections/{{ collection.id }}" style="border:none;background:none;color:var(--dd-text-muted);font:700 13px var(--dd-font-body);cursor:pointer;">← Back</a>
     <h1 style="font:600 20px var(--dd-font-display);color:var(--dd-text);margin:0;">{% if meal is none %}Add a meal{% else %}Edit {{ meal.name }}{% endif %}</h1>
   </div>
 
@@ -11,7 +11,7 @@
   <p style="font:700 12px var(--dd-font-body);color:var(--dd-dinner);margin:14px 0 0;">{{ error }}</p>
   {% endif %}
 
-  <form method="post" action="{% if meal is none %}/library{% else %}/library/{{ meal.id }}{% endif %}" style="margin:0;">
+  <form method="post" action="{% if meal is none %}/collections/{{ collection.id }}/items{% else %}/collections/{{ collection.id }}/items/{{ meal.id }}{% endif %}" style="margin:0;">
     <div style="font:700 10.5px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin-top:18px;">Name</div>
     <input type="text" name="name" value="{{ form.name }}" placeholder="e.g. Sunday roast chicken"
            style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
@@ -48,8 +48,8 @@
 
   {% if meal is not none %}
   <div style="display:flex;gap:16px;margin-top:14px;">
-    <a href="/library/{{ meal.id }}" style="border:none;background:none;color:oklch(0.5 0.12 140);font:700 12px var(--dd-font-body);cursor:pointer;">View recipe →</a>
-    <form method="post" action="/library/{{ meal.id }}/{% if meal.archived_at %}unarchive{% else %}archive{% endif %}" style="margin:0;">
+    <a href="/collections/{{ collection.id }}/items/{{ meal.id }}" style="border:none;background:none;color:oklch(0.5 0.12 140);font:700 12px var(--dd-font-body);cursor:pointer;">View recipe →</a>
+    <form method="post" action="/collections/{{ collection.id }}/items/{{ meal.id }}/{% if meal.archived_at %}unarchive{% else %}archive{% endif %}" style="margin:0;">
       <button type="submit" style="border:none;background:none;color:var(--dd-text-muted);font:700 12px var(--dd-font-body);cursor:pointer;padding:0;">{% if meal.archived_at %}Restore meal{% else %}Archive meal{% endif %}</button>
     </form>
   </div>

@@ -388,3 +388,35 @@ bypass (Starlette percent-encoding closes it), 401→login→post-login query-st
 0006 up/down/up live, seed-dedupe test proven non-vacuous by mutation, logout under the origin check.
 
 Remaining for M2c part 2: collection-scoped routing (`/collections/{id}`, plan §9).
+
+---
+
+## 2026-08-29 — M2c part 2 landed: collection-scoped routing. M2c complete.
+
+The library moved to honest URLs: `/collections` hub (per-group sections, active counts),
+`/collections/{id}` browse, item routes nested under their collection with a two-stage guard
+(collection ownership 404-guarded, then item existence + membership in that exact collection),
+`/library` reduced to a legacy 303. Creates now land in the URL's collection — the multi-group dead
+end (code-review major #3: an account in two groups could never reach the second library, and creates
+silently bound to the lowest collection id) is closed, with a regression test saying so by name.
+
+Implementation: `deepseek-v4-flash`, two invocations plus one `--continue` fix round. Its completion
+report was calibrated and honest (flagged its own two test deletions with reasons — both correct: the
+deleted tests asserted behaviors this slice removes by design). Lead verification: full diff read,
+`ruff` clean, `pytest -q` green throughout (113 → 127 tests).
+
+Oscar review (Sonnet, adversarial): **approve**, and unusually strong receipts — it mutation-tested
+the guards (dropped the collection-membership check in a scratch copy; the ported tests went red,
+proving they're load-bearing), probed cross-group tag reuse, hub count edges, and the legacy
+redirect for open-redirect surface. Findings, all dispositioned: (minor) hub grouped sections by
+group *name*, merging same-named groups — **fixed** (implementer round: id-keyed grouping +
+regression test). Lead follow-up on that fix: the ORDER BY still lacked `Group.id`, so two same-named
+groups' collections could interleave and split a group into multiple sections — **fixed by the lead**
+(one line + strengthened regression test, proven load-bearing by mutation: fails on the un-fixed
+ordering, passes on the fix). (nit) `_get_meal_collection` filters `kind == "meal"` while the hub
+shows all kinds — **rejected as a defect**: intentional asymmetry, documented in both docstrings
+(the legacy redirect goes to a *meal* library; the hub is the generic surface).
+
+M2c is complete. The mandate's steps 1 and 2 are done: spec + doc sweep landed, correctness punch
+list landed, routing landed. Next up per ROADMAP: design round-1 (Charlie + Claude Design, kickoff
+brief in docs/DESIGN-BRIEF-mobile.md), then M3 approval gate on the revised plan.

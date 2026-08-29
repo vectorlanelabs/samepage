@@ -9,12 +9,12 @@
 <div style="background:var(--dd-card);border-radius:var(--dd-radius-card);padding:32px;box-shadow:var(--dd-shadow-card);">
   <div style="display:flex;align-items:center;justify-content:space-between;">
     <h1 style="font-family:var(--dd-font-display);font-weight:600;font-size:22px;margin:0;color:var(--dd-text);">Meal Library</h1>
-    <a href="/library/new" style="padding:11px 18px;border:none;border-radius:999px;background:var(--dd-primary-soft);color:var(--dd-primary-strong);font:700 13px var(--dd-font-display);cursor:pointer;">+ Add a meal</a>
+    <a href="/collections/{{ collection.id }}/items/new" style="padding:11px 18px;border:none;border-radius:999px;background:var(--dd-primary-soft);color:var(--dd-primary-strong);font:700 13px var(--dd-font-display);cursor:pointer;">+ Add a meal</a>
   </div>
   <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:6px 0 0;">{{ active_count }} active · {{ archived_count }} archived.</p>
 
   <div style="display:flex;gap:10px;margin-top:16px;align-items:flex-start;flex-wrap:wrap;">
-    <form method="get" action="/library" style="flex:1 1 200px;min-width:160px;margin:0;display:flex;gap:8px;">
+    <form method="get" action="/collections/{{ collection.id }}" style="flex:1 1 200px;min-width:160px;margin:0;display:flex;gap:8px;">
       <input type="text" name="q" value="{{ q }}" placeholder="Search meals…"
              style="flex:1;min-width:0;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
       <input type="hidden" name="type" value="{{ type }}">
@@ -24,7 +24,7 @@
     </form>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
       {% for tf in type_filters %}
-      <form method="get" action="/library" style="margin:0;">
+      <form method="get" action="/collections/{{ collection.id }}" style="margin:0;">
         <input type="hidden" name="q" value="{{ q }}">
         <input type="hidden" name="tags" value="{{ tags }}">
         <input type="hidden" name="status" value="{{ status }}">
@@ -35,7 +35,7 @@
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
       {% for sf in status_filters %}
-      <form method="get" action="/library" style="margin:0;">
+      <form method="get" action="/collections/{{ collection.id }}" style="margin:0;">
         <input type="hidden" name="q" value="{{ q }}">
         <input type="hidden" name="type" value="{{ type }}">
         <input type="hidden" name="tags" value="{{ tags }}">
@@ -58,8 +58,8 @@
   {% for m in meals %}
     <div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;background:oklch(0.97 0.015 260);border-radius:16px;{% if m.archived %}opacity:.55;{% endif %}">
       <div style="display:flex;align-items:center;gap:8px;">
-        <a href="/library/{{ m.id }}" style="font:700 14px var(--dd-font-body);color:var(--dd-text);flex:1;">{{ m.name }}</a>
-        <form method="post" action="/library/{{ m.id }}/cycle-type" style="margin:0;">
+        <a href="/collections/{{ collection.id }}/items/{{ m.id }}" style="font:700 14px var(--dd-font-body);color:var(--dd-text);flex:1;">{{ m.name }}</a>
+        <form method="post" action="/collections/{{ collection.id }}/items/{{ m.id }}/cycle-type" style="margin:0;">
           <button type="submit" style="{{ m.type_style }}">{{ m.type_label }}</button>
         </form>
       </div>
@@ -72,21 +72,17 @@
         {% endif %}
       </div>
       <div style="display:flex;gap:12px;align-items:center;">
-        <a href="/library/{{ m.id }}/edit" style="border:none;background:none;color:oklch(0.55 0.14 300);font:700 11px var(--dd-font-body);cursor:pointer;">Edit</a>
+        <a href="/collections/{{ collection.id }}/items/{{ m.id }}/edit" style="border:none;background:none;color:oklch(0.55 0.14 300);font:700 11px var(--dd-font-body);cursor:pointer;">Edit</a>
         {% if m.has_recipe %}
-        <a href="/library/{{ m.id }}" style="border:none;background:none;color:oklch(0.5 0.12 140);font:700 11px var(--dd-font-body);cursor:pointer;">Recipe →</a>
+        <a href="/collections/{{ collection.id }}/items/{{ m.id }}" style="border:none;background:none;color:oklch(0.5 0.12 140);font:700 11px var(--dd-font-body);cursor:pointer;">Recipe →</a>
         {% endif %}
-        <form method="post" action="/library/{{ m.id }}/{% if m.archived %}unarchive{% else %}archive{% endif %}" style="margin:0 0 0 auto;">
+        <form method="post" action="/collections/{{ collection.id }}/items/{{ m.id }}/{% if m.archived %}unarchive{% else %}archive{% endif %}" style="margin:0 0 0 auto;">
           <button type="submit" style="border:none;background:none;color:var(--dd-text-muted);font:700 11px var(--dd-font-body);cursor:pointer;padding:0;">{% if m.archived %}Restore{% else %}Archive{% endif %}</button>
         </form>
       </div>
     </div>
   {% else %}
-    {% if no_collection %}
-    <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);margin:0;grid-column:1 / -1;">No meal collection yet — an admin needs to seed the library.</p>
-    {% else %}
     <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);margin:0;grid-column:1 / -1;">No meals match these filters.</p>
-    {% endif %}
   {% endfor %}
   </div>
 </div>

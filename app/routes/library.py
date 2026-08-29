@@ -1,13 +1,15 @@
-"""Item library routes (M2b, T2.1–T2.2): browse/search/filter, create, edit,
-archive/unarchive, type cycle, and the recipe view.
+"""Item library routes (M2b, T2.1–T2.2; M2c part 2, collection-scoped routing):
+browse/search/filter, create, edit, archive/unarchive, type cycle, the recipe
+view, and the legacy /library redirect.
 
-Every route requires a signed-in account, and every item lookup is scoped to
-a meal collection owned by a group the signed-in account owns or admins —
+Every route requires a signed-in account, and every lookup is scoped to the
+collection in the URL: the collection must belong to a group the signed-in
+account owns or admins, and an item must belong to that exact collection —
 this is a shared multi-tenant deployment, so an account must never be able to
-browse, view, or mutate another group's library by guessing an item id or
-just visiting the page while logged out. A nonexistent-or-not-yours item
-returns 404, never 403, so browsing doesn't reveal that another group's item
-exists.
+browse, view, or mutate another group's library by guessing a collection or
+item id, or by mixing ids across collections. A nonexistent-or-not-yours
+resource returns 404, never 403, so browsing doesn't reveal that another
+group's collection or item exists.
 """
 
 from __future__ import annotations
@@ -70,10 +72,22 @@ def _account_owns_collection(db: Session, account: Account, collection_id: int) 
     )
 
 
+def _get_owned_collection_or_404(db: Session, account: Account, collection_id: int) -> Collection:
+    """A collection, but only if it belongs to a group `account` owns or
+    admins — 404 (not 403) for a collection that doesn't exist or isn't
+    theirs, so browsing never reveals another group's collection exists."""
+    if not _account_owns_collection(db, account, collection_id):
+        raise HTTPException(404, "No such collection")
+    collection = db.get(Collection, collection_id)
+    if collection is None:
+        raise HTTPException(404, "No such collection")
+    return collection
+
+
 def _get_meal_collection(db: Session, account: Account) -> Collection | None:
     """The signed-in account's own meal-kind collection — a collection owned by
     a group `account` owns or admins. Never another group's collection, even
-    if one exists first in the table."""
+    if one exists first in the table. Only used by the legacy /library redirect."""
     return db.scalar(
         select(Collection)
         .join(Group, Group.id == Collection.group_id)
@@ -90,12 +104,14 @@ def _get_meal_collection(db: Session, account: Account) -> Collection | None:
     )
 
 
-def _get_owned_item_or_404(db: Session, account: Account, item_id: int) -> Item:
-    """An item, but only if it belongs to a collection `account` owns or
-    admins — 404 (not 403) for anything else, so browsing never reveals that
-    another group's item exists."""
+def _get_owned_item_or_404(db: Session, collection: Collection, item_id: int) -> Item:
+    """An item, but only if it exists AND lives in the already-guarded
+    collection from the URL — 404 (not 403) for anything else. Ownership is
+    established by the collection guard; this check is existence plus
+    membership in that exact collection, so item ids can't be mixed across
+    collections."""
     item = db.get(Item, item_id)
-    if item is None or not _account_owns_collection(db, account, item.collection_id):
+    if item is None or item.collection_id != collection.id:
         raise HTTPException(404, "No such item")
     return item
 
@@ -139,7 +155,7 @@ def _all_tags(db: Session, group_id: int) -> list[Tag]:
 def _render_edit(
     request: Request,
     db: Session,
-    group_id: int,
+    collection: Collection,
     item: Item | None,
     detail: MealDetail | None,
     form: dict,
@@ -160,9 +176,10 @@ def _render_edit(
         "meal_edit.html",
         {
             "meal": item,  # keep template var name for compatibility
+            "collection": collection,
             "form": form,
             "selected_tags": selected_tags,
-            "all_tags": _all_tags(db, group_id),
+            "all_tags": _all_tags(db, collection.group_id),
             "error": error,
             "track_label": TYPE_LABELS[meal_type],
             "track_style": (
@@ -264,38 +281,31 @@ def _validate_form(
 
 
 @router.get("/library")
+def legacy_library_redirect(request: Request, db: Annotated[Session, Depends(get_db)]):
+    """Legacy /library (plan §9): 303 to the account's first meal collection,
+    or to the collections hub when the account has none. Every other /library
+    route was deleted — the library now lives at /collections/{id}."""
+    account = require_account(request, db)
+    collection = _get_meal_collection(db, account)
+    if collection is None:
+        return RedirectResponse("/collections", status_code=303)
+    return RedirectResponse(f"/collections/{collection.id}", status_code=303)
+
+
+@router.get("/collections/{collection_id}")
 def library_page(
     request: Request,
+    collection_id: int,
     db: Annotated[Session, Depends(get_db)],
     q: str = "",
     type: str = "",
     tags: str = "",
     status: str = "active",
 ):
-    """Library browse (signed-in accounts only): search (q), type / tag (OR) /
-    status filters, scoped to the account's own group's collection."""
+    """Collection browse (signed-in accounts only): search (q), type / tag (OR)
+    / status filters, scoped to the collection in the URL."""
     account = require_account(request, db)
-
-    # Resolve the account's own meal collection; if none exists, show empty state.
-    collection = _get_meal_collection(db, account)
-    if collection is None:
-        return templates.TemplateResponse(
-            request,
-            "library.html",
-            {
-                "meals": [],
-                "active_count": 0,
-                "archived_count": 0,
-                "q": q,
-                "type": type,
-                "tags": tags,
-                "status": status,
-                "type_filters": [],
-                "status_filters": [],
-                "tag_filters": [],
-                "no_collection": True,
-            },
-        )
+    collection = _get_owned_collection_or_404(db, account, collection_id)
 
     type = type if type in VALID_TYPES else ""
     status = status if status in ("active", "archived", "all") else "active"
@@ -380,7 +390,8 @@ def library_page(
         params = {"q": q, "type": type, "tags": tags, "status": status}
         params.update({k: v for k, v in overrides.items() if v is not None})
         params = {k: v for k, v in params.items() if v}
-        return f"/library?{urlencode(params)}" if params else "/library"
+        base = f"/collections/{collection.id}"
+        return f"{base}?{urlencode(params)}" if params else base
 
     def _toggle_tag_url(tag_name: str) -> str:
         if tag_name in tag_names:
@@ -414,6 +425,7 @@ def library_page(
         request,
         "library.html",
         {
+            "collection": collection,
             "meals": rows,
             "active_count": active_count,
             "archived_count": archived_count,
@@ -428,32 +440,36 @@ def library_page(
     )
 
 
-@router.get("/library/new")
+@router.get("/collections/{collection_id}/items/new")
 def new_meal_page(
     request: Request,
+    collection_id: int,
     db: Annotated[Session, Depends(get_db)],
     type: str = "dinner",
 ):
-    """Blank edit page for a new item (admin-only). ``?type=`` presets the
-    track; the in-form cycle button drives it from there."""
+    """Blank edit page for a new item in the URL's collection (signed-in
+    account, own collection). ``?type=`` presets the track; the in-form cycle
+    button drives it from there."""
     account = require_account(request, db)
-    collection = _get_meal_collection(db, account)
-    if collection is None:
-        raise HTTPException(400, "No meal collection exists yet. An admin needs to seed the library first.")
+    collection = _get_owned_collection_or_404(db, account, collection_id)
     return _render_edit(
-        request, db, collection.group_id, None, None, _empty_form(type), [], error=None
+        request, db, collection, None, None, _empty_form(type), [], error=None
     )
 
 
-@router.get("/library/{item_id}")
+@router.get("/collections/{collection_id}/items/{item_id}")
 def recipe_view(
-    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request,
+    collection_id: int,
+    item_id: int,
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """Recipe view (signed-in accounts only, own group's items): name,
+    """Recipe view (signed-in accounts only, own collection's items): name,
     type/tags, ingredients (bulleted), then instructions, then the optional
     original-source link."""
     account = require_account(request, db)
-    item = _get_owned_item_or_404(db, account, item_id)
+    collection = _get_owned_collection_or_404(db, account, collection_id)
+    item = _get_owned_item_or_404(db, collection, item_id)
     detail = _item_meal_detail(db, item.id)
     ingredients = [
         line.strip()
@@ -466,6 +482,7 @@ def recipe_view(
         "recipe.html",
         {
             "meal": item,  # keep template var name for compatibility
+            "collection": collection,
             "detail": detail,
             "tags": _item_tags(db, item.id),
             "type_label": TYPE_LABELS[detail.type if detail else "dinner"],
@@ -476,21 +493,22 @@ def recipe_view(
     )
 
 
-@router.get("/library/{item_id}/edit")
+@router.get("/collections/{collection_id}/items/{item_id}/edit")
 def edit_meal_page(
-    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request,
+    collection_id: int,
+    item_id: int,
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """Edit page for an existing item (admin-only)."""
+    """Edit page for an existing item (signed-in account, own collection)."""
     account = require_account(request, db)
-    item = _get_owned_item_or_404(db, account, item_id)
+    collection = _get_owned_collection_or_404(db, account, collection_id)
+    item = _get_owned_item_or_404(db, collection, item_id)
     detail = _item_meal_detail(db, item.id)
-    collection = db.get(Collection, item.collection_id)
-    if collection is None:
-        raise HTTPException(500, "Collection not found")
     return _render_edit(
         request,
         db,
-        collection.group_id,
+        collection,
         item,
         detail,
         _item_form(item, detail),
@@ -499,9 +517,10 @@ def edit_meal_page(
     )
 
 
-@router.post("/library")
+@router.post("/collections/{collection_id}/items")
 def create_meal(
     request: Request,
+    collection_id: int,
     db: Annotated[Session, Depends(get_db)],
     name: Annotated[str, Form()],
     type: Annotated[str, Form()],
@@ -510,18 +529,19 @@ def create_meal(
     instructions: Annotated[str, Form()] = "",
     source_url: Annotated[str, Form()] = "",
 ):
-    """Create an item (admin-only). 303 to the new item's edit page."""
+    """Create an item in the URL's collection (signed-in account, own
+    collection — the item is inserted into the URL's collection, replacing the
+    old implicit 'first meal collection' binding). 303 to the new item's edit
+    page."""
     account = require_account(request, db)
-    collection = _get_meal_collection(db, account)
-    if collection is None:
-        raise HTTPException(400, "No meal collection exists yet. An admin needs to seed the library first.")
+    collection = _get_owned_collection_or_404(db, account, collection_id)
 
     tags = tags or []
     form = _clean_form(name, type, ingredients, instructions, source_url)
     error = _validate_form(form, db, collection.id)
     if error is not None:
         return _render_edit(
-            request, db, collection.group_id, None, None, form, _tag_names(tags), error, status_code=400
+            request, db, collection, None, None, form, _tag_names(tags), error, status_code=400
         )
     item = Item(
         collection_id=collection.id,
@@ -545,14 +565,15 @@ def create_meal(
     for tag in _resolve_tags(db, collection.group_id, tags):
         db.add(ItemTag(item_id=item.id, tag_id=tag.id))
     db.commit()
-    return RedirectResponse(f"/library/{item.id}/edit", status_code=303)
+    return RedirectResponse(f"/collections/{collection.id}/items/{item.id}/edit", status_code=303)
 
 
-@router.post("/library/{item_id}")
+@router.post("/collections/{collection_id}/items/{item_id}")
 def update_meal(
     request: Request,
-    db: Annotated[Session, Depends(get_db)],
+    collection_id: int,
     item_id: int,
+    db: Annotated[Session, Depends(get_db)],
     name: Annotated[str, Form()],
     type: Annotated[str, Form()],
     tags: Annotated[list[str] | None, Form()] = None,
@@ -560,15 +581,13 @@ def update_meal(
     instructions: Annotated[str, Form()] = "",
     source_url: Annotated[str, Form()] = "",
 ):
-    """Update an item (admin-only): rename recomputes normalized_name; the
-    collision check excludes this item itself."""
+    """Update an item (signed-in account, own collection): rename recomputes
+    normalized_name; the collision check excludes this item itself."""
     account = require_account(request, db)
     tags = tags or []
-    item = _get_owned_item_or_404(db, account, item_id)
+    collection = _get_owned_collection_or_404(db, account, collection_id)
+    item = _get_owned_item_or_404(db, collection, item_id)
     detail = _item_meal_detail(db, item.id)
-    collection = db.get(Collection, item.collection_id)
-    if collection is None:
-        raise HTTPException(500, "Collection not found")
 
     form = _clean_form(name, type, ingredients, instructions, source_url)
     error = _validate_form(form, db, collection.id, exclude_item_id=item.id)
@@ -576,7 +595,7 @@ def update_meal(
         return _render_edit(
             request,
             db,
-            collection.group_id,
+            collection,
             item,
             detail,
             form,
@@ -600,47 +619,61 @@ def update_meal(
     detail.source_url = _safe_source_url(form["source_url"]) or None
 
     db.commit()
-    return RedirectResponse(f"/library/{item.id}/edit", status_code=303)
+    return RedirectResponse(f"/collections/{collection.id}/items/{item.id}/edit", status_code=303)
 
 
-@router.post("/library/{item_id}/archive")
+@router.post("/collections/{collection_id}/items/{item_id}/archive")
 def archive_meal(
-    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request,
+    collection_id: int,
+    item_id: int,
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """Archive (admin-only, reversible — never deleted, D16)."""
+    """Archive (signed-in account, own collection, reversible — never deleted,
+    D16)."""
     account = require_account(request, db)
-    item = _get_owned_item_or_404(db, account, item_id)
+    collection = _get_owned_collection_or_404(db, account, collection_id)
+    item = _get_owned_item_or_404(db, collection, item_id)
     item.archived_at = func.now()
     db.commit()
-    return RedirectResponse("/library", status_code=303)
+    return RedirectResponse(f"/collections/{collection.id}", status_code=303)
 
 
-@router.post("/library/{item_id}/unarchive")
+@router.post("/collections/{collection_id}/items/{item_id}/unarchive")
 def unarchive_meal(
-    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request,
+    collection_id: int,
+    item_id: int,
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """Restore an archived item (admin-only)."""
+    """Restore an archived item (signed-in account, own collection)."""
     account = require_account(request, db)
-    item = _get_owned_item_or_404(db, account, item_id)
+    collection = _get_owned_collection_or_404(db, account, collection_id)
+    item = _get_owned_item_or_404(db, collection, item_id)
     item.archived_at = None
     db.commit()
-    return RedirectResponse("/library", status_code=303)
+    return RedirectResponse(f"/collections/{collection.id}", status_code=303)
 
 
-@router.post("/library/{item_id}/cycle-type")
+@router.post("/collections/{collection_id}/items/{item_id}/cycle-type")
 def cycle_type(
-    request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request,
+    collection_id: int,
+    item_id: int,
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """Type cycle dinner → lunch → both → dinner (admin-only)."""
+    """Type cycle dinner → lunch → both → dinner (signed-in account, own
+    collection)."""
     account = require_account(request, db)
-    item = _get_owned_item_or_404(db, account, item_id)
+    collection = _get_owned_collection_or_404(db, account, collection_id)
+    item = _get_owned_item_or_404(db, collection, item_id)
     detail = _item_meal_detail(db, item.id)
     if detail is None:
         detail = MealDetail(item_id=item.id, type="dinner")
         db.add(detail)
     detail.type = TYPE_CYCLE[detail.type]
     db.commit()
-    return RedirectResponse("/library", status_code=303)
+    return RedirectResponse(f"/collections/{collection.id}", status_code=303)
 
 
 def _tag_names(raw_tags: list[str]) -> list[str]:
