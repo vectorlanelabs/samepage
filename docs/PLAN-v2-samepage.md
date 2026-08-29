@@ -1,4 +1,4 @@
-# SamePage — v2 Architecture: Multi-Tenant Decision Platform
+# Same Page — v2 Architecture: Multi-Tenant Decision Platform
 
 > Status: **2026-08-29 — M2a and M2b landed; M3 onward reviewed and revised in light of what building
 > M2a/M2b actually surfaced, still unapproved pending Charlie's sign-off.**
@@ -21,7 +21,7 @@
 
 Building M0–M2 as a single-household meal planner surfaced something bigger: the actual reusable asset
 here is a **consensus decision engine** (batch of options → private yes/no → unanimous-keep, host-may-accept-majority)
-that has nothing to do with meals specifically. Charlie wants this to become **SamePage** — a platform any
+that has nothing to do with meals specifically. Charlie wants this to become **Same Page** — a platform any
 family or friend group can host, with meal planning (renamed **Meal Planner**) as the first of several
 **collections** (things to do, games owned, date-night options, ...) sharing one voting mechanism and one
 reporting layer.
@@ -39,7 +39,7 @@ Two things forced a real architecture revision rather than an additive feature:
 
 ## 2. Product shape
 
-- **SamePage** is the platform/brand. **Meal Planner** (formerly "Dinner Decider") is the first
+- **Same Page** is the platform/brand. **Meal Planner** (formerly "Dinner Decider") is the first
   **collection kind** it hosts.
 - **Single shared deployment, multi-tenant.** One instance (Charlie's VPS) hosts many independent
   **groups** (households, friend circles). This was chosen over per-family self-hosted instances +
@@ -400,7 +400,10 @@ person curating collections is often at a desktop. That ordering now drives the 
 
 ## 10. Rename
 
-Product: **SamePage**. This collection/module: **Meal Planner** (was "Dinner Decider"). Repo, package
+Product: **Same Page** — two words, with the space, everywhere a human reads it (UI copy, page titles,
+docs; corrected per Charlie, 2026-08-29). Identifiers keep the collapsed form: repo
+`vectorlanelabs/samepage`, directory `samepage-app`, env prefix `SP_*`, package/module names. This
+collection/module: **Meal Planner** (was "Dinner Decider"). Repo, package
 name, and env var prefix (`DD_*` → `SP_*`) updated alongside this doc; see commit for the mechanical diff.
 GitHub repo renamed `vectorlanelabs/dinnerdecider` → `vectorlanelabs/samepage` on 2026-08-28, per Charlie's
 explicit go-ahead. Local clone directory renamed to match (`samepage-app`).

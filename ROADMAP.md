@@ -1,11 +1,11 @@
-# SamePage — Roadmap
+# Same Page — Roadmap
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## ⚠ Architecture pivot in progress (2026-08-28)
 
 **M3 onward is unapproved.** Building M0–M2 as a single-household meal planner surfaced a bigger, more
-useful shape: a generalized multi-tenant consensus-voting platform (**SamePage**), with meal planning
+useful shape: a generalized multi-tenant consensus-voting platform (**Same Page**), with meal planning
 (**Meal Planner**) as its first collection. This changes identity/tenancy (M1 is being redone as M2a) and
 generalizes the meal-specific schema (M2 is being redone as M2b) before M3 (planning sessions & voting,
 never built) starts. Full architecture: `docs/PLAN-v2-samepage.md`. `docs/PLAN-v1-mvp.md` and
@@ -47,7 +47,7 @@ Each gets a full plan doc when its trigger condition fires.
   `docs/DESIGN-BRIEF-mobile.md`; visual/template changes held for that pass. New M2c row tracks the
   pre-M3 correctness/routing slice. Doc sweep fixed CLAUDE.md's stale PIN/`is_admin`/global-API-key
   lines and CHARTER's banner scope.
-- **2026-08-28** — **Architecture pivot: SamePage.** Renamed from Dinner Decider; multi-tenant consensus
+- **2026-08-28** — **Architecture pivot: Same Page.** Renamed from Dinner Decider; multi-tenant consensus
   platform (`docs/PLAN-v2-samepage.md`) with Meal Planner as the first collection. Real accounts +
   group ownership/admin replace `Person`+PIN entirely (no PINs anywhere); meals generalize to
   `collection`/`item`; voting outcomes are recorded per-item with aggregate yes/no counts and **no

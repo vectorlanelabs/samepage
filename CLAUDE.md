@@ -1,4 +1,4 @@
-# SamePage — Implementer Constraints (CLAUDE.md)
+# Same Page — Implementer Constraints (CLAUDE.md)
 
 > **⚠ Pivot in progress (2026-08-28):** renamed from Dinner Decider. `docs/PLAN-v2-samepage.md` is now the
 > binding spec — it supersedes this file's and `docs/PLAN-v1-mvp.md`'s identity (D2) and meal-specific

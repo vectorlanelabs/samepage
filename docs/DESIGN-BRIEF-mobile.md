@@ -1,4 +1,4 @@
-# Design Brief — SamePage mobile-first rework
+# Design Brief — Same Page mobile-first rework
 
 > For the Claude Design pass now in flight. Written 2026-08-29 by the project lead. This brief
 > **supersedes the layout direction of the existing `Design Handoff/` bundle**, which describes itself as

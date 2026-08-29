@@ -353,3 +353,7 @@ retained deliberately, it's the no-SPA plan's mechanism (plan §9).
 Also this entry: `docs/DESIGN-BRIEF-mobile.md` written — corrects the Design Handoff bundle's
 desktop-first premise and its "plan v2 doesn't exist" claim before Claude Design sinks more work into
 the wrong target. Visual/template work held for that pass.
+
+**Addendum (same day):** Charlie corrected the brand: **"Same Page", with a space**, wherever a
+human reads it; identifiers (`samepage-app`, `SP_*`, repo name) stay collapsed. Live docs swept; the
+user-visible template/title strings go in the M2c implementation slice.

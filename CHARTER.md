@@ -1,7 +1,7 @@
-# SamePage — Project Charter
+# Same Page — Project Charter
 
 > **⚠ Superseded in part, 2026-08-28.** This charter's identity model (D2, D16's "no accounts") and
-> meal-specific decisions (D10) are superseded by `docs/PLAN-v2-samepage.md` — SamePage is now a
+> meal-specific decisions (D10) are superseded by `docs/PLAN-v2-samepage.md` — Same Page is now a
 > multi-tenant consensus-voting platform with Meal Planner (formerly "Dinner Decider") as its first
 > collection. M0–M2's mechanics (vote privacy, unanimous/majority-host-accept, Alembic migrations, no
 > in-app AI) all carry forward; identity and single-household assumptions do not. **Also superseded
