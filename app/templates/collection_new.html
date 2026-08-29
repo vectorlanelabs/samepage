@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}New Collection · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <a class="back-link" href="/collections">← Collections</a>
+
+  <h1 class="page-title">New collection</h1>
+
+  {% if not groups %}
+  <p class="empty-state"><a href="/groups">Create a group first.</a></p>
+  {% else %}
+  {% if error %}
+  <p class="form-error">{{ error }}</p>
+  {% endif %}
+
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <form method="post" action="/collections">
+      <div class="field-label">Name</div>
+      <input type="text" name="name" value="{{ name }}" placeholder="e.g. Weeknight dinners" required class="input">
+
+      <div class="field-label">Group</div>
+      <select name="group_id" required class="input">
+        {% for g in groups %}
+        <option value="{{ g.id }}"{% if g.selected %} selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="field-label">Kind</div>
+      <p class="page-meta" style="margin-top:0;">Meal Planner collection</p>
+      <input type="hidden" name="kind" value="meal">
+
+      <button type="submit" class="btn btn-primary" style="margin-top:22px;">Create</button>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

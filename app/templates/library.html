@@ -78,7 +78,11 @@
       </div>
     </div>
   {% else %}
-    <p class="empty-state lib-empty">No meals match these filters.</p>
+    {% if collection_empty %}
+    <p class="empty-state lib-empty">This collection has no items yet.</p>
+    {% else %}
+    <p class="empty-state lib-empty">No items match these filters.</p>
+    {% endif %}
   {% endfor %}
   </div>
 </div>

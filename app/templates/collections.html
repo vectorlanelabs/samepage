@@ -2,7 +2,10 @@
 {% block title %}Collections · Same Page{% endblock %}
 {% block content %}
 <div class="page">
-  <h1 class="page-title">Collections</h1>
+  <div class="lib-header">
+    <h1 class="page-title">Collections</h1>
+    <a class="btn btn-secondary" href="/collections/new">+ New collection</a>
+  </div>
 
   {% if groups %}
     {% for g in groups %}
@@ -20,7 +23,7 @@
     </div>
     {% endfor %}
   {% else %}
-  <p class="empty-state">No meal collection yet — an admin needs to seed the library.</p>
+  <p class="empty-state">No collections yet — create one to get started.</p>
   {% endif %}
 </div>
 {% endblock %}

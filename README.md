@@ -4,8 +4,8 @@ Same Page is a platform for a household or a friend group to keep a shared datab
 
 ## What's actually built right now
 
-- **Accounts and groups.** Anyone can sign up with email and password. Any account can create a group and becomes its owner; the owner can add other admins.
-- **A shared meal library.** Once a group exists, an admin runs the seed loader to load 155 household meals (recipe links included) into that group's library. Meals can be browsed, searched, filtered, tagged, added, edited, and archived.
+- **Accounts and groups.** Sign in with Google (no passwords in this app). Any account can create a group and becomes its owner; the owner can add other admins.
+- **A shared meal library.** A group's admin creates a collection and adds meals to it. Meals can be browsed, searched, filtered, tagged, added, edited, and archived.
 - **No voting yet.** The plan calls for batches of options and private yes/no votes until a group agrees, but that part isn't built. That's the next milestone.
 
 ## The voting mechanic (designed, not built)
@@ -29,8 +29,4 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app
 ```
 
-Then, in the browser: sign up, create a group, and note its id from the URL (`/groups/<id>`). Load the meal library into that group:
-
-```
-uv run python -m scripts.seed <group_id>
-```
+Then, in the browser: sign in with Google, create a group, and create a meal collection in it (`Collections → + New collection`) — a new deployment starts with an empty database, so the collection starts empty and meals are added from the library's "+ Add a meal" button.

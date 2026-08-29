@@ -37,7 +37,7 @@ VALID_TYPES = frozenset(TYPE_LABELS)
 
 
 def _normalize_name(name: str) -> str:
-    """D11 dedupe key, shared with scripts/seed.py: casefold + collapse."""
+    """D11 dedupe key: casefold + collapse whitespace."""
     return re.sub(r"\s+", " ", name.casefold()).strip()
 
 
@@ -409,6 +409,7 @@ def library_page(
             "meals": rows,
             "active_count": active_count,
             "archived_count": archived_count,
+            "collection_empty": active_count == 0 and archived_count == 0,
             "q": q,
             "type": type,
             "tags": tags,

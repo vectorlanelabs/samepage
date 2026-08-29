@@ -93,7 +93,6 @@ class Category(Base):
     collection_id: Mapped[int] = mapped_column(ForeignKey("collection.id"), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     sort_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    legacy_sheet_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Tag(Base):

@@ -812,3 +812,23 @@ def test_cycle_type_another_groups_item_404(client, post, db_session):
     assert resp.status_code == 404
     detail = db_session.get(MealDetail, other_item.id)
     assert detail.type == "dinner"  # unchanged (default from _make_item)
+
+
+def test_empty_states_distinguish_empty_collection_from_filtered(client, db_session):
+    """Regression (Oscar M2e): a collection with items but zero filter matches
+    must say 'No items match these filters', NOT 'has no items yet' (which
+    implies the collection needs setting up)."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _login(client, db_session)
+
+    # Truly empty collection → "no items yet".
+    resp = client.get(f"/collections/{collection.id}")
+    assert "has no items yet" in resp.text
+    assert "No items match these filters" not in resp.text
+
+    # Add an item, then filter to zero matches → "no items match".
+    _make_item(db_session, collection.id, group.id, "Real Meal")
+    resp = client.get(f"/collections/{collection.id}?q=zzz-no-such-meal")
+    assert "No items match these filters" in resp.text
+    assert "has no items yet" not in resp.text

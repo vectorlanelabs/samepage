@@ -501,3 +501,33 @@ no secret logged/rendered. Dispositions:
 Suite: **122 passed**, ruff clean. NEEDS-FROM-CHARLIE (REQUESTS.md): the Google OAuth client
 id/secret + domain before go-live; local testing runs against the FakeProvider / unconfigured
 degradation until then.
+
+---
+
+## 2026-08-29 — M2e landed: seed pipeline purged, create-collection flow added
+
+Charlie's deploy-ready direction: production launches from a blank, unseeded database with no
+dice-spreadsheet provenance in the repo. Deleted `seed/`, `scripts/` (seed.py + build_seed), the
+`reference/` XLSX and its README, `tests/test_seed.py`, and `openpyxl`; dropped
+`Category.legacy_sheet_index` (migration 0008). Added the flow a blank DB needs: `GET /collections/new`
+(group picker scoped to the account's own groups; "create a group first" when it has none; kind forced
+to "meal" server-side), `POST /collections` (guarded by `require_group_admin` — cross-tenant/nonexistent
+group → 404, blank name → 400, no stray rows), the hub "+ New collection" button and new empty states.
+README rewritten to the real no-seed flow. These files leave HEAD but remain in git history (REQUESTS.md
+notes that a history scrub, if wanted, is a separate destructive call — not assumed).
+
+Implementation: `deepseek-v4-flash`, dispatch + one `--continue`. Lead verification: fresh migration
+boot through 0008 (blank DB), plus a live browser walk on a blank DB — sign-in, empty hub with the
+correct "create one to get started" state, create "Weeknight Dinners", it appears with 0 items. The
+old dead end (only the seed script could make a collection) is closed.
+
+Oscar review (Sonnet): **needs-changes → fixed → ship**. Security/tenancy probes all clean, reproduced
+live: cross-tenant POST /collections → 404 no row (mutation-tested to confirm the guard has bite),
+picker lists only own groups, `kind` hardcoded server-side (POSTing kind=admin ignored), name XSS
+escaped, migration 0008 up/down/up on a populated DB safe, no dangling seed imports, app boots clean.
+One real regression found and **fixed by the lead**: the reskin had collapsed the "empty collection"
+and "filtered-to-zero" empty states into one misleading message ("has no items yet" shown even when
+filtering a populated collection) — restored the distinction via a `collection_empty` flag with a
+regression test pinning both messages. Suite: **126 passed**, ruff clean.
+
+M0–M2e + M5a complete. Next: M3 voting engine.
