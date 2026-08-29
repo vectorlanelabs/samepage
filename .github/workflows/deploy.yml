@@ -43,11 +43,15 @@ jobs:
             echo "in repo Settings → Secrets and variables → Actions, then re-run or push again."
             exit 0
           fi
-          # Coolify deploy webhook. TOKEN is sent as a bearer header when set;
-          # a plain URL-token webhook works with TOKEN left empty.
+          # Fire-and-forget: hitting the endpoint queues the deploy, which then
+          # runs independently of this HTTP connection. Coolify holds the
+          # connection open while it builds, so cap it (-m 30) and don't fail
+          # the job on a slow/streamed response — the deploy still proceeds.
+          # TOKEN is sent as a bearer header only when set (Coolify's plain
+          # webhook needs none).
           if [ -n "$TOKEN" ]; then
-            curl -fsSL --retry 2 -X GET "$URL" -H "Authorization: Bearer $TOKEN"
+            curl -sS -m 30 "$URL" -H "Authorization: Bearer $TOKEN" || true
           else
-            curl -fsSL --retry 2 -X GET "$URL"
+            curl -sS -m 30 "$URL" || true
           fi
-          echo "Coolify deploy triggered."
+          echo "Coolify deploy webhook sent (build runs on Coolify)."
