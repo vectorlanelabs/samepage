@@ -1,97 +1,66 @@
 # Deploying Same Page
 
-Same Page is a single FastAPI app on SQLite, fronted by Caddy for HTTPS. One
-VPS, two containers (`app` + `caddy`), one persistent volume for the database.
-Alembic migrations run automatically at app startup — there is no separate
-migrate step. The production database starts **empty**; there is no seed data.
+Same Page is a single FastAPI app on SQLite. Alembic migrations run
+automatically at app startup — there is no separate migrate step. The
+production database starts **empty**; there is no seed data.
 
-> **Status:** these artifacts are ready for the *first* deploy. The GitHub
-> Actions pipeline is intentionally NOT in the repo yet — CI stays off until
-> Charlie provides the domain and gives the go-ahead (CLAUDE.md #10). Until
-> then, deploy by hand with the steps below.
+## How it's deployed (production)
 
-## Prerequisites
+Production runs on a VPS via **Coolify** (Compose build strategy), deploying the
+`samepage` app from `vectorlanelabs/samepage` `main`. Coolify provides the TLS
+front door / reverse proxy internally, so the Compose file exposes the app on
+port 8000 to Coolify's proxy only — **no host port mapping, no bundled Caddy**.
+Production URL: `https://samepage.vectorlane.dev`.
 
-1. A VPS with Docker + Docker Compose, ports 80 and 443 free.
-2. A domain pointed (A/AAAA record) at the VPS.
-3. A Google OAuth client (see `REQUESTS.md` for the console walkthrough): its
-   client id + secret, with `https://<your-domain>/auth/google/callback` added
-   as an authorized redirect URI.
+The container: `Dockerfile` builds with `uv sync --frozen --no-dev`, runs as a
+non-root user, drops privileges in `docker-entrypoint.sh`, and starts
+`uvicorn app.main:app --proxy-headers`. The SQLite DB lives on the
+`samepage-data` volume at `/data/samepage.db`; the root filesystem is read-only
+(`/data` and `/tmp` are the only writable paths).
 
-## One-time setup
+To ship a change: land it on `main`. A deploy is currently triggered **manually
+in Coolify** (redeploy the `samepage` app); the CI pipeline to auto-trigger it
+on `main` is not built yet (CLAUDE.md #10 — pending Charlie's go-word).
 
-Create a `.env` next to `docker-compose.yml` (never commit it):
+## Environment variables (set in Coolify, never in Git)
 
-```
-SP_DOMAIN=samepage.example.com
-SP_SECRET=<openssl rand -hex 32>
-SP_GOOGLE_CLIENT_ID=<from Google Cloud Console>
-SP_GOOGLE_CLIENT_SECRET=<from Google Cloud Console>
-```
+| Var | Required | Value |
+|---|---|---|
+| `SP_ENV` | yes | `production` (also set in the image) — enables Secure session cookies |
+| `SP_SECRET` | yes | long random hex (`openssl rand -hex 32`); stable — rotating it logs everyone out |
+| `SP_DB_PATH` | yes | `/data/samepage.db` (set in Compose) |
+| `SP_BASE_URL` | **yes** | `https://samepage.vectorlane.dev` — the app builds the Google OAuth redirect URI from this; if unset it defaults to localhost and sign-in breaks |
+| `SP_GOOGLE_CLIENT_ID` | yes | from Google Cloud Console (project `samepage`) |
+| `SP_GOOGLE_CLIENT_SECRET` | yes | from Google Cloud Console |
 
-`SP_SECRET` signs the session cookies — keep it stable (rotating it logs
-everyone out) and secret. The app reads `SP_ENV=production` (set in the image),
-which turns on the `Secure` cookie flag; it only works over real HTTPS, which
-Caddy provides.
+No `SP_API_KEY` is used (M6a uses per-group tokens stored in the DB, not an env
+var). The Google OAuth client's authorized redirect URI must be
+`https://samepage.vectorlane.dev/auth/google/callback`.
 
-## Deploy
+## First-boot notes
 
-```bash
-docker compose up -d --build
-```
-
-Caddy fetches a Let's Encrypt certificate on first boot (needs DNS already
-pointing at the box and ports 80/443 reachable). Watch the first startup:
-
-```bash
-docker compose logs -f app     # migrations run here; a migration failure aborts boot by design
-docker compose logs -f caddy   # certificate issuance
-```
-
-Then visit `https://<your-domain>` — sign in with Google, create a group, and
-create a collection. There is no seed data; the library starts empty and is
-built in-app.
-
-## Reverse-proxy gotcha (already handled, don't undo)
-
-The app's CSRF protection compares the request `Origin` against the `Host`
-header verbatim. Caddy's `reverse_proxy` forwards the original Host by default,
-so the provided `Caddyfile` works as-is. If you swap in a different proxy, it
-**must** forward the original Host (nginx: `proxy_set_header Host $host;`) or
-every form submission will 403.
+- Migrations run at startup and a migration failure aborts boot by design —
+  watch the container logs on first deploy.
+- The DB starts empty: sign in with Google, create a group, create a collection,
+  add items in-app. If a previous (skeleton) deploy left data on the volume and
+  you want a truly clean start, reset the `samepage-data` volume before deploying.
 
 ## Backups
 
-The whole durable state is one SQLite file (plus its WAL sidecars) on the
-`samepage-data` volume. Back it up WAL-safely — never `cp` a live WAL database:
+The durable state is one SQLite file (+ WAL sidecars) on `samepage-data`. Back
+it up WAL-safely — never `cp` a live WAL database:
 
 ```bash
-# from the host, using sqlite3 against the mounted volume (recommended):
-sqlite3 /var/lib/docker/volumes/samepage_samepage-data/_data/samepage.db \
-  ".backup '/path/to/backups/samepage-$(date -u +%Y%m%dT%H%M%SZ).db'"
-# or run the bundled script (it lives in the repo, not the slim image — run it
-# from a checkout with sqlite3 installed, pointed at the volume path above):
-deploy/backup.sh <db-path> <backup-dir>
+# from a host with sqlite3, pointed at the volume path:
+sqlite3 <volume>/samepage.db ".backup '<dest>/samepage-$(date -u +%Y%m%dT%H%M%SZ).db'"
 ```
 
-`deploy/backup.sh` uses `sqlite3 .backup`, integrity-checks the snapshot, and
-prunes backups older than `RETENTION_DAYS` (default 14). Schedule it from cron
-(e.g. `17 3 * * *`). Periodically prove the backups restore:
-
-```bash
-docker compose exec app deploy/restore-check.sh /data/backups
-```
-
-`restore-check.sh` restores the newest backup into a scratch copy and asserts
-it's at Alembic head with the core tables queryable — a backup you've never
-restored is a hope, not a backup.
+`deploy/backup.sh` wraps this with an integrity check + retention prune, and
+`deploy/restore-check.sh` proves the newest backup restores at Alembic head —
+run them from a checkout with `sqlite3` installed, pointed at the volume. A
+backup you've never restored is a hope, not a backup.
 
 ## Upgrades
 
-```bash
-git pull
-docker compose up -d --build     # migrations run at startup; take a backup first
-```
-
-Take a backup before upgrading. Migrations are forward-only in practice; the
-downgrade paths exist but restoring a backup is the real rollback.
+Land the change on `main`, take a backup, then redeploy in Coolify. Migrations
+are forward-only in practice; restoring a backup is the real rollback.
