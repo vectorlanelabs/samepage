@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Home · SamePage{% endblock %}
 {% block content %}
+{% if account %}
 <section class="hero-card">
   <h1 class="hero-title">What's for dinner?</h1>
   <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);margin:8px 0 0;">Voting isn't built yet — browse the meal library or manage your groups below.</p>
@@ -15,4 +16,14 @@
     <div class="stat-count">{{ active_group_count }} groups</div>
   </a>
 </section>
+{% else %}
+<section class="hero-card">
+  <h1 class="hero-title">SamePage</h1>
+  <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);margin:8px 0 0;">Sign in to see your groups and meal library.</p>
+  <div style="display:flex;gap:10px;margin-top:16px;">
+    <a class="pill" href="/login">Sign in →</a>
+    <a class="pill" href="/signup" style="background:var(--dd-primary-soft);color:var(--dd-primary-strong);">Sign up →</a>
+  </div>
+</section>
+{% endif %}
 {% endblock %}

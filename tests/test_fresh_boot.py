@@ -45,4 +45,5 @@ def test_migrations_create_schema_from_scratch(tmp_path):
 def test_fresh_boot_home_renders(client):
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "What's for dinner?" in resp.text
+    assert "SamePage" in resp.text
+    assert "Sign in" in resp.text
