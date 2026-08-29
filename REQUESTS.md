@@ -94,3 +94,12 @@ don't think I can go into chatgpt or claude and add an API like I can add an MCP
 - ~~Lunch starter set / `both` subset~~, ~~admin bootstrap~~, ~~multi-worker bootstrap guard~~,
   ~~CLAUDE.md refresh~~, ~~CI disabled~~, ~~seeded recipe links Option A/B~~ — all obsolete or settled;
   see `docs/DEVLOG.md` for the history.
+
+- [ ] **Design Handoff is stale on meal types/tracks.** The build follows
+  `docs/PLAN-collection-templates.md` (breakfast/lunch/dinner as a multi-select set and as session
+  tracks), but the handoff still shows Lunch/Dinner/Both and only Dinners/Lunches steppers. Non-blocking:
+  M7 keeps breakfast and styles the controls per the design system; please refresh the artboards when
+  convenient.
+- [ ] **M7 (design-fidelity) commits are parked on `quiet-kitchen-fidelity` — not pushed.** Pushing to
+  `main` auto-deploys prod, so the lead pauses before any push per Charlie's instruction. When you're
+  happy: merge/push yourself, or check this box and say the word.

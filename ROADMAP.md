@@ -35,6 +35,27 @@ never built) starts. Full architecture: `docs/PLAN-v2-samepage.md`. `docs/PLAN-v
 | **M6a** | **Per-group API tokens + JSON API**: owner-minted per-group Bearer token (256-bit, SHA-256 hashed, one-time reveal), `/api/v1` for library items + reports, scoped to one group, no sessions/votes | [x] landed 2026-08-29 | Delivers "AI lives outside the app" via a plain JSON API. |
 | **M6b** | **MCP server** (FastMCP wrapper over the M6a operations) | [ ] **paused — needs Charlie** | Deferred by a lead decision (2026-08-29): adds a heavyweight new runtime dependency + a new protocol, hard to verify unattended, and the JSON API already covers the use case. See REQUESTS.md. |
 
+## M7 — Design fidelity (Oscar design review 2026-08-29)
+
+Source: `docs/OSCAR-REVIEW-design-2026-08-29.md` vs `Design Handoff/` v4. Run started 2026-08-29 on
+branch `quiet-kitchen-fidelity`. **Commits stay local — Charlie pushes (push = prod deploy via CI).**
+Budget: 14 cycles. Standing decision: breakfast/lunch/dinner multi-select tracks are plan-approved
+(`docs/PLAN-collection-templates.md`) and stay; the handoff is stale there (REQUESTS.md item).
+
+| ID | Slice (review findings) | Status |
+|---|---|---|
+| S1 | Chrome model: delete mobile topbar nav; per-screen-class chrome (hub = brand+avatar, inner = back+title, session = chromeless); sidebar unchanged on desktop (F1, F11-chrome) | [ ] |
+| S2 | Hub/IA: `/collections` becomes the signed-in home (`/` redirects), composed hub per artboard — greeting, group + switch, card meta, last-session footer, ink Host + Join-with-code CTAs; delete invented `/` hero page (F2) | [ ] |
+| S3 | Create session: collection radio cards + dashed ad-hoc (collection default), per-track steppers, bottom-pinned Create (F3) | [ ] |
+| S4 | Share screen: `/s/{code}/share` (host-only) — 40px mono code, Copy invite link, native Share, joined count, Go to the lobby; create redirects here (F4) | [ ] |
+| S5 | BUG: session-scoped recipe view for voters (participant/host of that session, item offered in that session); voting card links there (F5) | [ ] |
+| S6 | Voting screen: progress bar, context line (collection · group), centered card + bottom-pinned Yes/No (F6) | [ ] |
+| S7 | Results + complete: outcome color labels (accent/host/faint), persistent kept-by-host group, white majority card w/ violet label, quiet counts, End session early (danger), target-met copy, completion screen per artboard (F7, F11-complete) | [ ] |
+| S8 | Join/lobby/waiting compositions: invite landing w/ session+group+chips, voter lobby centered + avatar chips, host lobby "N at the table" + lock caption + code pill, waiting ✓ + progress card (F11, F12-lobby) | [ ] |
+| S9 | Library phone: compact rows-in-card, actions off browse (archive stays in edit), one-line Type/Tags/Time filter row, edit-screen tags = applied-only + "+ tag" adder (F8-phone, F9) | [ ] |
+| S10 | Library desktop: sidebar w/ collections + pinned Host, table layout (name/type/tags/kept/last kept) + Sort + Clear (F8-desktop) | [ ] |
+| S11 | Copy sweep to handoff v3 + small fixes: captions, em-dash asides, recipe back-link/source-domain/footer, groups page composition, report "never kept" conditional, phone landing composition, API-panel copy (F10, F12) | [ ] |
+
 Detailed build plan: `docs/PLAN-v2-samepage.md` (current) · `docs/PLAN-v1-mvp.md` (superseded, kept for
 history) · Scope & stop criteria: `CHARTER.md` (identity/D10 sections superseded — see pivot note above)
 
