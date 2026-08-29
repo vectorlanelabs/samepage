@@ -7,6 +7,11 @@ name: CI + Deploy
 on:
   push:
     branches: [main]
+    # Docs-only changes don't affect the running app — skip the build/redeploy.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'Design Handoff/**'
   pull_request:
 
 concurrency:

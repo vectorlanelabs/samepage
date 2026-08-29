@@ -38,6 +38,17 @@ don't think I can go into chatgpt or claude and add an API like I can add an MCP
   
   note from charlie: I don't care about the seed data in history - the whole point here was to have a clean database on first deploy so that we can properly test
 
+## Ops (durable notes)
+
+- [ ] **Tailscale CI auth key expires ~2026-11-27.** After that, CI auto-deploy fails at the "Connect to
+  Tailscale" step until a fresh key is generated (Tailscale caps auth keys at 90 days). To renew:
+  Tailscale admin → Settings → Keys → Generate auth key (reusable + ephemeral), then
+  `gh secret set TS_AUTHKEY --repo vectorlanelabs/samepage`. Or switch to a non-expiring OAuth client
+  (needs a `tag:ci` in the tailnet ACL). Not urgent until then; deploys work meanwhile.
+- [ ] **Deploy is auto (CI → Coolify).** Every code push to `main` runs tests, then triggers a Coolify
+  redeploy over Tailscale. Docs-only pushes are skipped (workflow `paths-ignore`). If a deploy ever
+  fails, the deploy job goes red — check the Coolify deploy logs; the tested code is on `main` regardless.
+
 ## Parked (decided — no action needed unless you disagree)
 
 - [ ] **Over-target trim (D13 strict).** M3e uses "host decides when to stop": targets are guidance, the
