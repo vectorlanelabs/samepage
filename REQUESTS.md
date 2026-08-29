@@ -9,12 +9,11 @@ built. **Nothing here is promised.** Add freely.
 
 Tracked so they don't get lost — these are settled calls, not open questions.
 
-- [ ] **M5 pre-deployment security blockers** (promoted 2026-08-29 from "whenever" follow-ups, per the
-  Oscar plan review — accounts are the platform's sole security boundary, so these gate deployment):
-  login attempt limiting (unlimited online password guessing today); a decision on the signup email
-  oracle ("That email is already in use" — accept openly or make signup non-revealing); join-by-code
-  rate limiting once M3 sessions exist; and the login timing side-channel (dummy hash on the
-  unknown-email path — the smallest of the set). Tracked in plan §8 M5 as milestone requirements.
+- [ ] **M5 pre-deployment security blockers** (revised 2026-08-29 after Charlie locked Google-only
+  SSO, plan §4/M5a): the M5a SSO slice itself (its landing deletes password auth and with it the
+  login-rate-limiting, timing-side-channel, and signup-email-oracle blockers), plus join-by-code rate
+  limiting once M3 sessions exist. Until M5a lands, the password endpoints stay un-throttled — one
+  more reason nothing gets publicly deployed before M5a.
 - [ ] **Phantom account indicator on a stale session** — `app/templating.py` trusts the session's
   `account_name` without a DB check (deliberate: no DB hit per render; names aren't editable). If an
   account-deletion/deactivation path ever lands, a surviving session cookie shows a live-looking

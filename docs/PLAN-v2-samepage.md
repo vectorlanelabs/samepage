@@ -83,11 +83,30 @@ Three tiers, none of them PIN-based:
 | **Group membership** | An account attached to a group as `owner` (exactly one, set on the group, transferable) or `admin` (any number, added by the owner or another admin). Membership grants management of that group's collections, sessions, and reports. | Yes |
 | **Session participant** | Whoever joined a specific voting session — a display name, optionally linked to an `Account` for pre-fill. Not a household roster entry; scoped to that one session. | Ephemeral (kept only as long as the session record exists) |
 
-**Auth mechanism (recommendation, reviewable):** email + password (PBKDF2 or Argon2 hash, matching the
-project's existing hashing approach), no transactional email required for v1 — "forgot password" is a
-manual admin action (script), not a self-serve flow. This avoids adding an SMTP dependency for a
-small-scale, invite-only platform. Passwordless magic-links were considered and rejected for v1 solely
-because they *require* outbound email; revisit if the user base grows past what manual resets can handle.
+**Auth mechanism (LOCKED, Charlie 2026-08-29): pure SSO via Google — no internal passwords, ever.**
+Supersedes the earlier email+password recommendation (which shipped in M2a and gets removed by the SSO
+slice, ROADMAP M5a). Rules:
+
+- **Google OAuth (OIDC) is the only sign-in at launch.** No password field, no password column, no
+  reset flow. The M2a password code (hashing, login form, related tests) is deleted in the SSO slice,
+  not kept as a fallback.
+- **Modular by construction**: providers behind a small provider interface (name, authorize URL,
+  token/claims exchange) so adding Apple or others later is a new module + config, not a refactor. The
+  schema splits identity from account: `account` keeps email + display_name;
+  `auth_identity(account_id FK, provider TEXT, subject TEXT, UNIQUE(provider, subject))` records the
+  external identity. One account may hold several identities later; today exactly one (google).
+- **Email stays the human-facing key** (from the provider's verified email claim), so
+  invite-admin-by-email keeps working unchanged.
+- **Recovery stance, stated plainly**: an account *is* its Google identity. Losing the Google account
+  means Charlie transfers group ownership manually at the DB level — the same manual escape hatch the
+  password design had for forgotten passwords.
+- **Security consequences**: the login rate-limiting, password timing side-channel, and signup
+  email-oracle items vanish with the password surface (M5's blocker list is trimmed accordingly);
+  join-by-code rate limiting remains. Session cookies and their flags are unchanged — the session
+  remains the boundary after sign-in.
+- **Deployment coupling**: the OAuth redirect URI needs the real HTTPS domain, so the slice fully
+  lands at M5a (pre-deployment), after M3 — voting never touches auth, so M3 proceeds on the current
+  password code without wasting work on it.
 
 **Why no PINs at all, not even for regulars:** the only thing PINs were protecting was "which specific
 person cast this vote," and the platform no longer needs that (§5.5 — outcomes are tracked, voters are
@@ -364,7 +383,7 @@ live on 2026-08-29 before deployment made them incidents.
 | **M2b** | **Generic collections & items**: `Collection`/`Item`/`meal_detail`/scoped `Category`/`Tag`, migrate the 155 meals (§5.1), library UI becomes collection-aware | **Revises M2** (CRUD/seed logic mostly reusable, schema underneath changes) | [x] landed |
 | M3 | **Session-based voting engine**: group/account-hosted sessions, account-optional participants, `session_target`, ad hoc + library-backed `batch_item`, outcome-only recording per §5.5's lifecycle rules, state machines per §5.6, host participant removal. **Mobile-first UI (§10): the voter flow presents one option at a time** — full-screen card, yes/no, progress — not a 15-row grid. | Net-new build against this doc; old M3 spec (§9 of plan v1) is void except D5/D6/D13, re-adopted by explicit reference in §5.6 — everything else about M3 state lives in this doc now | [ ] unapproved until this doc is approved |
 | M4 | **Reporting & discovery** (§6) — supersedes "history & favorites" (broader scope: trend/tag correlation, not just `times_kept`). **Every query scoped to the requesting account's own groups (§6)** — a new hard requirement multi-tenancy introduces that didn't exist in the old single-household plan. | Expanded from old M4 | [ ] |
-| M5 | Hardening, deployment docs, backup/restore. Single shared SQLite DB (§6.1) — backup/restore story unchanged (still one file). **Locked (2026-08-29): no site-wide passphrase gate.** Real accounts (M2a) are the security boundary. `Settings.access_key`/`SP_ACCESS_KEY` already removed — dead code, never enforced. **Hard pre-deployment items (accounts being the sole boundary makes these blockers, not polish):** (1) login attempt limiting — unlimited online password guessing is currently possible; (2) a decision on email enumeration: signup's "That email is already in use" is an email oracle today; either accept that openly or make signup non-revealing (awkward without outbound email — if accepted, record it as accepted, not overlooked); (3) join-by-code rate limiting (§5.6 — codes are a cross-tenant guessing surface); (4) the login timing side-channel fix (dummy hash on unknown email — the smallest of the four, tracked in REQUESTS.md). Plus **PWA packaging (§10)**: manifest + icons + installability, so voters get a home-screen app without app stores. | Gate question resolved; security items promoted from REQUESTS.md follow-ups to M5 blockers per the 2026-08-29 Oscar plan review | [ ] |
+| M5 | Hardening, deployment docs, backup/restore. Single shared SQLite DB (§6.1) — backup/restore story unchanged (still one file). **Locked (2026-08-29): no site-wide passphrase gate.** Real accounts (M2a) are the security boundary. `Settings.access_key`/`SP_ACCESS_KEY` already removed — dead code, never enforced. **Hard pre-deployment items:** (1) the **M5a Google-SSO slice** (§4) — its landing deletes the password surface and with it the formerly-listed login-rate-limiting, timing-side-channel, and signup-email-oracle blockers; (2) join-by-code rate limiting (§5.6 — codes are a cross-tenant guessing surface, unaffected by SSO). Plus **PWA packaging (§10)**: manifest + icons + installability, so voters get a home-screen app without app stores. | Gate question resolved; security items promoted from REQUESTS.md follow-ups to M5 blockers per the 2026-08-29 Oscar plan review | [ ] |
 | M6 | External API + MCP. **Locked change from the old plan: tokens are per-group, not one shared household key.** A single global `DD_API_KEY`/`SP_API_KEY` would let one group's AI tools read every other group's data on the same deployment — a real leak now that other people's groups live in this database, not a hypothetical. Each group's owner generates and can revoke their own group's token; MCP tools operate on generic `item`/`collection` endpoints (not meal-specific), scoped the same way as M4's reporting. Four requirements stated now so M6's implementer doesn't invent them: **(a) tokens are stored hashed**, like every other credential in this codebase — the plaintext is shown once at generation; **(b) ownership transfer forces token rotation** — the departing owner knows the token, so transfer revokes it and prompts the new owner to generate a fresh one; **(c) verb scope: tokens can read/write the group's library items and read its reports — they cannot create, drive, or vote in sessions** (voting is a humans-in-a-room mechanism; an AI tool with a vote is out of scope by the charter's own no-in-app-AI stance); **(d) a token resolves to exactly one group at auth time, before any tool logic runs** — per-tool scoping checks are exactly the hand-rolled inconsistency this platform keeps getting burned by. The MCP tool list itself is M6-planning-time detail, deliberately open. "AI lives outside the app" still holds — it now applies per-group, not just to Charlie's own tools. | Token-scoping question from the original table is now a locked decision, not an open item | [ ] |
 
 ## 9. Client platform & design (locked 2026-08-29)

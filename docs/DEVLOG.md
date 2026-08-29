@@ -425,3 +425,13 @@ brief in docs/DESIGN-BRIEF-mobile.md), then M3 approval gate on the revised plan
 designer — the legacy logo was constraining directions he actually liked. The re-set CSS wordmark +
 kept favicon mark in the Quiet Kitchen bundle is therefore a decision, not a deviation; the M2d
 reskin implements it as spec'd.
+
+---
+
+## 2026-08-29 — Decision (Charlie): pure Google SSO, modular providers
+
+Sign-in locked to Google OAuth only — no internal passwords to invent/store/secure. Modular provider
+interface so Apple/others are later additions (Facebook ruled out); pure SSO, no password fallback;
+recovery = manual ownership transfer, same escape hatch as before. Full spec in plan §4; new ROADMAP
+row M5a (lands pre-deployment, after M3 — voting doesn't touch auth). Three of the four M5 security
+blockers die with the password surface; join-by-code limiting survives.
