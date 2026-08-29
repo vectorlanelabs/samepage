@@ -32,11 +32,13 @@
       <span class="brand-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
       Same Page
     </a>
+    {% if current_account %}
     <nav class="nav">
       <a class="nav-link{% if request.url.path == '/' %} is-active{% endif %}" href="/">Home</a>
       <a class="nav-link{% if request.url.path.startswith('/collections') %} is-active{% endif %}" href="/collections">Collections</a>
       <a class="nav-link{% if request.url.path.startswith('/groups') %} is-active{% endif %}" href="/groups">Groups</a>
     </nav>
+    {% endif %}
     <div class="sidebar-spacer"></div>
     {% if current_account %}
     <span class="nav-account">{{ current_account.display_name }}</span>
@@ -51,11 +53,13 @@
       <span class="brand-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
       Same Page
     </a>
+    {% if current_account %}
     <nav class="nav">
       <a class="nav-link{% if request.url.path == '/' %} is-active{% endif %}" href="/">Home</a>
       <a class="nav-link{% if request.url.path.startswith('/collections') %} is-active{% endif %}" href="/collections">Collections</a>
       <a class="nav-link{% if request.url.path.startswith('/groups') %} is-active{% endif %}" href="/groups">Groups</a>
     </nav>
+    {% endif %}
     {% if current_account %}
     <span class="nav-account">{{ current_account.display_name }}</span>
     <form method="post" action="/logout"><button type="submit" class="nav-link">Sign out</button></form>

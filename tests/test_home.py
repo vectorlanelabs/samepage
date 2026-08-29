@@ -43,9 +43,11 @@ def test_home_signed_in_shows_own_counts(client, post, db_session):
     _login(client, db_session)
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "What's for dinner?" in resp.text
-    assert "1 meals" in resp.text
-    assert "1 groups" in resp.text
+    # The dashboard is generic — it counts collections (of any kind), not meals.
+    assert "Decide together" in resp.text
+    assert "1 collection" in resp.text
+    assert "1 group" in resp.text
+    assert "Meal Library" not in resp.text  # meal framing stays inside the collection
 
 
 def test_home_never_shows_another_groups_counts(client, post, db_session):
@@ -68,5 +70,21 @@ def test_home_never_shows_another_groups_counts(client, post, db_session):
     _make_account(db_session)
     _login(client, db_session)
     resp = client.get("/")
-    assert "0 meals" in resp.text
+    assert "0 collections" in resp.text
     assert "0 groups" in resp.text
+
+
+def test_signed_out_nav_hides_app_links(client):
+    """A signed-out visitor sees no app nav they can't use — the Collections
+    and Groups links (both 401-gated) only render when signed in."""
+    body = client.get("/").text
+    assert 'href="/collections"' not in body
+    assert 'href="/groups"' not in body
+
+
+def test_signed_in_nav_shows_app_links(client, db_session):
+    _make_account(db_session)
+    _login(client, db_session)
+    body = client.get("/").text
+    assert 'href="/collections"' in body
+    assert 'href="/groups"' in body

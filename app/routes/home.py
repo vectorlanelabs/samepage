@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_account
 from app.db import get_db
-from app.models import Collection, Group, GroupAdmin, Item
+from app.models import Collection, Group, GroupAdmin
 from app.templating import templates
 
 router = APIRouter()
@@ -37,12 +37,14 @@ def home(request: Request, db: Annotated[Session, Depends(get_db)]):
         .distinct()
     ).all()
 
-    active_item_count = (
+    # The dashboard is a generic surface — it counts collections (of any kind),
+    # not meals. Meal-specific framing lives inside a Meal Planner collection,
+    # not here, so an account with no collections isn't shown a "meal library".
+    collection_count = (
         db.scalar(
             select(func.count())
-            .select_from(Item)
-            .join(Collection, Collection.id == Item.collection_id)
-            .where(Collection.group_id.in_(own_group_ids), Item.archived_at.is_(None))
+            .select_from(Collection)
+            .where(Collection.group_id.in_(own_group_ids))
         )
         or 0
     )
@@ -51,7 +53,7 @@ def home(request: Request, db: Annotated[Session, Depends(get_db)]):
         "home.html",
         {
             "account": account,
-            "active_meal_count": active_item_count,
+            "collection_count": collection_count,
             "active_group_count": len(own_group_ids),
         },
     )

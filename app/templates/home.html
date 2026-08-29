@@ -3,8 +3,8 @@
 {% block content %}
 {% if account %}
 <section class="card hero-card">
-  <h1 class="hero-title">What's for dinner?</h1>
-  <p class="hero-sub">Browse the meal library, manage your groups, or host a voting session below.</p>
+  <h1 class="hero-title">Decide together</h1>
+  <p class="hero-sub">Host a voting session, or open your collections and groups.</p>
   <div class="hero-cta">
     <a class="btn btn-primary" href="/sessions/new">Host a session</a>
     <a class="btn btn-secondary" href="/join">Join a session</a>
@@ -12,18 +12,18 @@
 </section>
 <section class="stat-grid">
   <a class="stat-card" href="/collections">
-    <div class="stat-label">Meal Library</div>
-    <div class="stat-count">{{ active_meal_count }} meals</div>
+    <div class="stat-label">Collections</div>
+    <div class="stat-count">{{ collection_count }} {{ "collection" if collection_count == 1 else "collections" }}</div>
   </a>
   <a class="stat-card" href="/groups">
     <div class="stat-label">Groups</div>
-    <div class="stat-count">{{ active_group_count }} groups</div>
+    <div class="stat-count">{{ active_group_count }} {{ "group" if active_group_count == 1 else "groups" }}</div>
   </a>
 </section>
 {% else %}
 <section class="card hero-card hero-card--center">
   <h1 class="hero-title">Same Page</h1>
-  <p class="hero-sub">Sign in to see your groups and meal library — or join a session with a code.</p>
+  <p class="hero-sub">Sign in to see your groups and collections, or join a session with a code.</p>
   <div class="hero-cta">
     <a class="btn btn-secondary" href="/join">Join a session</a>
     <a class="btn btn-primary" href="/login">Sign in</a>

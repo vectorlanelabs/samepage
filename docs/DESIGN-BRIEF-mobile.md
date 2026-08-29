@@ -85,3 +85,11 @@ Binding spec: `docs/PLAN-v2-samepage.md` — identity/permissions (§4), session
 - Flag anything you design that you suspect can't be server-rendered simply — don't assume it can.
 - Engineering will recreate the chosen direction as Jinja templates + CSS in one reskin slice;
   tokens documented as CSS custom properties make that hand-off cheap.
+
+## Addendum (2026-08-29) — generic model, and no dead nav (from Charlie)
+
+Two structural rules the redesign must honor. The code was corrected to match these; design on top of the corrected structure, don't reintroduce the old behavior.
+
+1. **Signed-out is a landing, not the app shell with dead controls.** A signed-out visitor must never see app nav they can't use. The Collections and Groups links are auth-gated, so they only render when signed in (fixed in base.html). First-class SaaS shows a real landing/sign-in experience when signed out and the app shell only after login — design the signed-out page as a proper landing (value prop + Sign in with Google + Join a session), not the sidebar with greyed-out links.
+
+2. **Top-level surfaces are generic; meal language lives inside a Meal Planner collection.** A collection's kind is chosen when it's created, so the account dashboard and the Collections hub cannot assume "meals". The home dashboard now says "Decide together" and counts **collections** (of any kind) and groups — not "What's for dinner?" / "Meal Library / N meals". Meal-specific identity (recipes, "meals", dinner/lunch, "What's for dinner?") belongs on a Meal Planner collection's own pages (library, recipe view), never on the generic home or hub. An account with zero collections must see a neutral empty state, never a meal library it never created. Today only the "meal" kind is buildable, but the generic surfaces stay kind-agnostic so a future game shelf or to-do list fits without a redesign.
