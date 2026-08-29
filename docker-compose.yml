@@ -1,52 +1,17 @@
-# Same Page — app + Caddy (TLS front door). See docs/DEPLOY.md.
-#
-# The app speaks plain HTTP on 8000, published ONLY to the internal network.
-# Caddy terminates HTTPS (automatic Let's Encrypt), redirects 80→443, and
-# proxies to the app — forwarding the ORIGINAL Host header, which the app's
-# CSRF check compares against Origin (get this wrong and every form 403s).
-#
-# Secrets come from a local .env file (never committed): SP_SECRET,
-# SP_GOOGLE_CLIENT_ID, SP_GOOGLE_CLIENT_SECRET, and SP_DOMAIN.
-
 services:
-  app:
+  samepage:
     build: .
-    restart: unless-stopped
     environment:
       SP_ENV: production
+      SP_SECRET: ${SP_SECRET:?Set SP_SECRET to `openssl rand -hex 32` output}
       SP_DB_PATH: /data/samepage.db
       SP_PORT: "8000"
-      SP_SECRET: ${SP_SECRET:?set SP_SECRET in .env (openssl rand -hex 32)}
-      SP_BASE_URL: https://${SP_DOMAIN:?set SP_DOMAIN in .env}
-      SP_GOOGLE_CLIENT_ID: ${SP_GOOGLE_CLIENT_ID:?set SP_GOOGLE_CLIENT_ID in .env}
-      SP_GOOGLE_CLIENT_SECRET: ${SP_GOOGLE_CLIENT_SECRET:?set SP_GOOGLE_CLIENT_SECRET in .env}
+    read_only: true
+    restart: unless-stopped
+    tmpfs:
+      - /tmp
     volumes:
       - samepage-data:/data
-    expose:
-      - "8000"          # internal only; NOT ports: — never bind 8000 to the host
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    depends_on:
-      - app
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      SP_DOMAIN: ${SP_DOMAIN:?set SP_DOMAIN in .env}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data      # Caddy's cert store (separate from the app volume)
-      - caddy-config:/config
 
 volumes:
-  samepage-data:   # the SQLite DB + WAL sidecars; back this up (deploy/backup.sh)
-  caddy-data:
-  caddy-config:
+  samepage-data:

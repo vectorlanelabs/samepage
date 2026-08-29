@@ -1,16 +1,5 @@
 .git
-.gitignore
 .venv
 __pycache__
-*.pyc
 .pytest_cache
 .ruff_cache
-tests
-data
-Design Handoff
-docs
-deploy/backup.sh
-reference
-*.md
-.env
-.DS_Store
