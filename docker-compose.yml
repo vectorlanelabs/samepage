@@ -1,16 +1,6 @@
 services:
-  init-data:
-    build: .
-    command: ["sh", "-c", "mkdir -p /data && chown 10001:10001 /data && chmod 0700 /data"]
-    user: "0:0"
-    volumes:
-      - samepage-data:/data
-
   samepage:
     build: .
-    depends_on:
-      init-data:
-        condition: service_completed_successfully
     environment:
       SP_ENV: production
       SP_SECRET: ${SP_SECRET:?Set SP_SECRET to `openssl rand -hex 32` output}
