@@ -54,36 +54,77 @@
 
   {% if is_owner %}
   <section class="card" style="padding:20px;margin-top:20px;">
-    <h2 class="section-title">API access</h2>
-    <p class="page-meta" style="margin-bottom:12px;">
-      A per-group token lets external AI tools read and write this group's library and read its reports over the JSON API (no sessions or voting). Only the group owner manages the token.
+    <h2 class="section-title">API &amp; MCP access</h2>
+    <p class="page-meta" style="margin-bottom:14px;">
+      A per-group token lets your AI tools — ChatGPT, Claude, and the like — read and update this group's library and read its reports, over MCP or the JSON API. It never exposes sessions or individual votes. Owner-only.
     </p>
 
     {% if api_token_plaintext %}
-    <div class="token-reveal" style="border:2px solid #4468D2;border-radius:8px;padding:12px;margin-bottom:14px;background:#eef2ff;">
-      <strong>Copy this token now — it won't be shown again.</strong>
-      <div style="font-family:var(--font-mono,monospace);word-break:break-all;margin-top:6px;">{{ api_token_plaintext }}</div>
+    <div class="token-reveal">
+      <div class="token-reveal-head">Your new token — copy it now. It won't be shown again.</div>
+      <div class="copy-field">
+        <code class="copy-value">{{ api_token_plaintext }}</code>
+        <button type="button" class="copy-btn" data-copy="{{ api_token_plaintext }}">Copy</button>
+      </div>
     </div>
     {% endif %}
 
+    {% if api_token or api_token_plaintext %}
+    <div class="conn-block">
+      <div class="field-label">MCP endpoint</div>
+      <div class="copy-field">
+        <code class="copy-value">{{ mcp_url }}</code>
+        <button type="button" class="copy-btn" data-copy="{{ mcp_url }}">Copy</button>
+      </div>
+      <div class="field-label" style="margin-top:12px;">JSON API base</div>
+      <div class="copy-field">
+        <code class="copy-value">{{ api_url }}</code>
+        <button type="button" class="copy-btn" data-copy="{{ api_url }}">Copy</button>
+      </div>
+    </div>
+
+    <details class="doc-block">
+      <summary>How to connect</summary>
+      <div class="doc-body">
+        <p><strong>From ChatGPT or Claude (MCP).</strong> Add a custom connector / MCP server pointed at the <em>MCP endpoint</em> above, with the token as its Bearer authorization. Then ask it things like "add this recipe to my group in Same Page."</p>
+        <p><strong>From code (JSON API).</strong> Send the token as a bearer header:</p>
+        <pre class="doc-code">curl {{ api_url }}/collections \
+  -H "Authorization: Bearer YOUR_TOKEN"</pre>
+        <p><strong>What it can do.</strong> List collections; list, add, and update items (a meal's name, types, tags, ingredients, and recipe); and read a collection's report. Both surfaces are scoped to this one group and are aggregate-only — never individual votes.</p>
+      </div>
+    </details>
+    {% endif %}
+
     {% if api_token %}
-    <p class="page-meta">
+    <p class="page-meta" style="margin-top:14px;">
       Token active since {{ api_token.created_at.strftime("%b %d, %Y") }}{% if api_token.last_used_at %} · last used {{ api_token.last_used_at.strftime("%b %d, %Y") }}{% else %} · never used{% endif %}.
     </p>
-    <div style="display:flex;gap:8px;margin-top:10px;">
+    <div style="display:flex;gap:12px;align-items:center;margin-top:10px;">
       <form method="post" action="/groups/{{ group.id }}/api-token" class="inline-form">
         <button type="submit" class="btn btn-secondary">Regenerate</button>
       </form>
       <form method="post" action="/groups/{{ group.id }}/api-token/revoke" class="inline-form">
-        <button type="submit" class="btn btn-secondary danger-text">Revoke</button>
+        <button type="submit" class="danger-text">Revoke</button>
       </form>
     </div>
-    {% else %}
+    {% elif not api_token_plaintext %}
     <form method="post" action="/groups/{{ group.id }}/api-token" class="inline-form">
       <button type="submit" class="btn btn-primary">Generate token</button>
     </form>
     {% endif %}
   </section>
+  <script>
+    document.querySelectorAll(".copy-btn").forEach(function (b) {
+      b.addEventListener("click", function () {
+        navigator.clipboard.writeText(b.getAttribute("data-copy")).then(function () {
+          var prev = b.textContent;
+          b.textContent = "Copied";
+          b.classList.add("is-copied");
+          setTimeout(function () { b.textContent = prev; b.classList.remove("is-copied"); }, 1400);
+        });
+      });
+    });
+  </script>
   {% endif %}
 
   <p class="auth-note">Admins manage collections and host sessions. Voting never requires membership.</p>

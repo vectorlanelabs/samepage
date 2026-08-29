@@ -5,6 +5,7 @@ one-time plaintext reveal, and revoke)."""
 from __future__ import annotations
 
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -18,6 +19,17 @@ from app.templating import templates
 from app.tokens import generate_token, hash_token
 
 router = APIRouter()
+
+
+def _public_base_url(request: Request) -> str:
+    """The app's public origin (no trailing slash), for showing API/MCP URLs.
+    Behind a TLS-terminating proxy the request scheme is http internally, so
+    present https for any non-local host — that's the real public URL."""
+    base = str(request.base_url).rstrip("/")
+    parsed = urlparse(base)
+    if parsed.scheme == "http" and (parsed.hostname or "") not in ("localhost", "127.0.0.1"):
+        base = "https://" + base.split("://", 1)[1]
+    return base
 
 
 def _groups_context(db: Session, account: Account) -> dict:
@@ -46,9 +58,13 @@ def _groups_context(db: Session, account: Account) -> dict:
     }
 
 
-def _group_detail_context(db: Session, group: Group, account: Account) -> dict:
+def _group_detail_context(
+    db: Session, group: Group, account: Account, request: Request
+) -> dict:
     """Build context dict for group detail template with owner and admins list,
-    plus the group's API-token status (created/last-used, never the hash)."""
+    plus the group's API-token status (created/last-used, never the hash) and
+    the public MCP/API endpoint URLs."""
+    base_url = _public_base_url(request)
     owner = db.get(Account, group.owner_account_id)
     admin_accounts = db.scalars(
         select(Account)
@@ -75,6 +91,8 @@ def _group_detail_context(db: Session, group: Group, account: Account) -> dict:
             if api_token is not None
             else None
         ),
+        "mcp_url": f"{base_url}/mcp",
+        "api_url": f"{base_url}/api/v1",
     }
 
 
@@ -121,7 +139,7 @@ def group_detail(
 ):
     """Group detail: name, owner, admin list."""
     account, group = require_group_admin(request, db, group_id)
-    context = _group_detail_context(db, group, account)
+    context = _group_detail_context(db, group, account, request)
     return templates.TemplateResponse(
         request,
         "group_detail.html",
@@ -148,7 +166,7 @@ def add_admin(
     target = db.scalar(select(Account).where(Account.email == email))
 
     if target is None:
-        context = _group_detail_context(db, group, account)
+        context = _group_detail_context(db, group, account, request)
         context["error"] = "No account with that email exists."
         return templates.TemplateResponse(
             request,
@@ -158,7 +176,7 @@ def add_admin(
         )
 
     if target.id == group.owner_account_id:
-        context = _group_detail_context(db, group, account)
+        context = _group_detail_context(db, group, account, request)
         context["error"] = "That account is already the owner."
         return templates.TemplateResponse(
             request,
@@ -174,7 +192,7 @@ def add_admin(
         )
     )
     if existing is not None:
-        context = _group_detail_context(db, group, account)
+        context = _group_detail_context(db, group, account, request)
         context["error"] = "That account is already an admin."
         return templates.TemplateResponse(
             request,
@@ -240,7 +258,7 @@ def create_api_token(
     db.add(ApiToken(group_id=group.id, token_hash=hash_token(token)))
     db.commit()
 
-    context = _group_detail_context(db, group, account)
+    context = _group_detail_context(db, group, account, request)
     context["api_token_plaintext"] = token
     return templates.TemplateResponse(
         request,
