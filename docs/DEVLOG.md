@@ -691,3 +691,23 @@ a participant leak. Suite: **276 passed**.
 
 Voting engine M3a–M3e done. Next: a whole-codebase audit of the new session surface (the every-5-slices
 / pre-milestone discipline), then M4 reporting.
+
+---
+
+## 2026-08-29 — Whole-codebase audit (post-M3, pre-M4)
+
+Ran the loop's every-milestone whole-codebase audit (absence-class defects a diff review misses) over
+the new voting surface. **Clean — nothing to fix.** Properties checked, each holding everywhere:
+- `_expire_if_stale` is invoked on ALL 13 session-loading routes (GET /s/{code}, join, roster, start,
+  vote, close, keep, pass, next-batch, finish, voting-status, remove) — no route serves/mutates a stale
+  session.
+- Origin/CSRF exemptions remain only `/api/` and `/mcp` (token-authed); every session POST is covered by
+  the fail-closed origin middleware.
+- The §5.6 "count only, never who's missing" rule holds: the waiting state and `_voting_status.html`
+  render `finished/roster` counts only.
+- Vote/identity privacy on outcome surfaces: `batch_results.html` and `session_complete.html` contain
+  zero participant/display_name references (grep-verified). The only templates rendering a participant
+  name are the lobby roster (participants see each other by design), the signed-in user's own nav name,
+  and group-member management — all correct.
+- User-input `int()` coercion in session routes is guarded (404, never 500); path/form ints are typed so
+  FastAPI 422s rather than 500s.
