@@ -9,18 +9,15 @@ built. **Nothing here is promised.** Add freely.
 
 Tracked so they don't get lost — these are settled calls, not open questions.
 
-- [ ] **Login timing side-channel** — `POST /login` returns instantly for an unknown email but takes
-  ~60ms for a known email with a wrong password (full 600k-iteration PBKDF2 run), letting an attacker
-  enumerate valid account emails by response time. Inherited from the old PIN-login code, not new. Fix is
-  cheap (always run a dummy hash on the unknown-email path). Worth doing before any public launch.
-- [ ] **Library CRUD gating is interim** — gates `/library` create/edit/archive on "any signed-in
-  account," not "must be an owner/admin of the group that owns this collection." Fine while there's one
-  group in practice; tighten before real multi-group usage.
-- [ ] **Single-collection routing is a deliberate M2b simplification** — `/library` always resolves to
-  "the first meal-kind collection that exists," not a `collection_id` in the URL. Needs real
-  `/collections/{id}/...` routing once a second collection or a second group's meal collection exists.
-- [ ] **Bare 401s instead of a login redirect** — unauthenticated requests to `/groups`, `/library`
-  mutations, etc. return a bare 401 rather than redirecting to `/login`. Polish pass, whenever convenient.
+- [ ] **M5 pre-deployment security blockers** (promoted 2026-08-29 from "whenever" follow-ups, per the
+  Oscar plan review — accounts are the platform's sole security boundary, so these gate deployment):
+  login attempt limiting (unlimited online password guessing today); a decision on the signup email
+  oracle ("That email is already in use" — accept openly or make signup non-revealing); join-by-code
+  rate limiting once M3 sessions exist; and the login timing side-channel (dummy hash on the
+  unknown-email path — the smallest of the set). Tracked in plan §8 M5 as milestone requirements.
+- [ ] **`reference/D20 Dinner Decider.xlsx`** — dormant legacy source data, unreferenced since the dice
+  purge. Flagged 2026-08-29 for Charlie: delete it too, or keep as archive? (Deleting source data is
+  Charlie's call, not assumed.)
 - [ ] **Library export** — JSON export of items + recipes as backup/portability. M5 ships DB-level
   backups regardless; this would be a user-facing export on top. Low priority.
 - [ ] **Drop `Category.legacy_sheet_index`.** This column persists a meal's position on the old dice
@@ -34,6 +31,14 @@ Tracked so they don't get lost — these are settled calls, not open questions.
 
 ## Resolved
 
+- ~~Bare 401s instead of a login redirect~~ — fixed 2026-08-29 (`main.py` 401 handler redirects browser
+  navigations to `/login?next=...`; tests in `tests/test_auth.py`).
+- ~~Library CRUD gating is interim~~ — effectively closed by the 2026-08-29 tenancy fixes:
+  `_get_meal_collection` scopes to the signed-in account's groups, `_get_owned_item_or_404` guards every
+  item mutation (with a cross-tenant test on each route), and creates insert into the account's own
+  collection. Remaining structural piece is the routing item below.
+- ~~Single-collection routing~~ — promoted to a milestone: **M2c** (ROADMAP), collection-scoped URLs per
+  plan §9, landing before M3. No longer a someday-item.
 - ~~Batch size default~~ — fixed at 15 (not a setup choice); revisit after real sessions.
 - ~~Lunch starter set~~ — resolved via the curated 27-meal `both` seed subset.
 - ~~Adversarial plan review~~ — fulfilled by `docs/INITIAL-PLAN-REVIEW.md`; all 12 findings accepted.

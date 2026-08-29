@@ -294,3 +294,62 @@ project, not a real product direction.
 
 **Status**: All three plan-review items resolved. `REQUESTS.md`'s "needs Charlie's judgment" section is
 now empty. Next: a Fable-run Oscar review of the updated plan before M3 execution starts.
+
+---
+
+## 2026-08-29 — Oscar reviews dispositioned; mobile-first locked; lead handoff to Fable orchestration
+
+Charlie handed the lead role to a Fable-orchestrated loop (autonomous-dev-loop + model-routing:
+Fable leads, deepseek-v4-flash implements spec-locked slices, Sonnet runs Oscar reviews). Two locked
+product decisions from Charlie this session: **mobile-first** (voters and hosts are on phones), and
+SPA-vs-not delegated to the lead — **decided: no SPA**; server-rendered + htmx/SSE, PWA at M5,
+one-option-at-a-time voting on mobile. All recorded in plan §9.
+
+**Recovery note:** cycle start found correct, uncommitted fixes in the tree (code-review findings 1/2/4/5
+plus tests; suite green at 105). Verified independently (diff read line-by-line, ruff + pytest re-run)
+and landed as `8399219` rather than discarded — attribution: produced before this loop took over, not by
+this loop's delegation.
+
+**Plan-review dispositions** (`docs/OSCAR-REVIEW-plan-2026-08-29.md`):
+blocking 1 (pseudo-SQL PKs) **fixed** — §5 rewritten: surrogate ids, partial unique indexes,
+exactly-one-of CHECK, `batch_response` now references `batch_item.id` (also kills the ad-hoc
+label-matching minor). blocking 2 (privacy claim unenforced) **fixed** — new §5.5 makes deletion at
+batch close and participant deletion at session end M3 acceptance criteria; expiry defined (24h
+inactivity, lazily enforced). blocking 3 (session tenancy invariants) **fixed** — stated in §5 as hard
+requirements. major 4 (no rate limiting) **deferred, tracked** — promoted to M5 pre-deployment blockers
+(plan §8 M5 + REQUESTS.md): login throttling, signup email-oracle decision, join-by-code limiting,
+timing side-channel. major 5 (M4 scoping) **fixed** — dual join path, choke-point pattern, cross-tenant
+negative tests as acceptance criteria. major 6 (§6.1 blast radius) **fixed** — owned explicitly with
+standing mitigations. major 7 (M3 state machines) **fixed** — §5.6; D5/D6/D13 re-adopted by explicit
+reference. major 8 (ghost participants) **fixed** — host participant removal in M3 scope; trust model
+stated. major 9 (M6 gaps) **fixed** — hashed storage, rotation-on-transfer, verb scope (no session/vote
+access for tokens), token-resolves-to-one-group; tool list deliberately left to M6 planning.
+major 10 (doc contradictions) **fixed** — CLAUDE.md #5/#6/product-shape rewritten, CHARTER banner now
+supersedes the raw-votes language, ROADMAP M5 row updated. Minors: §5.5 dangling refs **fixed** (section
+exists); session-code surface **fixed** (§5.6 + M5); ad-hoc-needs-a-group **fixed** (honest caveat,
+§5.2); `legacy_sheet_index` **already tracked**, unchanged. Nits: ROADMAP M0 "CI" mention **fixed**
+(marked historical); `target_count > 0` CHECK **fixed**; `batch.seq` gapless-ness **rejected** — unique
+per session is the only invariant anything needs; gaplessness buys nothing.
+
+**Code-review dispositions** (`docs/OSCAR-REVIEW-code-2026-08-29.md`):
+blocking 1 (library 500), blocking 2 (403-vs-404 oracle), major 4 (`_safe_next` backslash),
+major 5 (cross-tenant mutation tests), major 6 (N+1 + platform-wide tag query) — all **fixed** in
+`8399219`. major 3 (multi-group library dead end) **deferred to M2c, in progress** — collection-scoped
+routing per plan §9, landing before M3. major 7 (dead schema) — split: `is_active` **fix queued**
+(M2c slice: drop via migration; `archived_at` is the mechanism); `times_offered` **kept deliberately**
+(M3 increments it at batch close; §6 reads it); `Item.description` **kept** (schema-intended, UI just
+doesn't surface it yet); `Category` **kept** (categories are in the product design; surfaced at
+reskin/M4). major 8 (`/logout` unreachable) **fix queued** (M2c). Minors — all **fix queued** for M2c:
+odd-hex `verify_password`, group-create error context loss, 401 redirect dropping query string, signup
+dropping `next`, owner-vs-admin error copy, case-sensitive ordering, seed within-run dedupe +
+undercounted skips, PIN-era origin-check payloads, stale test_session docstring. Exception:
+add_admin's email-existence disclosure to group owners **accepted as a decision** — invite-by-email
+cannot function without it; recorded here so it's a choice, not an accident. Taste nits:
+`dinnerdecider` logger + vestigial `can_edit`/`no_collection` + recipe_view ORM-grafting **fix queued**
+(M2c); `--dd-*` CSS vars **deferred to the reskin slice** (renaming variables in a stylesheet the
+design pass will replace is work done twice); vendored-but-unused htmx **rejected as an issue** —
+retained deliberately, it's the no-SPA plan's mechanism (plan §9).
+
+Also this entry: `docs/DESIGN-BRIEF-mobile.md` written — corrects the Design Handoff bundle's
+desktop-first premise and its "plan v2 doesn't exist" claim before Claude Design sinks more work into
+the wrong target. Visual/template work held for that pass.

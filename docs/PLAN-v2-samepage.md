@@ -1,7 +1,12 @@
 # SamePage — v2 Architecture: Multi-Tenant Decision Platform
 
 > Status: **2026-08-29 — M2a and M2b landed; M3 onward reviewed and revised in light of what building
-> M2a/M2b actually surfaced, still unapproved pending Charlie's sign-off.** Supersedes the identity,
+> M2a/M2b actually surfaced, still unapproved pending Charlie's sign-off.**
+> **Revision 2026-08-29 (2): applied all seven fix items from the Oscar architecture review**
+> (`docs/OSCAR-REVIEW-plan-2026-08-29.md` — implementable PKs in §5, vote-data lifecycle §5.5, session
+> tenancy invariants, state machines §5.6, sharpened M4/M5/M6 rows) **and added §10: mobile-first client
+> platform decisions** (Charlie's direction, 2026-08-29: voters and hosts are on phones; desktop remains
+> for library/collection management comfort). Supersedes the identity,
 > tenancy, and voting-mechanism decisions in `CHARTER.md` and `docs/PLAN-v1-mvp.md` (D2, D16 identity
 > portions, D10, and the M3–M6 task lists). M0–M2 code stood as the starting point for M2a/M2b — it was
 > generalized, not thrown away.
@@ -127,12 +132,20 @@ meal_detail(item_id FK PK -> item, type TEXT NOT NULL DEFAULT 'dinner',   -- lun
                                                                      -- only. Future kinds (game, outing) get
                                                                      -- their own *_detail table the same way.
 
-session(id PK, code TEXT UNIQUE NOT NULL, status TEXT NOT NULL,    -- lobby|voting|complete|expired
+session(id PK, code TEXT UNIQUE NOT NULL, status TEXT NOT NULL,    -- lobby|voting|complete|expired (§5.6)
         group_id FK NOT NULL, host_account_id FK -> account NOT NULL,
         collection_id FK NULL,                                     -- NULL = pure ad hoc session
         created_at DATETIME, finished_at DATETIME NULL)
+        -- INVARIANTS (hard M3 requirements, enforced in the creation route, not assumed):
+        --   (a) host_account_id must be an owner/admin of group_id — session creation goes
+        --       through require_group_admin (app/auth.py), which already exists.
+        --   (b) collection_id, when set, must belong to group_id — checked at creation AND
+        --       re-checked at batch assembly. Without (b), a host could point their session at
+        --       another group's collection and serve that group's entire library to voters:
+        --       a full cross-tenant read through the one path M4's scoping rule doesn't cover.
 
-session_target(session_id FK, track_label TEXT NOT NULL, target_count INT NOT NULL,
+session_target(session_id FK, track_label TEXT NOT NULL,
+               target_count INT NOT NULL CHECK (target_count > 0),
                PK(session_id, track_label))
                                                                      -- generalizes lunch_target/dinner_target;
                                                                      -- Meal Planner writes rows
@@ -148,29 +161,41 @@ session_participant(id PK, session_id FK NOT NULL, account_id FK NULL,
 batch(id PK, session_id FK NOT NULL, seq INT, track_label TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'open', closed_at DATETIME NULL, UNIQUE(session_id, seq))
 
-batch_item(batch_id FK, item_id FK NULL, ad_hoc_label TEXT NULL,   -- exactly one of item_id/ad_hoc_label set
+batch_item(id PK, batch_id FK NOT NULL, item_id FK NULL, ad_hoc_label TEXT NULL,
            sort_order INT, yes_count INT DEFAULT 0, no_count INT DEFAULT 0,
            outcome TEXT NULL,                                      -- 'kept_unanimous' | 'kept_host' | 'not_kept' | NULL (open)
-           PK(batch_id, COALESCE(item_id, ad_hoc_label)))           -- durable per-item OUTCOME log — no person_id.
-                                                                     -- this is what reporting/discovery reads (§6).
+           CHECK ((item_id IS NULL) != (ad_hoc_label IS NULL)))     -- exactly one of the two set, DB-enforced
+           -- plus two PARTIAL unique indexes (SQLite forbids expressions in a PRIMARY KEY,
+           -- so the earlier COALESCE pseudo-PK cannot be built as written):
+           --   CREATE UNIQUE INDEX ... ON batch_item(batch_id, item_id)      WHERE item_id IS NOT NULL;
+           --   CREATE UNIQUE INDEX ... ON batch_item(batch_id, ad_hoc_label) WHERE ad_hoc_label IS NOT NULL;
+           -- durable per-option OUTCOME log — no person_id. This is what reporting reads (§6).
 
-batch_response(batch_id FK, session_participant_id FK, item_id FK NULL, ad_hoc_label TEXT NULL,
+batch_response(id PK, batch_item_id FK -> batch_item NOT NULL,
+               session_participant_id FK NOT NULL,
                choice TEXT NOT NULL, responded_at DATETIME,
-               PK(batch_id, session_participant_id, COALESCE(item_id, ad_hoc_label)))
+               UNIQUE(batch_item_id, session_participant_id))
                                                                      -- EPHEMERAL, in-batch-only state used to
                                                                      -- detect "has everyone responded" and to
                                                                      -- roll up yes_count/no_count onto
-                                                                     -- batch_item at close. Safe to prune after
-                                                                     -- a batch closes — batch_item is the
-                                                                     -- durable record, this is not history.
+                                                                     -- batch_item at close. DELETED at batch
+                                                                     -- close — a hard rule, not a "safe to
+                                                                     -- prune" suggestion; see §5.5.
+                                                                     -- Referencing batch_item.id (not a
+                                                                     -- (item_id, ad_hoc_label) pair) means a
+                                                                     -- response can only ever point at an
+                                                                     -- option actually in the batch, and
+                                                                     -- relabeling an ad hoc option can't
+                                                                     -- orphan its responses.
 ```
 
 Notes:
 
-- **No table anywhere ties a vote choice to a durable identity.** `session_participant` is scoped to one
-  session and can be discarded with it; `batch_response` is explicitly operational, not historical. This
-  is a *stronger* privacy posture than the old "never shown, but stored raw forever" design — answers §5.5
-  below.
+- **No table anywhere ties a vote choice to a durable identity — because §5.5 requires deletion, not
+  because rows are merely "prunable."** `session_participant` is scoped to one session and is deleted
+  with it; `batch_response` is operational, not historical, and is deleted at batch close. This is a
+  *stronger* privacy posture than the old "never shown, but stored raw forever" design — but it is only
+  true if the lifecycle rules in §5.5 ship as part of M3. They are acceptance criteria, not suggestions.
 - `item.times_kept`/`last_kept_at` replace `meal.times_kept`/`last_kept_at` — same signal, generalized.
 - Ad hoc, never-persisted options (the "let everyone throw in an option before reveal" feature, still
   backlog per §7) slot in via `batch_item.ad_hoc_label` — an item that only ever exists inside one batch
@@ -190,7 +215,10 @@ mechanical migration — no data loss, no manual re-entry.
 should we eat," "what movie," typed in as ad hoc `batch_item.ad_hoc_label` rows, nothing ever touching a
 database. This is table stakes for the "date night" / "what do we do today" use cases Charlie described,
 and it costs nothing extra in the schema above (`ad_hoc_label` already has to exist for the pre-reveal
-submission backlog item).
+submission backlog item). One honest caveat: `session.group_id` is NOT NULL, so "zero setup" really
+means "zero setup after account + group creation" — a brand-new host creates an account and a group
+before their first ad hoc session. Accepted: the group is the tenancy anchor everything else scopes
+through, and it's a one-time 30-second step.
 
 ### 5.3 Targets replace hard-coded tracks
 
@@ -206,7 +234,63 @@ Yes, but scoped narrowly: **`batch_item`** is the durable record — one row per
 batch, outcome, aggregate yes/no counts). It has no `person_id` and never will. It's enough to answer "how
 often has this been rejected," "is it trending down," "does the `fish` tag correlate with no-votes" — all
 of §6 — without ever knowing or storing *who* voted which way. `batch_response` is the only thing that
-looks like a per-person vote, and it's explicitly disposable operational state, not a history table.
+looks like a per-person vote, and §5.5 makes its disposal a requirement rather than an intention.
+
+### 5.5 Vote-data lifecycle (hard M3 requirements — this is what makes the privacy claim structural)
+
+The claim "no durable per-person vote" is earned by these rules, all of them M3 acceptance criteria
+with tests:
+
+1. **`batch_response` rows are deleted in the same transaction that closes their batch** and writes the
+   rollup (`yes_count`/`no_count`/`outcome`) onto `batch_item`. Not a background sweep, not "prunable
+   later" — the close transaction that commits the aggregate also removes the per-person rows. A batch
+   that is closed has zero `batch_response` rows, ever, and a test asserts exactly that.
+2. **`session_participant` rows are deleted when their session reaches `complete` or `expired`.** What
+   survives a finished session: the `session` row itself (code, timestamps, group), `batch` rows, and
+   `batch_item` outcome rows — nothing that names a voter or links an account to participation.
+3. **Session expiry is defined, not implied.** A session left in `lobby` or `voting` becomes `expired`
+   after **24 hours of inactivity** (no join, no response, no host action). Enforcement is lazy — any
+   route that loads a session first applies the expiry check-and-transition — plus the host's explicit
+   "end session" action, which moves `voting → complete` (treating missing responses per the manual-close
+   rule, §5.6). Lazy enforcement means no scheduler dependency; the invariant is "no expired-eligible
+   session is ever *served*," not "a daemon marks rows on time."
+4. **Aborted sessions clean up the same way.** Expiry (rule 3) triggers the participant deletion of
+   rule 2 and deletes any `batch_response` rows of a batch that never closed — an abandoned mid-vote
+   batch does not preserve votes just because nobody clicked close. Its `batch_item` rows keep
+   `outcome = NULL` and their counts stay 0: unclosed means unreported.
+
+### 5.6 Session & batch state machines (M3 spec of record)
+
+Re-adopted from plan v1 by explicit reference, still binding: **D5** (manual close counts missing
+responses as "no"), **D6** (batch assembly/ordering mechanics), **D13** (over-target resolution: host
+picks which keeps stay when a batch agrees on more than the remaining target). Everything else about
+M3 state lives here, not in the old doc:
+
+- **`session.status`: `lobby → voting → complete`, with `expired` reachable from `lobby` or `voting`**
+  (only via the inactivity rule in §5.5; `complete` only via the host). Transitions are host-triggered
+  (`start voting`, `end session`), require the host guard (the session's `host_account_id`, re-checked
+  server-side), and are **idempotent** — a double-submitted transition applies once (CLAUDE.md
+  non-negotiable #7); replaying `start voting` on a `voting` session is a no-op, not an error, and
+  `times_offered`/`times_kept` increments happen only in the single batch-close transaction.
+- **`batch.status`: `open → closed`.** Two values, no others. A batch closes automatically when every
+  current roster member has responded to every option, or manually by the host (missing = "no", per D5).
+  Close is idempotent; the rollup-and-delete of §5.5 happens exactly once.
+- **Roster rule under open join:** joining is open (link/code) **only while the session is in `lobby`
+  or between batches in `voting`** — a participant cannot join mid-batch (the unanimity denominator for
+  an open batch is frozen at that batch's start). A visitor hitting a mid-batch session sees a waiting
+  state, not a ballot. Joins are refused outright for `complete`/`expired` sessions.
+- **The host is also a participant** if and only if they join the roster like anyone else — hosting
+  controls (start, close, accept-majority, end) come from `host_account_id`, never from roster
+  membership, and the host's ballot carries no extra weight.
+- **Host participant removal exists (M3 scope, not backlog).** The host can remove a participant while
+  no batch is open; removal deletes the participant row (and, mid-`lobby`, is invisible). Rationale:
+  the keep rule is unanimity over the roster, so one ghost row — a second device, a joiner who left —
+  makes unanimity mechanically unreachable. Duplicate joins are otherwise allowed (no auth to vote
+  means no dedup key; that's the accepted trust model of a family tool, stated here deliberately), so
+  the remedy has to be a host control rather than a constraint.
+- **Session codes:** generated with collision retry against the permanent `UNIQUE(code)` (codes never
+  recycle); join-by-code gets rate limiting at M5 (§8) since codes are now a cross-tenant guessing
+  surface on a shared deployment.
 
 ## 6. Reporting & discovery
 
@@ -225,11 +309,19 @@ This directly feeds the "discover new recipes based on what similar items succee
 Charlie's own framing — it's a query over existing data, not a new subsystem, once `batch_item`+`tag`
 exist.
 
-**Tenant scoping is load-bearing here, not optional.** Every reporting query must filter through
-`collection.group_id` to groups the requesting account actually belongs to (owner or admin). This didn't
-matter under the old single-household design; it matters now because the database holds other people's
-groups too. A report endpoint that forgets this filter leaks one family's reject rates and meal history to
-another. Locked as a hard requirement for M4, not a nice-to-have.
+**Tenant scoping is load-bearing here, not optional — and it has two join paths, not one.**
+Library-derived data scopes through `collection.group_id`; session-derived data (including every ad hoc
+`batch_item`, which has no `item_id` and therefore *no collection*) scopes through
+`batch → session.group_id`. A query that only follows the collection path silently drops ad hoc outcomes
+at best and leaks them at worst. Where a report joins both, the two group ids must agree.
+
+Enforcement is structural, not per-query discipline: **every M4 route takes a `group_id`, guards it with
+the existing `require_group_admin`, and starts every query from that group id** — one choke point instead
+of N remembered filters. Acceptance criteria for every M4 endpoint include a cross-tenant negative test:
+an account in group B requesting group A's report gets 404, and group A's ad hoc *and* library outcomes
+never appear in group B's numbers. This didn't matter under the old single-household design; it matters
+now because the database holds other people's groups, and this project has already shipped (and fixed)
+exactly this class of leak twice — see `docs/OSCAR-REVIEW-code-2026-08-29.md`.
 
 ## 6.1 Single shared database, not database-per-tenant
 
@@ -240,6 +332,15 @@ locked decision: database-per-tenant would mean per-group backup/restore, per-gr
 routing layer to pick the right DB file per request — real infrastructure this deployment doesn't need at
 its current scale (Charlie's VPS, a handful of groups). Revisit only if the platform outgrows a single
 SQLite file, not preemptively.
+
+**The blast radius of this decision, owned explicitly:** with no storage-layer backstop, one missed
+`group_id` filter exposes *every* group's data, read or write. The mitigations are cheap and standing:
+(1) the choke-point pattern from §6 applies to every tenant-owned query in the app, not just M4 —
+routes derive scope from a guarded `group_id`/ownership helper, never ad hoc per query; (2) every new
+tenant-owned route ships with a cross-tenant negative test as a matter of course (the mutation-route
+test band added 2026-08-29 is the template). History justifies the paranoia: `/library`'s unscoped
+`_get_meal_collection()` and the home page's platform-wide counts both shipped, and were both found
+live on 2026-08-29 before deployment made them incidents.
 
 ## 7. Explicitly still backlog (not blocking M2a/M2b/M3)
 
@@ -261,12 +362,43 @@ SQLite file, not preemptively.
 | M0 | Foundation (FastAPI skeleton, migrations, security middleware) | **Stands as-is** — no identity/tenancy coupling here | [x] landed |
 | **M2a** | **Identity & tenancy**: `Account` (email+password), `Group`/`group_admin`, replace `Person`+PIN entirely | **Replaces M1** in full (PINs, lockout, `Person.is_admin` all removed) | [x] landed |
 | **M2b** | **Generic collections & items**: `Collection`/`Item`/`meal_detail`/scoped `Category`/`Tag`, migrate the 155 meals (§5.1), library UI becomes collection-aware | **Revises M2** (CRUD/seed logic mostly reusable, schema underneath changes) | [x] landed |
-| M3 | **Session-based voting engine**: group/account-hosted sessions, account-optional participants, `session_target`, ad hoc + library-backed `batch_item`, outcome-only recording | Net-new build against this doc; old M3 spec (§9 of plan v1) is void — roster-freeze/batch-assembly/unanimous+majority *mechanics* carry over, identity plumbing does not | [ ] unapproved until this doc is approved |
+| M3 | **Session-based voting engine**: group/account-hosted sessions, account-optional participants, `session_target`, ad hoc + library-backed `batch_item`, outcome-only recording per §5.5's lifecycle rules, state machines per §5.6, host participant removal. **Mobile-first UI (§10): the voter flow presents one option at a time** — full-screen card, yes/no, progress — not a 15-row grid. | Net-new build against this doc; old M3 spec (§9 of plan v1) is void except D5/D6/D13, re-adopted by explicit reference in §5.6 — everything else about M3 state lives in this doc now | [ ] unapproved until this doc is approved |
 | M4 | **Reporting & discovery** (§6) — supersedes "history & favorites" (broader scope: trend/tag correlation, not just `times_kept`). **Every query scoped to the requesting account's own groups (§6)** — a new hard requirement multi-tenancy introduces that didn't exist in the old single-household plan. | Expanded from old M4 | [ ] |
-| M5 | Hardening, deployment docs, backup/restore. Single shared SQLite DB (§6.1) — backup/restore story unchanged (still one file). **Locked (2026-08-29): no site-wide passphrase gate.** Real accounts (M2a) are the security boundary; a blanket site gate would work against the "invite a friend's group to join" flow the platform is for. `Settings.access_key`/`SP_ACCESS_KEY` already removed — dead code, never enforced. | Resolved; M5 no longer has a gate-middleware task | [ ] |
-| M6 | External API + MCP. **Locked change from the old plan: tokens are per-group, not one shared household key.** A single global `DD_API_KEY`/`SP_API_KEY` would let one group's AI tools read every other group's data on the same deployment — a real leak now that other people's groups live in this database, not a hypothetical. Each group's owner generates and can revoke their own group's token; MCP tools operate on generic `item`/`collection` endpoints (not meal-specific), scoped the same way as M4's reporting. "AI lives outside the app" still holds — it now applies per-group, not just to Charlie's own tools. | Token-scoping question from the original table is now a locked decision, not an open item | [ ] |
+| M5 | Hardening, deployment docs, backup/restore. Single shared SQLite DB (§6.1) — backup/restore story unchanged (still one file). **Locked (2026-08-29): no site-wide passphrase gate.** Real accounts (M2a) are the security boundary. `Settings.access_key`/`SP_ACCESS_KEY` already removed — dead code, never enforced. **Hard pre-deployment items (accounts being the sole boundary makes these blockers, not polish):** (1) login attempt limiting — unlimited online password guessing is currently possible; (2) a decision on email enumeration: signup's "That email is already in use" is an email oracle today; either accept that openly or make signup non-revealing (awkward without outbound email — if accepted, record it as accepted, not overlooked); (3) join-by-code rate limiting (§5.6 — codes are a cross-tenant guessing surface); (4) the login timing side-channel fix (dummy hash on unknown email — the smallest of the four, tracked in REQUESTS.md). Plus **PWA packaging (§10)**: manifest + icons + installability, so voters get a home-screen app without app stores. | Gate question resolved; security items promoted from REQUESTS.md follow-ups to M5 blockers per the 2026-08-29 Oscar plan review | [ ] |
+| M6 | External API + MCP. **Locked change from the old plan: tokens are per-group, not one shared household key.** A single global `DD_API_KEY`/`SP_API_KEY` would let one group's AI tools read every other group's data on the same deployment — a real leak now that other people's groups live in this database, not a hypothetical. Each group's owner generates and can revoke their own group's token; MCP tools operate on generic `item`/`collection` endpoints (not meal-specific), scoped the same way as M4's reporting. Four requirements stated now so M6's implementer doesn't invent them: **(a) tokens are stored hashed**, like every other credential in this codebase — the plaintext is shown once at generation; **(b) ownership transfer forces token rotation** — the departing owner knows the token, so transfer revokes it and prompts the new owner to generate a fresh one; **(c) verb scope: tokens can read/write the group's library items and read its reports — they cannot create, drive, or vote in sessions** (voting is a humans-in-a-room mechanism; an AI tool with a vote is out of scope by the charter's own no-in-app-AI stance); **(d) a token resolves to exactly one group at auth time, before any tool logic runs** — per-tool scoping checks are exactly the hand-rolled inconsistency this platform keeps getting burned by. The MCP tool list itself is M6-planning-time detail, deliberately open. "AI lives outside the app" still holds — it now applies per-group, not just to Charlie's own tools. | Token-scoping question from the original table is now a locked decision, not an open item | [ ] |
 
-## 9. Rename
+## 9. Client platform & design (locked 2026-08-29)
+
+Charlie's direction: the people *voting* — and usually the host *starting* a vote — are on phones; the
+person curating collections is often at a desktop. That ordering now drives the client decisions:
+
+- **Mobile-first, as a responsive web app.** Every M3+ screen is designed for a phone viewport first;
+  desktop is the adaptation. The library/collection-management screens may stay desktop-comfortable, but
+  they still have to work on a phone. Existing M0–M2b templates get brought under this rule by the
+  design reskin (below), not piecemeal.
+- **No SPA — server-rendered pages plus htmx and SSE.** The voting flow is taps and reveals, not a rich
+  client app. Live behavior (lobby roster filling in, batch closing, results reveal) uses SSE or
+  short-poll via htmx — which is already vendored — keeping the charter's no-build-step/no-Node rule
+  intact. This is a decision, not a deferral: an SPA proposal reopens it only with Charlie's word.
+- **PWA packaging at M5**: web manifest, icons, installability — an app-on-the-home-screen experience
+  with no app store. Native apps are explicitly not planned; if they ever happen, M6's API is the path
+  and the backend does not change.
+- **Batch presentation on mobile is one option at a time** (M3): full-screen card, large yes/no
+  targets, "4 of 15" progress. Same batch mechanics, same schema — presentation only. Desktop may show
+  a denser list.
+- **Collection-scoped routing**: the library moves from the implicit "first collection that exists" to
+  honest URLs — `/collections/{id}` (browse) and `/collections/{id}/items/{item_id}` (detail/edit),
+  with a collections index as the post-login hub and `/library` kept as a redirect to the account's
+  first meal collection. This closes the multi-group dead end found in the 2026-08-29 code review
+  (accounts in two groups could never reach the second group's library) and matches the data model that
+  already exists. Lands before M3 so the voting engine never builds on the single-collection assumption.
+- **Design rework is in flight** (Claude Design). The current handoff bundle in `Design Handoff/` is
+  explicitly desktop-first and predates this section — it is superseded as a *layout* reference. The
+  corrected brief for the design pass is `docs/DESIGN-BRIEF-mobile.md`. Visual/template changes to the
+  running app wait for that pass and land as one reskin slice; until then, code slices stay
+  template-light.
+
+## 10. Rename
 
 Product: **SamePage**. This collection/module: **Meal Planner** (was "Dinner Decider"). Repo, package
 name, and env var prefix (`DD_*` → `SP_*`) updated alongside this doc; see commit for the mechanical diff.

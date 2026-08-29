@@ -4,7 +4,11 @@
 > meal-specific decisions (D10) are superseded by `docs/PLAN-v2-samepage.md` — SamePage is now a
 > multi-tenant consensus-voting platform with Meal Planner (formerly "Dinner Decider") as its first
 > collection. M0–M2's mechanics (vote privacy, unanimous/majority-host-accept, Alembic migrations, no
-> in-app AI) all carry forward; identity and single-household assumptions do not. M3+ is unapproved
+> in-app AI) all carry forward; identity and single-household assumptions do not. **Also superseded
+> (added 2026-08-29): this charter's vote-retention language — the Core-mechanic bullet's "Raw votes
+> stay server-side for future learning" and D9's "raw votes stored." The v2 plan (§5.4–§5.5) records
+> aggregate outcomes only and requires per-person vote rows to be deleted at batch close; raw votes are
+> not retained, for learning or anything else.** M3+ is unapproved
 > pending sign-off on the v2 doc. Kept here for history rather than rewritten in place. **Note (2026-08-29):
 > this document's dice/D8/D20 framing below is historical only** — it describes the spreadsheet ritual
 > Meal Planner replaced. The mechanic is permanently retired, including as a future "bring it back" idea;

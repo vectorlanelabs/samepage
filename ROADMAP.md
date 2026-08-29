@@ -15,12 +15,13 @@ never built) starts. Full architecture: `docs/PLAN-v2-samepage.md`. `docs/PLAN-v
 
 | ID | Milestone | Status | Notes |
 |---|---|---|---|
-| M0 | Foundation: scaffolding, FastAPI skeleton, SQLite models, **Alembic migrations**, session, security middleware, CI | [x] | Landed 2026-08-26 (`0a786dc`); 22 tests; review fixes applied. Stands as-is — no identity/tenancy coupling. |
+| M0 | Foundation: scaffolding, FastAPI skeleton, SQLite models, **Alembic migrations**, session, security middleware, CI (built, then removed — CI is banned per CLAUDE.md non-negotiable #10; listed here as history) | [x] | Landed 2026-08-26 (`0a786dc`); 22 tests; review fixes applied. Stands as-is — no identity/tenancy coupling. |
 | ~~M1~~ → **M2a** | ~~Household profiles (PINs)~~ → **Identity & tenancy**: `Account` (email+password), `Group`/`group_admin`, replaces `Person`+PIN entirely | [x] landed 2026-08-28 | PINs fully removed. Library CRUD gated on "any signed-in account" (interim — proper group-scoping lands in M2b, tracked in REQUESTS.md). See `docs/PLAN-v2-samepage.md` §4/§8. |
 | **M2b** | **Generic collections & items**: `Collection`/`Item`/`meal_detail`, scoped `Category`/`Tag`, migrate the 155 seeded meals | [x] landed 2026-08-28 | Clean-slate schema (matches M2a's precedent — no real user data to preserve); `scripts/seed.py` now requires a `group_id` and is idempotent per-collection. `/library` URLs unchanged; multi-collection routing deferred (tracked in REQUESTS.md). Revises the M2 work (`6d22054`). §5 |
-| M3 | Session-based voting engine: group/account-hosted sessions, account-optional participants, ad hoc + library-backed items, outcome-only recording (no per-person vote history) | [ ] unapproved | Mechanics (batch size, unanimous/majority-host-accept) carry over from the old spec; identity plumbing does not. §5/§8 |
+| **M2c** | **Pre-M3 correctness & routing**: Oscar code-review punch list (crash/oracle/redirect fixes, cross-tenant test band, dead-weight purge) + collection-scoped library routing (`/collections/{id}`, plan §9) | [~] in progress 2026-08-29 | Closes the multi-group dead end before M3 builds on the single-collection assumption. Visual/template work explicitly excluded — held for the design reskin (plan §9). |
+| M3 | Session-based voting engine: group/account-hosted sessions, account-optional participants, ad hoc + library-backed items, outcome-only recording with the §5.5 lifecycle rules (vote rows deleted at batch close; participants deleted at session end) | [ ] unapproved | State machines and roster rules now in plan §5.6 (D5/D6/D13 re-adopted by reference). Mobile-first: voting is one option at a time (plan §9). |
 | M4 | Reporting & discovery (tag/category trend analysis on vote outcomes) | [ ] | Supersedes "history & favorites" — broader than `times_kept` alone. **Every query scoped to the requesting account's own groups** — new hard requirement under multi-tenancy. §6 |
-| M5 | Hardening, polish, deployment docs, WAL-safe backup + restore check | [ ] | Single shared SQLite DB, not per-tenant (§6.1). **Open question for Charlie**: does the old site-wide passphrase gate still fit a platform meant to let other groups self-serve sign up? Tracked in REQUESTS.md. |
+| M5 | Hardening, polish, deployment docs, WAL-safe backup + restore check, **PWA packaging** (manifest/icons/installable — plan §9) | [ ] | Single shared SQLite DB, not per-tenant (§6.1). Gate question **resolved 2026-08-29: no site gate; accounts are the boundary.** Hard pre-deployment security items (plan §8 M5): login attempt limiting, the signup email-enumeration decision, join-by-code rate limiting, login timing-side-channel fix. |
 | M6 | External API + MCP server (**no in-app AI**) | [ ] | **Locked**: tokens are per-group, not one shared key — a global key would leak one group's data to another group's AI tools on the same deployment. Each group's owner generates/revokes their own token. §8 |
 
 Detailed build plan: `docs/PLAN-v2-samepage.md` (current) · `docs/PLAN-v1-mvp.md` (superseded, kept for
@@ -36,6 +37,16 @@ Each gets a full plan doc when its trigger condition fires.
 
 ## Change log
 
+- **2026-08-29 (2)** — **Oscar reviews applied + mobile-first locked.** Both 2026-08-29 Oscar reviews
+  (plan + shipped code, saved in `docs/`) dispositioned: plan §5 PKs made implementable, vote-data
+  lifecycle written as §5.5 (deletion is now a requirement, not a hope), session tenancy invariants and
+  §5.6 state machines added, M4/M5/M6 rows sharpened, security follow-ups promoted to M5 blockers.
+  New plan §9 locks Charlie's client direction: **mobile-first responsive web app, no SPA**
+  (server-rendered + htmx/SSE), PWA at M5, one-option-at-a-time voting on mobile, collection-scoped
+  library routing before M3. Design rework (Claude Design) re-briefed mobile-first via
+  `docs/DESIGN-BRIEF-mobile.md`; visual/template changes held for that pass. New M2c row tracks the
+  pre-M3 correctness/routing slice. Doc sweep fixed CLAUDE.md's stale PIN/`is_admin`/global-API-key
+  lines and CHARTER's banner scope.
 - **2026-08-28** — **Architecture pivot: SamePage.** Renamed from Dinner Decider; multi-tenant consensus
   platform (`docs/PLAN-v2-samepage.md`) with Meal Planner as the first collection. Real accounts +
   group ownership/admin replace `Person`+PIN entirely (no PINs anywhere); meals generalize to
