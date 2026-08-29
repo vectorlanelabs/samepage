@@ -58,9 +58,7 @@
     <div class="meal-card{% if m.archived %} meal-card--archived{% endif %}">
       <div class="meal-card-top">
         <a href="/collections/{{ collection.id }}/items/{{ m.id }}" class="meal-card-name">{{ m.name }}</a>
-        <form method="post" action="/collections/{{ collection.id }}/items/{{ m.id }}/cycle-type" class="meal-type-form">
-          <button type="submit" class="chip">{{ m.type_label }}</button>
-        </form>
+        {% if m.type_label %}<span class="chip chip--static">{{ m.type_label }}</span>{% endif %}
       </div>
       <div class="meal-card-meta">
         {% for t in m.tags %}

@@ -26,12 +26,16 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import ApiToken, Collection, Group, Item, ItemTag, MealDetail, Tag
 from app.routes.library import (
-    VALID_TYPES,
+    _item_ingredients,
     _item_meal_detail,
+    _item_meal_types,
     _item_tags,
     _normalize_name,
+    _parse_meal_types,
     _resolve_tags,
     _safe_source_url,
+    _set_meal_ingredients,
+    _set_meal_types,
 )
 from app.routes.reports import NOT_OFFERED_LATELY_COUNT, _rate_row
 from app.tokens import hash_token
@@ -95,9 +99,9 @@ def _item_json(db: Session, item: Item) -> dict:
     return {
         "id": item.id,
         "name": item.name,
-        "type": detail.type if detail is not None else "dinner",
+        "types": _item_meal_types(db, item.id),
         "tags": _item_tags(db, item.id),
-        "ingredients": detail.ingredients if detail is not None else None,
+        "ingredients": _item_ingredients(db, item.id),
         "recipe_text": detail.recipe_text if detail is not None else None,
         "source_url": detail.source_url if detail is not None else None,
         "times_offered": item.times_offered,
@@ -132,18 +136,18 @@ def _check_name_collision(
 
 class ItemCreate(BaseModel):
     name: str
-    type: str = "dinner"
+    types: list[str] = ["dinner"]
     tags: list[str] = []
-    ingredients: str | None = None
+    ingredients: list[str] = []
     recipe_text: str | None = None
     source_url: str | None = None
 
 
 class ItemUpdate(BaseModel):
     name: str | None = None
-    type: str | None = None
+    types: list[str] | None = None
     tags: list[str] | None = None
-    ingredients: str | None = None
+    ingredients: list[str] | None = None
     recipe_text: str | None = None
     source_url: str | None = None
 
@@ -185,16 +189,17 @@ def create_item(
     group: Annotated[Group, Depends(require_api_group)],
 ):
     """Create an item in the token's group's collection. Name is required
-    (400 when blank), type must be dinner/lunch/both (400), and a normalized-
-    name collision is a 409. Tags are group-scoped get-or-create, exactly like
-    the library create path."""
+    (400 when blank), types must be a non-empty subset of
+    breakfast/lunch/dinner (400), and a normalized-name collision is a 409.
+    Tags are group-scoped get-or-create, exactly like the library create path."""
     collection = _get_group_collection_or_404(db, group, collection_id)
 
     name = payload.name.strip()
     if not name:
         raise HTTPException(400, "Name is required.")
-    if payload.type not in VALID_TYPES:
-        raise HTTPException(400, "Type must be dinner, lunch, or both.")
+    types = _parse_meal_types(payload.types)
+    if not types:
+        raise HTTPException(400, "Pick at least one of breakfast, lunch, or dinner.")
     source_url = _require_valid_source_url(payload.source_url) if payload.source_url else None
     _check_name_collision(db, collection.id, _normalize_name(name), exclude_item_id=None)
 
@@ -207,10 +212,10 @@ def create_item(
     db.add(item)
     db.flush()
 
+    _set_meal_types(db, item.id, types)
+    _set_meal_ingredients(db, collection.group_id, item.id, payload.ingredients)
     detail = MealDetail(
         item_id=item.id,
-        type=payload.type,
-        ingredients=(payload.ingredients or "").rstrip("\r\n") or None,
         recipe_text=(payload.recipe_text or "").rstrip() or None,
         source_url=source_url,
     )
@@ -229,7 +234,7 @@ def update_item(
     group: Annotated[Group, Depends(require_api_group)],
 ):
     """Partial update of an item in the token's group. Any of
-    name/type/tags/ingredients/recipe_text/source_url may be provided; a
+    name/types/tags/ingredients/recipe_text/source_url may be provided; a
     rename recomputes normalized_name and a collision is a 409. Validation
     runs before anything is mutated, so a failed request changes nothing."""
     item = _get_group_item_or_404(db, group, item_id)
@@ -243,8 +248,11 @@ def update_item(
         name = payload.name.strip() if payload.name else ""
         if not name:
             raise HTTPException(400, "Name is required.")
-    if "type" in fields and payload.type is not None and payload.type not in VALID_TYPES:
-        raise HTTPException(400, "Type must be dinner, lunch, or both.")
+    new_types: list[str] | None = None
+    if "types" in fields:
+        new_types = _parse_meal_types(payload.types)
+        if not new_types:
+            raise HTTPException(400, "Pick at least one of breakfast, lunch, or dinner.")
     if "name" in fields:
         _check_name_collision(db, collection.id, _normalize_name(name), exclude_item_id=item.id)
     source_url = None
@@ -259,14 +267,14 @@ def update_item(
     if "name" in fields:
         item.name = name
         item.normalized_name = _normalize_name(name)
-    if "type" in fields and payload.type is not None:
-        detail.type = payload.type
+    if new_types is not None:
+        _set_meal_types(db, item.id, new_types)
     if "tags" in fields:
         db.execute(delete(ItemTag).where(ItemTag.item_id == item.id))
         for tag in _resolve_tags(db, collection.group_id, payload.tags or []):
             db.add(ItemTag(item_id=item.id, tag_id=tag.id))
     if "ingredients" in fields:
-        detail.ingredients = (payload.ingredients or "").rstrip("\r\n") or None
+        _set_meal_ingredients(db, collection.group_id, item.id, payload.ingredients or [])
     if "recipe_text" in fields:
         detail.recipe_text = (payload.recipe_text or "").rstrip() or None
     if "source_url" in fields:

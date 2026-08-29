@@ -102,7 +102,7 @@ batch primary; End session early as danger text).
 **3 · Auth** — sign in / sign up.
 
 **4 · Collections & library** — collections hub is the post-login home (`/collections/{id}`);
-library is browse/search/filter with chip filters and kept-count meta; item edit (segmented
+library is browse/search/filter with compact dropdown filters (Type / Tags / Time — fixed-width row, never a wrapping chip list) and kept-count meta; item edit (segmented
 type control, removable tag chips, archive as danger text); recipe view (ingredients + method
 cards + source link + offered/kept footer).
 
@@ -116,8 +116,8 @@ read from batch outcomes and totals only.
 headline left, join-by-code card as the co-star; sign in / create account quiet in the top-right.
 Join code entry posts to the same join flow as an invite link.
 
-**Desktop** — library gets a real desktop layout (250px sidebar nav + table: name / type / tags /
-kept / last kept). Session screens stay a centered 720px single column reusing the phone
+**Desktop** — library gets a real desktop layout (250px sidebar nav + dropdown filter row with Sort and
+Clear + table: name / type / tags / kept / last kept). Session screens stay a centered 720px single column reusing the phone
 components unchanged — voting stays one-option-at-a-time on desktop too.
 
 ## Engineering notes

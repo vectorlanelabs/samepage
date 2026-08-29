@@ -29,8 +29,25 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from app import mcp_server
-from app.models import Account, ApiToken, Collection, Group, Item, ItemTag, MealDetail, Tag
+from app.models import (
+    Account,
+    ApiToken,
+    Collection,
+    Group,
+    Item,
+    ItemTag,
+    MealType,
+    Tag,
+)
 from app.tokens import hash_token
+
+# Legacy scalar type -> the meal-type set it maps to now ('both' = lunch+dinner).
+_TYPE_TO_SET = {
+    "dinner": ["dinner"],
+    "lunch": ["lunch"],
+    "breakfast": ["breakfast"],
+    "both": ["lunch", "dinner"],
+}
 
 # ---------- helpers ----------
 
@@ -56,9 +73,8 @@ def _seed_item(db_session, collection_id, group_id, name, *, type="dinner", tags
     item = Item(collection_id=collection_id, name=name, normalized_name=name.casefold())
     db_session.add(item)
     db_session.flush()
-    db_session.add(
-        MealDetail(item_id=item.id, type=type, ingredients=None, recipe_text=None, source_url=None)
-    )
+    for meal_type in _TYPE_TO_SET[type]:
+        db_session.add(MealType(item_id=item.id, meal_type=meal_type))
     for tname in tags:
         tag = db_session.scalar(select(Tag).where((Tag.group_id == group_id) & (Tag.name == tname)))
         if tag is None:
@@ -107,17 +123,17 @@ def test_valid_token_lists_collections_adds_lists_and_reports(engine, db_session
             {
                 "collection_id": coll_a.id,
                 "name": "  Baked Salmon  ",
-                "type": "dinner",
+                "types": ["dinner"],
                 "tags": ["fish", "quick"],
-                "ingredients": "salmon\n\nlemon\n\n\n",
+                "ingredients": ["salmon", "", "lemon"],  # blanks dropped, order kept
                 "recipe_text": "Bake it.  \n",
                 "source_url": "https://example.com/salmon",
             },
         )
         assert added.data["name"] == "Baked Salmon"  # trimmed
-        assert added.data["type"] == "dinner"
+        assert added.data["types"] == ["dinner"]
         assert added.data["tags"] == ["fish", "quick"]
-        assert added.data["ingredients"] == "salmon\n\nlemon"  # trailing blank lines stripped
+        assert added.data["ingredients"] == ["salmon", "lemon"]  # blanks dropped, order kept
         assert added.data["recipe_text"] == "Bake it."
         assert added.data["source_url"] == "https://example.com/salmon"
         assert added.data["times_kept"] == 0
@@ -141,9 +157,9 @@ def test_valid_token_lists_collections_adds_lists_and_reports(engine, db_session
             {
                 "id": item_id,
                 "name": "Baked Salmon",
-                "type": "dinner",
+                "types": ["dinner"],
                 "tags": ["fish", "quick"],
-                "ingredients": "salmon\n\nlemon",
+                "ingredients": ["salmon", "lemon"],
                 "recipe_text": "Bake it.",
                 "source_url": "https://example.com/salmon",
                 "times_kept": 0,
@@ -220,7 +236,7 @@ def test_token_cannot_reach_another_groups_collections_or_items(engine, db_sessi
         with pytest.raises(ToolError, match="No such collection"):
             await client.call_tool(
                 "add_item",
-                {"collection_id": coll_b.id, "name": "Stowaway", "type": "dinner"},
+                {"collection_id": coll_b.id, "name": "Stowaway", "types": ["dinner"]},
             )
 
         # A's token cannot read B's report.
@@ -292,16 +308,16 @@ def test_add_item_blank_name_duplicate_and_bad_type(engine, db_session, monkeypa
     async def case(client):
         with pytest.raises(ToolError, match="Name is required."):
             await client.call_tool(
-                "add_item", {"collection_id": coll_a.id, "name": "   ", "type": "dinner"}
+                "add_item", {"collection_id": coll_a.id, "name": "   ", "types": ["dinner"]}
             )
         # Normalized-name collision (whitespace-collapsed casefold).
         with pytest.raises(ToolError, match="An item with that name already exists"):
             await client.call_tool(
-                "add_item", {"collection_id": coll_a.id, "name": "bacon   and eggs", "type": "dinner"}
+                "add_item", {"collection_id": coll_a.id, "name": "bacon   and eggs", "types": ["dinner"]}
             )
-        with pytest.raises(ToolError, match="Type must be dinner, lunch, or both."):
+        with pytest.raises(ToolError, match="Pick at least one of breakfast, lunch, or dinner."):
             await client.call_tool(
-                "add_item", {"collection_id": coll_a.id, "name": "Weird", "type": "brunch"}
+                "add_item", {"collection_id": coll_a.id, "name": "Weird", "types": ["brunch"]}
             )
         with pytest.raises(ToolError, match="Source URL must start with http:// or https://."):
             await client.call_tool(
@@ -309,7 +325,7 @@ def test_add_item_blank_name_duplicate_and_bad_type(engine, db_session, monkeypa
                 {
                     "collection_id": coll_a.id,
                     "name": "Fishy",
-                    "type": "dinner",
+                    "types": ["dinner"],
                     "source_url": "javascript:alert(1)",
                 },
             )
@@ -333,10 +349,10 @@ def test_update_item_partial_and_rename_collision(engine, db_session, monkeypatc
         # Partial update: rename + type + tags in one call.
         result = await client.call_tool(
             "update_item",
-            {"item_id": item.id, "name": "  New Name  ", "type": "both", "tags": ["newtag"]},
+            {"item_id": item.id, "name": "  New Name  ", "types": ["lunch", "dinner"], "tags": ["newtag"]},
         )
         assert result.data["name"] == "New Name"
-        assert result.data["type"] == "both"
+        assert result.data["types"] == ["lunch", "dinner"]
         assert result.data["tags"] == ["newtag"]
         # Rename collision with an existing item in the same collection.
         with pytest.raises(ToolError, match="An item with that name already exists"):

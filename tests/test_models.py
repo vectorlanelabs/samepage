@@ -1,12 +1,9 @@
 """Model round-trip + integrity constraints for every table in PLAN-v2-samepage.md §5."""
 
-import sqlite3
-
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.db import Base
 from app.models import (
     Account,
     AuthIdentity,
@@ -17,9 +14,12 @@ from app.models import (
     Collection,
     Group,
     GroupAdmin,
+    Ingredient,
     Item,
     ItemTag,
     MealDetail,
+    MealIngredient,
+    MealType,
     Session,
     SessionParticipant,
     SessionTarget,
@@ -174,7 +174,8 @@ def test_tag_unique_constraint_per_group(db_session):
 
 
 def test_item_and_meal_detail_round_trip(db_session):
-    """Item and MealDetail are 1:1; both persist and reload correctly."""
+    """Item, its meal-type set, structured ingredients, and MealDetail all
+    persist and reload correctly."""
     account = Account(email="owner@example.com", display_name="Owner")
     db_session.add(account)
     db_session.flush()
@@ -198,12 +199,18 @@ def test_item_and_meal_detail_round_trip(db_session):
 
     detail = MealDetail(
         item_id=item.id,
-        type="dinner",
-        ingredients="Pasta\nEggs\nBacon",
         recipe_text="Cook pasta. Mix eggs and bacon.",
         source_url="https://example.com/carbonara",
     )
     db_session.add(detail)
+    db_session.add(MealType(item_id=item.id, meal_type="dinner"))
+    for position, iname in enumerate(("pasta", "eggs", "bacon")):
+        ing = Ingredient(group_id=group.id, name=iname)
+        db_session.add(ing)
+        db_session.flush()
+        db_session.add(
+            MealIngredient(item_id=item.id, ingredient_id=ing.id, position=position)
+        )
     db_session.commit()
 
     db_session.expire_all()
@@ -212,9 +219,21 @@ def test_item_and_meal_detail_round_trip(db_session):
     assert item_q.name == "Pasta Carbonara"
     assert item_q.times_kept == 0
 
+    # The meal's type is now a set of meal_type rows, not a scalar column.
+    types = db_session.scalars(
+        select(MealType.meal_type).where(MealType.item_id == item.id)
+    ).all()
+    assert list(types) == ["dinner"]
+
+    ingredients = db_session.scalars(
+        select(Ingredient.name)
+        .join(MealIngredient, MealIngredient.ingredient_id == Ingredient.id)
+        .where(MealIngredient.item_id == item.id)
+        .order_by(MealIngredient.position)
+    ).all()
+    assert list(ingredients) == ["pasta", "eggs", "bacon"]
+
     detail_q = db_session.get(MealDetail, item.id)
-    assert detail_q.type == "dinner"
-    assert detail_q.ingredients == "Pasta\nEggs\nBacon"
     assert detail_q.source_url == "https://example.com/carbonara"
 
 
@@ -298,26 +317,31 @@ def test_auth_identity_unique_provider_subject(db_session):
     db_session.rollback()
 
 
-def test_invalid_meal_detail_type_rejected_by_check_constraint(tmp_path):
-    """DB-level guard: an out-of-domain MealDetail.type violates the CHECK constraint.
+def test_invalid_meal_type_rejected_by_check_constraint(db_session):
+    """DB-level guard: an out-of-domain meal_type value violates the
+    ``ck_meal_type_value`` CHECK constraint.
 
-    Raw sqlite3 on purpose — there is no SQLAlchemy app-layer validation yet,
-    so the CHECK constraint is the guard.
+    The type domain moved from the old ``meal_detail.type`` column to the
+    ``meal_type`` table; the CHECK now lives there, and the DB (not an
+    app-layer validator) is what rejects a bad value like 'brunch'.
     """
-    db_path = str(tmp_path / "check.db")
-    engine = create_engine(f"sqlite:///{db_path}")
-    Base.metadata.create_all(bind=engine)
-    engine.dispose()
+    account = Account(email="owner@example.com", display_name="Owner")
+    db_session.add(account)
+    db_session.flush()
+    group = Group(name="Test Group", owner_account_id=account.id)
+    db_session.add(group)
+    db_session.flush()
+    collection = Collection(group_id=group.id, kind="meal", name="Meal Planner")
+    db_session.add(collection)
+    db_session.flush()
+    item = Item(collection_id=collection.id, name="Weird", normalized_name="weird")
+    db_session.add(item)
+    db_session.flush()
 
-    conn = sqlite3.connect(db_path)
-    try:
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute(
-                "INSERT INTO meal_detail (item_id, type)"
-                " VALUES (1, 'breakfast')"
-            )
-    finally:
-        conn.close()
+    with pytest.raises(IntegrityError):
+        db_session.add(MealType(item_id=item.id, meal_type="brunch"))
+        db_session.commit()
+    db_session.rollback()
 
 
 # ---------------------------------------------------------------------------

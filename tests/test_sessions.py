@@ -29,6 +29,7 @@ from app.models import (
     Item,
     ItemTag,
     MealDetail,
+    MealType,
     SessionParticipant,
     SessionTarget,
     Tag,
@@ -105,16 +106,25 @@ def _participant_count(db_session) -> int:
     return db_session.scalar(select(func.count()).select_from(SessionParticipant)) or 0
 
 
+# Legacy scalar type -> the meal-type set it maps to now ('both' = lunch+dinner).
+_TYPE_TO_SET = {
+    "dinner": ["dinner"],
+    "lunch": ["lunch"],
+    "breakfast": ["breakfast"],
+    "both": ["lunch", "dinner"],
+}
+
+
 def _make_item(
     db_session, collection_id: int, name: str, type: str = "dinner", recipe_text: str = ""
 ) -> Item:
     item = Item(collection_id=collection_id, name=name, normalized_name=name.casefold())
     db_session.add(item)
     db_session.flush()
-    detail = MealDetail(item_id=item.id, type=type)
+    for meal_type in _TYPE_TO_SET[type]:
+        db_session.add(MealType(item_id=item.id, meal_type=meal_type))
     if recipe_text:
-        detail.recipe_text = recipe_text
-    db_session.add(detail)
+        db_session.add(MealDetail(item_id=item.id, recipe_text=recipe_text))
     db_session.commit()
     return item
 
@@ -1782,7 +1792,7 @@ def test_next_batch_with_pending_majority_item_400(client, post, db_session):
 
 
 def test_next_batch_advances_track_when_current_met(client, post, db_session):
-    """Dinner target met → the next batch is the 'lunch' track."""
+    """Lunch target met → the next batch is the 'dinner' track."""
     session, _, items, (sam, lee) = _started_roster(
         client,
         post,
@@ -1791,13 +1801,12 @@ def test_next_batch_advances_track_when_current_met(client, post, db_session):
         roster_names=["Sam", "Lee"],
         targets=[("dinner", 1), ("lunch", 1)],
     )
-    # Batch 1 is the dinner track, so `items` holds only the two dinner options
-    # (Apple, Banana); Salad is lunch and arrives in the advanced batch.
-    apple, banana = items
-    _cast(client, post, db_session, session, sam, apple.id, "yes")
-    _cast(client, post, db_session, session, sam, banana.id, "no")
-    _cast(client, post, db_session, session, lee, apple.id, "yes")
-    _cast(client, post, db_session, session, lee, banana.id, "no")  # auto-closes
+    # Canonical track order is breakfast, lunch, dinner, so batch 1 is the LUNCH
+    # track (Salad only); the two dinner options (Apple, Banana) arrive in the
+    # advanced batch.
+    (salad,) = items
+    _cast(client, post, db_session, session, sam, salad.id, "yes")
+    _cast(client, post, db_session, session, lee, salad.id, "yes")  # unanimous keep → closes
     _login(client, db_session, "host@example.com")
 
     resp = post(f"/s/{session.code}/next-batch", follow_redirects=False)
@@ -1806,8 +1815,8 @@ def test_next_batch_advances_track_when_current_met(client, post, db_session):
         select(Batch).where(Batch.session_id == session.id).order_by(Batch.seq)
     ).all()
     assert [b.seq for b in batches] == [1, 2]
-    assert batches[1].track_label == "lunch"
-    assert _item_names(db_session, _batch_items(db_session, batches[1].id)) == ["Salad"]
+    assert batches[1].track_label == "dinner"
+    assert _item_names(db_session, _batch_items(db_session, batches[1].id)) == ["Apple", "Banana"]
 
 
 def test_next_batch_pool_exhausted_400(client, post, db_session):

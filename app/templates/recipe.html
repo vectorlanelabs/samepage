@@ -5,7 +5,9 @@
   <a class="back-link" href="/collections/{{ collection.id }}">← Back to library</a>
   <h1 class="page-title recipe-title">{{ meal.name }}</h1>
   <div class="chip-row" style="margin-top:12px;">
-    <span class="chip">{{ type_label }}</span>
+    {% for tl in type_labels %}
+    <span class="chip">{{ tl }}</span>
+    {% endfor %}
     {% for t in tags %}
     <span class="chip">{{ t }}</span>
     {% endfor %}

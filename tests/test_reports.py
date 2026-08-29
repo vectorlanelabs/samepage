@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from conftest import stamp_session
 from sqlalchemy import func, select
 
-from app.models import Account, Collection, Group, Item, ItemTag, MealDetail, Tag
+from app.models import Account, Collection, Group, Item, ItemTag, MealType, Tag
 
 
 def _make_account(db_session, email, display_name=None):
@@ -38,11 +38,11 @@ def _make_collection(db_session, group_id, name="Meal Planner"):
 
 
 def _make_item(db_session, collection_id, group_id, name, tags=(), archived=False):
-    """Item with a meal_detail row and optional group-scoped tags."""
+    """Item with its meal-type set and optional group-scoped tags."""
     item = Item(collection_id=collection_id, name=name, normalized_name=name.casefold())
     db_session.add(item)
     db_session.flush()
-    db_session.add(MealDetail(item_id=item.id, type="dinner"))
+    db_session.add(MealType(item_id=item.id, meal_type="dinner"))
     for tname in tags:
         tag = db_session.scalar(
             select(Tag).where((Tag.group_id == group_id) & (Tag.name == tname))

@@ -30,12 +30,16 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models import ApiToken, Collection, Group, Item, ItemTag, MealDetail, Tag
 from app.routes.library import (
-    VALID_TYPES,
+    _item_ingredients,
     _item_meal_detail,
+    _item_meal_types,
     _item_tags,
     _normalize_name,
+    _parse_meal_types,
     _resolve_tags,
     _safe_source_url,
+    _set_meal_ingredients,
+    _set_meal_types,
 )
 from app.routes.reports import NOT_OFFERED_LATELY_COUNT, _rate_row
 from app.tokens import hash_token
@@ -104,9 +108,9 @@ def _item_json(db: Session, item: Item) -> dict:
     return {
         "id": item.id,
         "name": item.name,
-        "type": detail.type if detail is not None else "dinner",
+        "types": _item_meal_types(db, item.id),
         "tags": _item_tags(db, item.id),
-        "ingredients": detail.ingredients if detail is not None else None,
+        "ingredients": _item_ingredients(db, item.id),
         "recipe_text": detail.recipe_text if detail is not None else None,
         "source_url": detail.source_url if detail is not None else None,
         "times_kept": item.times_kept,
@@ -174,13 +178,15 @@ def list_items(collection_id: int) -> list[dict]:
 def add_item(
     collection_id: int,
     name: str,
-    type: str = "dinner",
+    types: list[str] | None = None,
     tags: list[str] | None = None,
-    ingredients: str = "",
+    ingredients: list[str] | None = None,
     recipe_text: str = "",
     source_url: str = "",
 ) -> dict:
-    """Add a meal (or other item) to one of the group's collections."""
+    """Add a meal (or other item) to one of the group's collections. ``types``
+    is any combination of 'breakfast', 'lunch', 'dinner' (defaults to dinner).
+    ``ingredients`` is a list of ingredient names (one item each, no quantities)."""
     db = SessionLocal()
     try:
         group = _group_for_request(db)
@@ -189,8 +195,9 @@ def add_item(
         name = name.strip()
         if not name:
             raise ToolError("Name is required.")
-        if type not in VALID_TYPES:
-            raise ToolError("Type must be dinner, lunch, or both.")
+        meal_types = _parse_meal_types(types if types is not None else ["dinner"])
+        if not meal_types:
+            raise ToolError("Pick at least one of breakfast, lunch, or dinner.")
         source_url = _require_valid_source_url(source_url)
         _check_name_collision(db, collection.id, _normalize_name(name), exclude_item_id=None)
 
@@ -203,10 +210,10 @@ def add_item(
         db.add(item)
         db.flush()
 
+        _set_meal_types(db, item.id, meal_types)
+        _set_meal_ingredients(db, collection.group_id, item.id, ingredients or [])
         detail = MealDetail(
             item_id=item.id,
-            type=type,
-            ingredients=ingredients.rstrip("\r\n") or None,
             recipe_text=recipe_text.rstrip() or None,
             source_url=source_url,
         )
@@ -223,13 +230,16 @@ def add_item(
 def update_item(
     item_id: int,
     name: str | None = None,
-    type: str | None = None,
+    types: list[str] | None = None,
     tags: list[str] | None = None,
-    ingredients: str | None = None,
+    ingredients: list[str] | None = None,
     recipe_text: str | None = None,
     source_url: str | None = None,
 ) -> dict:
-    """Update an item in one of the group's collections; only the fields provided change."""
+    """Update an item in one of the group's collections; only the fields
+    provided change. ``types`` (if given) is any combination of 'breakfast',
+    'lunch', 'dinner' and replaces the whole set. ``ingredients`` (if given) is
+    a list of ingredient names that replaces the whole set."""
     db = SessionLocal()
     try:
         group = _group_for_request(db)
@@ -243,8 +253,11 @@ def update_item(
             if not name:
                 raise ToolError("Name is required.")
             _check_name_collision(db, collection.id, _normalize_name(name), exclude_item_id=item.id)
-        if type is not None and type not in VALID_TYPES:
-            raise ToolError("Type must be dinner, lunch, or both.")
+        new_types: list[str] | None = None
+        if types is not None:
+            new_types = _parse_meal_types(types)
+            if not new_types:
+                raise ToolError("Pick at least one of breakfast, lunch, or dinner.")
         source_url = None
         if source_url is not None and source_url:
             source_url = _require_valid_source_url(source_url)
@@ -257,14 +270,14 @@ def update_item(
         if name is not None:
             item.name = name
             item.normalized_name = _normalize_name(name)
-        if type is not None:
-            detail.type = type
+        if new_types is not None:
+            _set_meal_types(db, item.id, new_types)
         if tags is not None:
             db.execute(delete(ItemTag).where(ItemTag.item_id == item.id))
             for tag in _resolve_tags(db, collection.group_id, tags):
                 db.add(ItemTag(item_id=item.id, tag_id=tag.id))
         if ingredients is not None:
-            detail.ingredients = ingredients.rstrip("\r\n") or None
+            _set_meal_ingredients(db, collection.group_id, item.id, ingredients)
         if recipe_text is not None:
             detail.recipe_text = recipe_text.rstrip() or None
         if source_url is not None:

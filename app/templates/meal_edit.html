@@ -16,19 +16,13 @@
     <input type="text" name="name" value="{{ form.name }}" placeholder="e.g. Sunday roast chicken" class="input">
 
     <div class="field-label">Type</div>
-    <div class="segmented">
-      <label class="segment{% if form.type == 'lunch' %} segment--on{% endif %}">
-        <input type="radio" name="type" value="lunch" {% if form.type == 'lunch' %}checked{% endif %}>
-        Lunch
+    <div class="segmented" role="group" aria-label="Meal types">
+      {% for opt in meal_type_options %}
+      <label class="segment{% if opt.checked %} segment--on{% endif %}">
+        <input type="checkbox" name="types" value="{{ opt.value }}" {% if opt.checked %}checked{% endif %}>
+        {{ opt.label }}
       </label>
-      <label class="segment{% if form.type == 'dinner' %} segment--on{% endif %}">
-        <input type="radio" name="type" value="dinner" {% if form.type == 'dinner' %}checked{% endif %}>
-        Dinner
-      </label>
-      <label class="segment{% if form.type == 'both' %} segment--on{% endif %}">
-        <input type="radio" name="type" value="both" {% if form.type == 'both' %}checked{% endif %}>
-        Both
-      </label>
+      {% endfor %}
     </div>
 
     <div class="field-label">Tags</div>
@@ -41,8 +35,8 @@
       {% endfor %}
     </div>
 
-    <div class="field-label">Ingredients (one per line)</div>
-    <textarea name="ingredients" rows="5" placeholder="e.g. 1 lb chicken thighs&#10;2 cups rice&#10;1 onion, diced" class="input textarea">{{ form.ingredients }}</textarea>
+    <div class="field-label">Ingredients (one per line — just the item)</div>
+    <textarea name="ingredients" rows="5" placeholder="chicken thigh&#10;rice&#10;onion&#10;garlic" class="input textarea">{{ form.ingredients }}</textarea>
 
     <div class="field-label">Instructions</div>
     <textarea name="instructions" rows="5" placeholder="The steps, the way we actually make it…" class="input textarea">{{ form.instructions }}</textarea>

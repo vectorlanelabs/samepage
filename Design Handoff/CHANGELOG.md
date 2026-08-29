@@ -1,5 +1,12 @@
 # Changelog — Quiet Kitchen handoff
 
+## v4 — filter controls (2026-08-29)
+- Replaced pill/chip filter rows in the library (phone + desktop) with compact dropdown
+  triggers (Type / Tags / Time, plus Sort and Clear on desktop). Dropdowns scale to any
+  number of tags without wrapping; each renders as a plain <select> or a small options
+  page server-side. Tag chips on the item-edit screen are unchanged (those are values,
+  not filters).
+
 ## v3 — lean copy (2026-08-29)
 - Removed 12 caption sub-cues across all screens: the privacy/no-account reassurance
   footnotes under buttons and at screen bottoms ("Votes are private — the group only ever

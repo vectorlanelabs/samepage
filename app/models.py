@@ -154,15 +154,53 @@ class ItemTag(Base):
 
 class MealDetail(Base):
     __tablename__ = "meal_detail"
-    __table_args__ = (
-        CheckConstraint("type IN ('dinner','lunch','both')", name="ck_meal_detail_type"),
-    )
 
     item_id: Mapped[int] = mapped_column(ForeignKey("item.id"), primary_key=True)
-    type: Mapped[str] = mapped_column(String, nullable=False, default="dinner")
     ingredients: Mapped[str | None] = mapped_column(Text, nullable=True)
     recipe_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class MealType(Base):
+    """A meal's applicable slots (M2, revised): breakfast / lunch / dinner, any
+    combination. Replaces the old single-valued meal_detail.type — a meal can be
+    breakfast *and* dinner, so this is a set, one row per selected slot."""
+
+    __tablename__ = "meal_type"
+    __table_args__ = (
+        CheckConstraint(
+            "meal_type IN ('breakfast','lunch','dinner')", name="ck_meal_type_value"
+        ),
+    )
+
+    item_id: Mapped[int] = mapped_column(ForeignKey("item.id"), primary_key=True)
+    meal_type: Mapped[str] = mapped_column(String, primary_key=True)
+
+
+class Ingredient(Base):
+    """A group's canonical ingredient vocabulary (M2, revised). Structured like
+    tags: one normalized name per group, reused across meals — so per-ingredient
+    metrics ('meals with onion get voted out') are a clean group-by, not a
+    fragile substring match on free text. Names are stored lowercased/collapsed."""
+
+    __tablename__ = "ingredient"
+    __table_args__ = (UniqueConstraint("group_id", "name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("group.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class MealIngredient(Base):
+    """Junction: a meal's ingredients, in entry order (``position``)."""
+
+    __tablename__ = "meal_ingredient"
+
+    item_id: Mapped[int] = mapped_column(ForeignKey("item.id"), primary_key=True)
+    ingredient_id: Mapped[int] = mapped_column(
+        ForeignKey("ingredient.id"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class Session(Base):

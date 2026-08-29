@@ -47,6 +47,7 @@ from app.models import (
     Item,
     ItemTag,
     MealDetail,
+    MealType,
     SessionParticipant,
     SessionTarget,
     Tag,
@@ -55,6 +56,7 @@ from app.models import (
     Session as VotingSession,
 )
 from app.ratelimit import JOIN_LIMITER, client_ip
+from app.routes.library import _item_ingredients, _item_meal_types, _types_label
 from app.session_logic import (
     BATCH_SIZE,
     Outcome,
@@ -71,8 +73,6 @@ from app.templating import templates
 router = APIRouter()
 
 ENDED_STATUSES = ("complete", "expired")
-
-TYPE_LABELS = {"dinner": "Dinner", "lunch": "Lunch", "both": "Both"}
 
 # §5.5 rule 3: a lobby/voting session with no activity for this many hours
 # becomes 'expired'. Enforcement is lazy — any route that loads a session
@@ -284,31 +284,30 @@ def _voting_progress_counts(db: Session, session: VotingSession) -> tuple[int, i
     return finished, roster
 
 
+# Meal tracks in canonical order (matches the library's MEAL_TYPES order).
+_MEAL_TRACK_ORDER = {"breakfast": 0, "lunch": 1, "dinner": 2}
+_MEAL_TRACK_LABELS = {"breakfast": "Breakfasts", "lunch": "Lunches", "dinner": "Dinners"}
+
+
 def _track_order(track_label: str) -> tuple[int, str]:
-    """Deterministic track ordering: 'dinner', then 'lunch', then any other
-    label alphabetically. Shared by target progress, batch assembly, and the
-    completion plan."""
-    if track_label == "dinner":
-        return (0, "")
-    if track_label == "lunch":
-        return (1, "")
-    return (2, track_label)
+    """Deterministic track ordering: the meal tracks (breakfast, lunch, dinner)
+    first in that order, then any other label alphabetically. Shared by target
+    progress, batch assembly, and the completion plan."""
+    if track_label in _MEAL_TRACK_ORDER:
+        return (_MEAL_TRACK_ORDER[track_label], "")
+    return (len(_MEAL_TRACK_ORDER), track_label)
 
 
 def _track_display_label(track_label: str) -> str:
-    """Human label for progress/plan summaries: 'Dinners'/'Lunches' for the
-    meal tracks, any other label capitalized."""
-    if track_label == "dinner":
-        return "Dinners"
-    if track_label == "lunch":
-        return "Lunches"
-    return track_label.capitalize()
+    """Human label for progress/plan summaries: 'Breakfasts'/'Lunches'/'Dinners'
+    for the meal tracks, any other label capitalized."""
+    return _MEAL_TRACK_LABELS.get(track_label, track_label.capitalize())
 
 
 def _first_track(db: Session, session: VotingSession) -> str | None:
-    """The session's first track with a positive target: 'dinner', then
-    'lunch', then any other track labels alphabetically. None when the session
-    has no targets (defensive — creation always writes at least one)."""
+    """The session's first track with a positive target, in _track_order. None
+    when the session has no targets (defensive — creation always writes at
+    least one)."""
     targets = db.scalars(
         select(SessionTarget).where(SessionTarget.session_id == session.id)
     ).all()
@@ -319,21 +318,17 @@ def _first_track(db: Session, session: VotingSession) -> str | None:
 
 
 def _eligible_item_ids(db: Session, session: VotingSession, track: str) -> list[int]:
-    """Non-archived items in the session's collection whose meal_detail.type
-    matches the track — 'dinner' → type in ('dinner','both'), 'lunch' → type in
-    ('lunch','both'), any other track label → all types — ordered by
-    normalized_name for deterministic batches (recency-weighting is a
-    post-MVP refinement)."""
+    """Non-archived items in the session's collection eligible for the track —
+    a meal track ('breakfast'/'lunch'/'dinner') selects items whose meal-type
+    set includes that slot; any other track label selects all items. Ordered by
+    normalized_name for deterministic batches (recency-weighting is a post-MVP
+    refinement)."""
     stmt = select(Item.id).where(
         (Item.collection_id == session.collection_id) & Item.archived_at.is_(None)
     )
-    if track == "dinner":
-        stmt = stmt.join(MealDetail, MealDetail.item_id == Item.id).where(
-            MealDetail.type.in_(("dinner", "both"))
-        )
-    elif track == "lunch":
-        stmt = stmt.join(MealDetail, MealDetail.item_id == Item.id).where(
-            MealDetail.type.in_(("lunch", "both"))
+    if track in _MEAL_TRACK_ORDER:
+        stmt = stmt.where(
+            Item.id.in_(select(MealType.item_id).where(MealType.meal_type == track))
         )
     return list(db.scalars(stmt.order_by(Item.normalized_name, Item.id)).all())
 
@@ -513,13 +508,15 @@ def _option_data(db: Session, session: VotingSession, batch_item: BatchItem) -> 
             .order_by(Tag.name)
         ).all()
     )
+    ingredients = _item_ingredients(db, item.id)
     has_recipe = bool(
-        detail and (detail.source_url or detail.recipe_text or (detail.ingredients or "").strip())
+        ingredients or (detail and (detail.source_url or detail.recipe_text))
     )
+    type_label = _types_label(_item_meal_types(db, item.id)) or None
     return {
         "batch_item_id": batch_item.id,
         "name": item.name,
-        "type_label": TYPE_LABELS.get(detail.type if detail else "dinner", "Dinner"),
+        "type_label": type_label,
         "tags": tags,
         "recipe_url": (
             f"/collections/{session.collection_id}/items/{item.id}" if has_recipe else None
@@ -650,6 +647,7 @@ def new_session_page(request: Request, db: Annotated[Session, Depends(get_db)]):
             "groups": groups,
             "selected_group_id": None,
             "selected_collection_id": None,
+            "breakfasts": 0,
             "dinners": 3,
             "lunches": 0,
             "picks": 3,
@@ -664,6 +662,7 @@ def create_session(
     db: Annotated[Session, Depends(get_db)],
     group_id: Annotated[str, Form()] = "",
     collection_id: Annotated[str, Form()] = "",
+    breakfasts: Annotated[str, Form()] = "",
     dinners: Annotated[str, Form()] = "",
     lunches: Annotated[str, Form()] = "",
     picks: Annotated[str, Form()] = "",
@@ -678,7 +677,8 @@ def create_session(
     > 0 create rows); ad hoc sessions take a single picks target.
     """
     account = require_account(request, db)
-    dinners_i, lunches_i, picks_i = (
+    breakfasts_i, dinners_i, lunches_i, picks_i = (
+        _parse_int(breakfasts),
         _parse_int(dinners),
         _parse_int(lunches),
         _parse_int(picks),
@@ -704,6 +704,7 @@ def create_session(
                 "groups": groups,
                 "selected_group_id": selected_group,
                 "selected_collection_id": selected_collection,
+                "breakfasts": breakfasts_i,
                 "dinners": dinners_i,
                 "lunches": lunches_i,
                 "picks": picks_i,
@@ -732,10 +733,12 @@ def create_session(
 
     if collection_id_int is not None:
         targets = []
-        if dinners_i > 0:
-            targets.append(("dinner", dinners_i))
+        if breakfasts_i > 0:
+            targets.append(("breakfast", breakfasts_i))
         if lunches_i > 0:
             targets.append(("lunch", lunches_i))
+        if dinners_i > 0:
+            targets.append(("dinner", dinners_i))
         if not targets:
             return _re_render("Set at least one target.", 400)
     else:

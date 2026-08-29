@@ -28,12 +28,23 @@ from app.models import (
     Collection,
     Group,
     GroupAdmin,
+    Ingredient,
     Item,
     ItemTag,
     MealDetail,
+    MealIngredient,
+    MealType,
     Tag,
 )
 from app.tokens import hash_token
+
+# Legacy scalar type -> the meal-type set it maps to now ('both' = lunch+dinner).
+_TYPE_TO_SET = {
+    "dinner": ["dinner"],
+    "lunch": ["lunch"],
+    "breakfast": ["breakfast"],
+    "both": ["lunch", "dinner"],
+}
 
 # ---------- helpers ----------
 
@@ -71,19 +82,44 @@ def _make_item(
     recipe_text=None,
     source_url=None,
 ):
-    """Item with a meal_detail row and optional group-scoped tags."""
+    """Item with its meal-type set, structured ingredients, an optional
+    meal_detail row, and optional group-scoped tags."""
     item = Item(collection_id=collection_id, name=name, normalized_name=name.casefold())
     db_session.add(item)
     db_session.flush()
-    db_session.add(
-        MealDetail(
-            item_id=item.id,
-            type=type,
-            ingredients=ingredients,
-            recipe_text=recipe_text,
-            source_url=source_url,
+
+    for meal_type in _TYPE_TO_SET[type]:
+        db_session.add(MealType(item_id=item.id, meal_type=meal_type))
+
+    # Structured ingredients: `ingredients` is legacy free text (one name per
+    # line) or None. Normalize + dedupe into group-scoped Ingredient rows.
+    if ingredients:
+        seen: set[str] = set()
+        position = 0
+        for raw in ingredients.splitlines():
+            iname = re.sub(r"\s+", " ", raw.casefold()).strip()
+            if not iname or iname in seen:
+                continue
+            seen.add(iname)
+            ing = db_session.scalar(
+                select(Ingredient).where(
+                    (Ingredient.group_id == group_id) & (Ingredient.name == iname)
+                )
+            )
+            if ing is None:
+                ing = Ingredient(group_id=group_id, name=iname)
+                db_session.add(ing)
+                db_session.flush()
+            db_session.add(
+                MealIngredient(item_id=item.id, ingredient_id=ing.id, position=position)
+            )
+            position += 1
+
+    if recipe_text is not None or source_url is not None:
+        db_session.add(
+            MealDetail(item_id=item.id, recipe_text=recipe_text, source_url=source_url)
         )
-    )
+
     for tname in tags:
         tag = db_session.scalar(
             select(Tag).where((Tag.group_id == group_id) & (Tag.name == tname))
@@ -280,7 +316,7 @@ def test_token_cannot_reach_another_groups_data(client, post, db_session):
     # A's token cannot create in B's collection, and nothing lands in the DB.
     resp = client.post(
         f"/api/v1/collections/{collection_b.id}/items",
-        json={"name": "Stowaway", "type": "dinner"},
+        json={"name": "Stowaway", "types": ["dinner"]},
         headers=headers,
     )
     assert resp.status_code == 404
@@ -295,7 +331,7 @@ def test_token_cannot_reach_another_groups_data(client, post, db_session):
     # A's create with A's token lands in A's collection.
     resp = client.post(
         f"/api/v1/collections/{collection_a.id}/items",
-        json={"name": "A New Dish", "type": "lunch"},
+        json={"name": "A New Dish", "types": ["lunch"]},
         headers=headers,
     )
     assert resp.status_code == 201
@@ -332,9 +368,9 @@ def test_cross_group_patch_404_leaves_item_untouched_via_own_collection(client, 
     assert item_b.name == "B Item"
     # A's own item is reachable for a same-group sanity check.
     item_a = _make_item(db_session, collection_a.id, group_a.id, "A Item")
-    resp = client.patch(f"/api/v1/items/{item_a.id}", json={"type": "both"}, headers=_bearer(token_a))
+    resp = client.patch(f"/api/v1/items/{item_a.id}", json={"types": ["lunch", "dinner"]}, headers=_bearer(token_a))
     assert resp.status_code == 200
-    assert resp.json()["type"] == "both"
+    assert resp.json()["types"] == ["lunch", "dinner"]
 
 
 # ---------- CRUD ----------
@@ -350,9 +386,9 @@ def test_api_create_item_201_and_listed(client, post, db_session):
         f"/api/v1/collections/{collection.id}/items",
         json={
             "name": "  Test Meal  ",
-            "type": "dinner",
+            "types": ["dinner"],
             "tags": ["takeout", "weeknight"],
-            "ingredients": "a\n\nb\n\n\n",
+            "ingredients": ["a", "", "b"],  # blanks dropped, order kept
             "recipe_text": "Do the thing.  \n",
             "source_url": "https://example.com/test",
         },
@@ -361,9 +397,9 @@ def test_api_create_item_201_and_listed(client, post, db_session):
     assert resp.status_code == 201
     body = resp.json()
     assert body["name"] == "Test Meal"  # trimmed
-    assert body["type"] == "dinner"
+    assert body["types"] == ["dinner"]
     assert body["tags"] == ["takeout", "weeknight"]
-    assert body["ingredients"] == "a\n\nb"  # internal blank line kept, trailing stripped
+    assert body["ingredients"] == ["a", "b"]  # blanks dropped, order kept
     assert body["recipe_text"] == "Do the thing."  # trailing whitespace stripped
     assert body["source_url"] == "https://example.com/test"
     assert body["times_offered"] == 0
@@ -377,7 +413,7 @@ def test_api_create_item_201_and_listed(client, post, db_session):
     items = resp.json()["items"]
     assert len(items) == 1
     assert set(items[0].keys()) == {
-        "id", "name", "type", "tags", "ingredients", "recipe_text", "source_url",
+        "id", "name", "types", "tags", "ingredients", "recipe_text", "source_url",
         "times_offered", "times_kept", "last_kept_at", "archived",
     }
     assert items[0]["id"] == body["id"]
@@ -385,7 +421,7 @@ def test_api_create_item_201_and_listed(client, post, db_session):
     # Tags are group-scoped get-or-create (a second item reuses the tag rows).
     resp = client.post(
         f"/api/v1/collections/{collection.id}/items",
-        json={"name": "Second Meal", "type": "both", "tags": ["takeout"]},
+        json={"name": "Second Meal", "types": ["lunch", "dinner"], "tags": ["takeout"]},
         headers=headers,
     )
     assert resp.status_code == 201
@@ -401,7 +437,7 @@ def test_api_create_name_collision_409(client, post, db_session):
 
     resp = client.post(
         f"/api/v1/collections/{collection.id}/items",
-        json={"name": "bacon   and eggs", "type": "dinner"},  # whitespace-collapsed collision
+        json={"name": "bacon   and eggs", "types": ["dinner"]},  # whitespace-collapsed collision
         headers=_bearer(token),
     )
     assert resp.status_code == 409
@@ -415,7 +451,7 @@ def test_api_create_blank_name_400(client, post, db_session):
 
     resp = client.post(
         f"/api/v1/collections/{collection.id}/items",
-        json={"name": "   ", "type": "dinner"},
+        json={"name": "   ", "types": ["dinner"]},
         headers=_bearer(token),
     )
     assert resp.status_code == 400
@@ -429,11 +465,11 @@ def test_api_create_bad_type_400(client, post, db_session):
 
     resp = client.post(
         f"/api/v1/collections/{collection.id}/items",
-        json={"name": "Weird", "type": "brunch"},
+        json={"name": "Weird", "types": ["brunch"]},
         headers=_bearer(token),
     )
     assert resp.status_code == 400
-    assert resp.json() == {"detail": "Type must be dinner, lunch, or both."}
+    assert resp.json() == {"detail": "Pick at least one of breakfast, lunch, or dinner."}
 
 
 def test_api_create_bad_source_url_400(client, post, db_session):
@@ -443,7 +479,7 @@ def test_api_create_bad_source_url_400(client, post, db_session):
 
     resp = client.post(
         f"/api/v1/collections/{collection.id}/items",
-        json={"name": "Fishy Link", "type": "dinner", "source_url": "javascript:alert(1)"},
+        json={"name": "Fishy Link", "types": ["dinner"], "source_url": "javascript:alert(1)"},
         headers=_bearer(token),
     )
     assert resp.status_code == 400
@@ -464,13 +500,13 @@ def test_api_patch_partial_updates(client, post, db_session):
     # Rename + type + tags in one PATCH.
     resp = client.patch(
         f"/api/v1/items/{item.id}",
-        json={"name": "  New Name  ", "type": "both", "tags": ["newtag"]},
+        json={"name": "  New Name  ", "types": ["lunch", "dinner"], "tags": ["newtag"]},
         headers=headers,
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["name"] == "New Name"
-    assert body["type"] == "both"
+    assert body["types"] == ["lunch", "dinner"]
     assert body["tags"] == ["newtag"]
     db_session.refresh(item)
     assert item.normalized_name == "new name"  # recomputed on rename
@@ -478,11 +514,11 @@ def test_api_patch_partial_updates(client, post, db_session):
     # A second PATCH touches only the detail fields given.
     resp = client.patch(
         f"/api/v1/items/{item.id}",
-        json={"ingredients": "fresh", "source_url": "https://example.com/new"},
+        json={"ingredients": ["fresh"], "source_url": "https://example.com/new"},
         headers=headers,
     )
     assert resp.status_code == 200
-    assert resp.json()["ingredients"] == "fresh"
+    assert resp.json()["ingredients"] == ["fresh"]
     assert resp.json()["source_url"] == "https://example.com/new"
     assert resp.json()["name"] == "New Name"  # untouched
     db_session.refresh(item)
@@ -517,7 +553,7 @@ def test_api_patch_validation_400(client, post, db_session):
     headers = _bearer(token)
 
     assert client.patch(f"/api/v1/items/{item.id}", json={"name": "   "}, headers=headers).status_code == 400
-    assert client.patch(f"/api/v1/items/{item.id}", json={"type": "brunch"}, headers=headers).status_code == 400
+    assert client.patch(f"/api/v1/items/{item.id}", json={"types": ["brunch"]}, headers=headers).status_code == 400
     db_session.refresh(item)
     assert item.name == "Steady"  # nothing mutated by the failed requests
 
@@ -594,7 +630,7 @@ def test_api_post_without_origin_header_succeeds(client, post, db_session):
 
     resp = client.post(
         f"/api/v1/collections/{collection.id}/items",
-        json={"name": "No Origin Meal", "type": "dinner"},
+        json={"name": "No Origin Meal", "types": ["dinner"]},
         headers=_bearer(token),
     )
     assert resp.status_code == 201

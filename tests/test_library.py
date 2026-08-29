@@ -11,7 +11,47 @@ reach the second group's library, is what this URL scheme closes.
 from conftest import stamp_session
 from sqlalchemy import func, select
 
-from app.models import Account, Collection, Group, Item, ItemTag, MealDetail, Tag
+from app.models import (
+    Account,
+    Collection,
+    Group,
+    Ingredient,
+    Item,
+    ItemTag,
+    MealDetail,
+    MealIngredient,
+    MealType,
+    Tag,
+)
+
+# Legacy scalar type -> the meal-type set it maps to now ('both' = lunch+dinner).
+_TYPE_TO_SET = {
+    "dinner": ["dinner"],
+    "lunch": ["lunch"],
+    "breakfast": ["breakfast"],
+    "both": ["lunch", "dinner"],
+}
+
+
+def _meal_types_of(db_session, item_id):
+    """An item's meal-type set (unordered) as stored in meal_type rows."""
+    return set(
+        db_session.scalars(
+            select(MealType.meal_type).where(MealType.item_id == item_id)
+        ).all()
+    )
+
+
+def _ingredients_of(db_session, item_id):
+    """An item's ingredient names in entry order."""
+    return list(
+        db_session.scalars(
+            select(Ingredient.name)
+            .join(MealIngredient, MealIngredient.ingredient_id == Ingredient.id)
+            .where(MealIngredient.item_id == item_id)
+            .order_by(MealIngredient.position)
+        ).all()
+    )
 
 
 def _get_or_make_account(db_session, email="admin@example.com", display_name="Admin"):
@@ -58,7 +98,10 @@ def _make_item(
     source_url=None,
     archived=False,
 ):
-    """Create an item with a meal_detail row and optional tags."""
+    """Create an item with its meal-type set, structured ingredients, an
+    optional meal_detail row, and optional tags."""
+    import re
+
     item = Item(
         collection_id=collection_id,
         name=name,
@@ -68,14 +111,39 @@ def _make_item(
     db_session.add(item)
     db_session.flush()
 
-    detail = MealDetail(
-        item_id=item.id,
-        type=type,
-        ingredients=ingredients,
-        recipe_text=recipe_text,
-        source_url=source_url,
-    )
-    db_session.add(detail)
+    for meal_type in _TYPE_TO_SET[type]:
+        db_session.add(MealType(item_id=item.id, meal_type=meal_type))
+
+    # Structured ingredients: `ingredients` is legacy free text (one name per
+    # line). Normalize (lowercase + collapse whitespace), drop blanks, dedupe,
+    # then create group-scoped Ingredient rows + ordered MealIngredient links.
+    if ingredients:
+        seen: set[str] = set()
+        position = 0
+        for raw in ingredients.splitlines():
+            iname = re.sub(r"\s+", " ", raw.casefold()).strip()
+            if not iname or iname in seen:
+                continue
+            seen.add(iname)
+            ing = db_session.scalar(
+                select(Ingredient).where(
+                    (Ingredient.group_id == group_id) & (Ingredient.name == iname)
+                )
+            )
+            if ing is None:
+                ing = Ingredient(group_id=group_id, name=iname)
+                db_session.add(ing)
+                db_session.flush()
+            db_session.add(
+                MealIngredient(item_id=item.id, ingredient_id=ing.id, position=position)
+            )
+            position += 1
+
+    # A meal_detail row only carries recipe_text/source_url now.
+    if recipe_text is not None or source_url is not None:
+        db_session.add(
+            MealDetail(item_id=item.id, recipe_text=recipe_text, source_url=source_url)
+        )
 
     for tname in tags:
         tag = db_session.scalar(select(Tag).where((Tag.group_id == group_id) & (Tag.name == tname)))
@@ -304,12 +372,15 @@ def test_library_type_filter(client, post, db_session):
     _make_item(db_session, collection.id, group.id, "Quesadillas", type="both")
     _make_item(db_session, collection.id, group.id, "Salad bar", type="lunch")
     _login(client, db_session)
-    resp = client.get(f"/collections/{collection.id}", params={"type": "both"})
+    # Filtering is now by a single slot; a meal matches if that slot is in its
+    # set. Quesadillas is lunch+dinner, so it shows under BOTH slot filters.
+    resp = client.get(f"/collections/{collection.id}", params={"type": "dinner"})
+    assert "Steak" in resp.text
     assert "Quesadillas" in resp.text
-    assert "Steak" not in resp.text
     assert "Salad bar" not in resp.text
     resp = client.get(f"/collections/{collection.id}", params={"type": "lunch"})
     assert "Salad bar" in resp.text
+    assert "Quesadillas" in resp.text
     assert "Steak" not in resp.text
 
 
@@ -469,7 +540,7 @@ def test_admin_gating(client, post, db_session):
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "Steak")
     # No session at all: 401 (not signed in) on every route, including plain browsing.
-    assert post(f"/collections/{collection.id}/items", data={"name": "X", "type": "dinner"}).status_code == 401
+    assert post(f"/collections/{collection.id}/items", data={"name": "X", "types": ["dinner"]}).status_code == 401
     assert client.get(f"/collections/{collection.id}/items/new").status_code == 401
     assert client.get(f"/collections/{collection.id}/items/1/edit").status_code == 401
     assert client.get(f"/collections/{collection.id}").status_code == 401
@@ -489,7 +560,7 @@ def test_create_item(client, post, db_session):
         f"/collections/{collection.id}/items",
         data={
             "name": "Test Meal",
-            "type": "dinner",
+            "types": ["dinner"],
             "tags": ["takeout", "weeknight"],
             "ingredients": "a\n\nb\n\n\n",  # trailing blank lines stripped
             "instructions": "Do the thing.  \n",
@@ -501,9 +572,9 @@ def test_create_item(client, post, db_session):
     item = db_session.scalar(select(Item).where(Item.normalized_name == "test meal"))
     assert item is not None
     assert item.collection_id == collection.id
+    assert _meal_types_of(db_session, item.id) == {"dinner"}
     detail = db_session.get(MealDetail, item.id)
-    assert detail.type == "dinner"
-    assert detail.ingredients == "a\n\nb"  # internal blank line kept
+    assert _ingredients_of(db_session, item.id) == ["a", "b"]  # blank lines dropped
     assert detail.recipe_text == "Do the thing."  # trailing whitespace stripped
     assert detail.source_url == "https://example.com/test"
     assert resp.headers["location"] == f"/collections/{collection.id}/items/{item.id}/edit"
@@ -518,14 +589,14 @@ def test_create_item_without_tags_or_recipe(client, post, db_session):
     _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items",
-        data={"name": "Bare meal", "type": "lunch"},
+        data={"name": "Bare meal", "types": ["lunch"]},
         follow_redirects=False,
     )
     assert resp.status_code == 303
     item = db_session.scalar(select(Item).where(Item.normalized_name == "bare meal"))
     assert item is not None
     detail = db_session.get(MealDetail, item.id)
-    assert detail.ingredients is None
+    assert _ingredients_of(db_session, item.id) == []
     assert detail.recipe_text is None
     assert _tags_of(db_session, item.id) == set()
 
@@ -546,7 +617,7 @@ def test_create_lands_in_url_collection(client, post, db_session):
 
     resp = post(
         f"/collections/{collection_b.id}/items",
-        data={"name": "B Item", "type": "dinner"},
+        data={"name": "B Item", "types": ["dinner"]},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -564,7 +635,7 @@ def test_create_duplicate_normalized_name_400(client, post, db_session):
     _make_item(db_session, collection.id, group.id, "Bacon and Eggs")
     resp = post(
         f"/collections/{collection.id}/items",
-        data={"name": "bacon   and eggs", "type": "dinner"},
+        data={"name": "bacon   and eggs", "types": ["dinner"]},
     )  # whitespace-collapsed collision
     assert resp.status_code == 400
     assert "An item with that name already exists" in resp.text
@@ -575,7 +646,7 @@ def test_create_invalid_type_400(client, post, db_session):
     collection = _make_collection(db_session, group.id)
     _make_account(db_session)
     _login(client, db_session)
-    resp = post(f"/collections/{collection.id}/items", data={"name": "Weird", "type": "brunch"})
+    resp = post(f"/collections/{collection.id}/items", data={"name": "Weird", "types": ["brunch"]})
     assert resp.status_code == 400
 
 
@@ -584,7 +655,7 @@ def test_create_empty_name_400(client, post, db_session):
     collection = _make_collection(db_session, group.id)
     _make_account(db_session)
     _login(client, db_session)
-    resp = post(f"/collections/{collection.id}/items", data={"name": "   ", "type": "dinner"})
+    resp = post(f"/collections/{collection.id}/items", data={"name": "   ", "types": ["dinner"]})
     assert resp.status_code == 400
 
 
@@ -597,7 +668,7 @@ def test_create_another_groups_collection_404(client, post, db_session):
     _login(client, db_session)
     resp = post(
         f"/collections/{other_collection.id}/items",
-        data={"name": "Stowaway", "type": "dinner"},
+        data={"name": "Stowaway", "types": ["dinner"]},
     )
     assert resp.status_code == 404
     assert db_session.scalar(select(Item).where(Item.normalized_name == "stowaway")) is None
@@ -614,7 +685,7 @@ def test_update_item_rename_and_type(client, post, db_session):
     item = _make_item(db_session, collection.id, group.id, "Old Name", type="dinner", tags=["takeout"])
     resp = post(
         f"/collections/{collection.id}/items/{item.id}",
-        data={"name": "New Name", "type": "both", "tags": ["takeout", "newtag"]},
+        data={"name": "New Name", "types": ["lunch", "dinner"], "tags": ["takeout", "newtag"]},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -622,8 +693,7 @@ def test_update_item_rename_and_type(client, post, db_session):
     db_session.refresh(item)
     assert item.name == "New Name"
     assert item.normalized_name == "new name"  # recomputed on rename
-    detail = db_session.get(MealDetail, item.id)
-    assert detail.type == "both"
+    assert _meal_types_of(db_session, item.id) == {"lunch", "dinner"}
     assert _tags_of(db_session, item.id) == {"takeout", "newtag"}
 
 
@@ -636,14 +706,14 @@ def test_update_rename_collision_400(client, post, db_session):
     item = _make_item(db_session, collection.id, group.id, "Other")
     resp = post(
         f"/collections/{collection.id}/items/{item.id}",
-        data={"name": "Tacos", "type": "dinner"},
+        data={"name": "Tacos", "types": ["dinner"]},
     )
     assert resp.status_code == 400
     assert "An item with that name already exists" in resp.text
     # Renaming an item to its own name is fine (self excluded).
     resp = post(
         f"/collections/{collection.id}/items/{item.id}",
-        data={"name": "Other", "type": "dinner"},
+        data={"name": "Other", "types": ["dinner"]},
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -663,21 +733,6 @@ def test_archive_redirects_to_collection(client, post, db_session):
     )
     assert resp.status_code == 303
     assert resp.headers["location"] == f"/collections/{collection.id}"
-
-
-def test_cycle_type_redirects_to_collection(client, post, db_session):
-    group = _make_group(db_session)
-    collection = _make_collection(db_session, group.id)
-    item = _make_item(db_session, collection.id, group.id, "Steak", type="dinner")
-    _login(client, db_session)
-    resp = post(
-        f"/collections/{collection.id}/items/{item.id}/cycle-type",
-        follow_redirects=False,
-    )
-    assert resp.status_code == 303
-    assert resp.headers["location"] == f"/collections/{collection.id}"
-    detail = db_session.get(MealDetail, item.id)
-    assert detail.type == "lunch"  # dinner → lunch
 
 
 # ---------- Cross-tenant mutation guards ----------
@@ -703,7 +758,7 @@ def test_update_another_groups_collection_404(client, post, db_session):
     _login(client, db_session)
     resp = post(
         f"/collections/{other_collection_id}/items/{other_item.id}",
-        data={"name": "Hijacked", "type": "dinner"},
+        data={"name": "Hijacked", "types": ["dinner"]},
     )
     assert resp.status_code == 404
     db_session.refresh(other_item)
@@ -718,7 +773,7 @@ def test_update_another_groups_item_404(client, post, db_session):
     _login(client, db_session)
     resp = post(
         f"/collections/{collection.id}/items/{other_item.id}",
-        data={"name": "Hijacked", "type": "dinner"},
+        data={"name": "Hijacked", "types": ["dinner"]},
     )
     assert resp.status_code == 404
     db_session.refresh(other_item)
@@ -735,7 +790,7 @@ def test_update_mismatched_collection_404(client, post, db_session):
     _login(client, db_session)
     resp = post(
         f"/collections/{collection_b.id}/items/{item_a.id}",
-        data={"name": "Renamed", "type": "dinner"},
+        data={"name": "Renamed", "types": ["dinner"]},
     )
     assert resp.status_code == 404
     db_session.refresh(item_a)
@@ -798,20 +853,6 @@ def test_unarchive_another_groups_item_404(client, post, db_session):
     assert resp.status_code == 404
     db_session.refresh(other_item)
     assert other_item.archived_at is not None  # still archived, untouched
-
-
-def test_cycle_type_another_groups_item_404(client, post, db_session):
-    other_item = _other_groups_item(db_session)
-    group = _make_group(db_session)
-    collection = _make_collection(db_session, group.id)
-    _login(client, db_session)
-    resp = post(
-        f"/collections/{collection.id}/items/{other_item.id}/cycle-type",
-        follow_redirects=False,
-    )
-    assert resp.status_code == 404
-    detail = db_session.get(MealDetail, other_item.id)
-    assert detail.type == "dinner"  # unchanged (default from _make_item)
 
 
 def test_empty_states_distinguish_empty_collection_from_filtered(client, db_session):

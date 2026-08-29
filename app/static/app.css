@@ -720,7 +720,8 @@ button { font-family: var(--sp-font-sans); }
   pointer-events: none;
 }
 
-.segment--on {
+.segment--on,
+.segment:has(input:checked) {
   background: var(--sp-ink);
   color: var(--sp-bg);
 }

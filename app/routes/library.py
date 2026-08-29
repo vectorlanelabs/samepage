@@ -26,14 +26,116 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_account
 from app.db import get_db
-from app.models import Account, Collection, Group, GroupAdmin, Item, ItemTag, MealDetail, Tag
+from app.models import (
+    Account,
+    Collection,
+    Group,
+    GroupAdmin,
+    Ingredient,
+    Item,
+    ItemTag,
+    MealDetail,
+    MealIngredient,
+    MealType,
+    Tag,
+)
 from app.templating import templates
 
 router = APIRouter()
 
-TYPE_LABELS = {"dinner": "Dinner", "lunch": "Lunch", "both": "Both"}
-TYPE_CYCLE = {"dinner": "lunch", "lunch": "both", "both": "dinner"}
-VALID_TYPES = frozenset(TYPE_LABELS)
+# Meal slots are a set now (a meal can be breakfast *and* dinner). MEAL_TYPES is
+# the canonical display order; a meal has any non-empty subset.
+MEAL_TYPES = ("breakfast", "lunch", "dinner")
+MEAL_TYPE_LABELS = {"breakfast": "Breakfast", "lunch": "Lunch", "dinner": "Dinner"}
+VALID_MEAL_TYPES = frozenset(MEAL_TYPES)
+
+
+def _parse_meal_types(raw: list[str] | None) -> list[str]:
+    """Validated, deduped meal types in canonical order (breakfast, lunch,
+    dinner). Unknown values are dropped."""
+    selected = set(raw or [])
+    return [t for t in MEAL_TYPES if t in selected]
+
+
+def _types_label(types: list[str]) -> str:
+    """Human label for a set of slots, e.g. 'Breakfast · Dinner'. Empty when the
+    meal has no slots (shouldn't happen for valid meals, but degrade gracefully)."""
+    return " · ".join(MEAL_TYPE_LABELS[t] for t in types)
+
+
+def _item_meal_types(db: Session, item_id: int) -> list[str]:
+    rows = db.scalars(
+        select(MealType.meal_type).where(MealType.item_id == item_id)
+    ).all()
+    return _parse_meal_types(list(rows))
+
+
+def _set_meal_types(db: Session, item_id: int, types: list[str]) -> None:
+    """Replace an item's meal-type set with `types` (already validated)."""
+    db.execute(delete(MealType).where(MealType.item_id == item_id))
+    for t in types:
+        db.add(MealType(item_id=item_id, meal_type=t))
+
+
+def _normalize_ingredient(name: str) -> str:
+    """Canonical ingredient key: casefold + collapse whitespace. Lowercasing is
+    intentional — 'Onion' and 'onion' are one ingredient for metrics."""
+    return re.sub(r"\s+", " ", name.casefold()).strip()
+
+
+def _clean_ingredient_names(raw_names: list[str]) -> list[str]:
+    """Normalize + dedupe a list of ingredient names (from a block textarea's
+    lines or an API list), dropping blanks, preserving first-seen order."""
+    names: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_names:
+        name = _normalize_ingredient(raw)
+        if name and name not in seen:
+            seen.add(name)
+            names.append(name)
+    return names
+
+
+def _resolve_ingredients(db: Session, group_id: int, names: list[str]) -> list[Ingredient]:
+    """Get-or-create group-scoped ingredients (like tags), returned in order."""
+    resolved: list[Ingredient] = []
+    for name in names:
+        ing = db.scalar(
+            select(Ingredient).where(
+                (Ingredient.group_id == group_id) & (Ingredient.name == name)
+            )
+        )
+        if ing is None:
+            ing = Ingredient(group_id=group_id, name=name)
+            db.add(ing)
+            db.flush()
+        resolved.append(ing)
+    return resolved
+
+
+def _set_meal_ingredients(
+    db: Session, group_id: int, item_id: int, raw_names: list[str]
+) -> None:
+    """Replace an item's ingredient set. `raw_names` are un-normalized lines
+    (textarea) or list entries (API); they're cleaned/deduped here."""
+    names = _clean_ingredient_names(raw_names)
+    db.execute(delete(MealIngredient).where(MealIngredient.item_id == item_id))
+    for position, ing in enumerate(_resolve_ingredients(db, group_id, names)):
+        db.add(
+            MealIngredient(item_id=item_id, ingredient_id=ing.id, position=position)
+        )
+
+
+def _item_ingredients(db: Session, item_id: int) -> list[str]:
+    """An item's ingredient names in entry order."""
+    return list(
+        db.scalars(
+            select(Ingredient.name)
+            .join(MealIngredient, MealIngredient.ingredient_id == Ingredient.id)
+            .where(MealIngredient.item_id == item_id)
+            .order_by(MealIngredient.position)
+        ).all()
+    )
 
 
 def _normalize_name(name: str) -> str:
@@ -120,10 +222,12 @@ def _item_meal_detail(db: Session, item_id: int) -> MealDetail | None:
     return db.scalar(select(MealDetail).where(MealDetail.item_id == item_id))
 
 
-def _has_recipe(detail: MealDetail | None) -> bool:
+def _has_recipe(detail: MealDetail | None, has_ingredients: bool) -> bool:
+    if has_ingredients:
+        return True
     if detail is None:
         return False
-    return bool(detail.source_url or detail.recipe_text or (detail.ingredients or "").strip())
+    return bool(detail.source_url or detail.recipe_text)
 
 
 def _safe_source_url(url: str | None) -> str | None:
@@ -154,7 +258,7 @@ def _render_edit(
 ):
     """Render meal_edit.html for a new (item=None) or existing item.
 
-    ``form`` holds the current field values (name/type/ingredients/
+    ``form`` holds the current field values (name/types/ingredients/
     instructions/source_url) — from the item/detail for GETs, from the submitted
     POST body for 400 re-renders so nothing the user typed is lost.
     """
@@ -167,6 +271,10 @@ def _render_edit(
             "form": form,
             "selected_tags": selected_tags,
             "all_tags": _all_tags(db, collection.group_id),
+            "meal_type_options": [
+                {"value": t, "label": MEAL_TYPE_LABELS[t], "checked": t in form["types"]}
+                for t in MEAL_TYPES
+            ],
             "error": error,
         },
         status_code=status_code,
@@ -174,45 +282,40 @@ def _render_edit(
 
 
 def _empty_form(type: str = "dinner") -> dict:
+    preset = type if type in VALID_MEAL_TYPES else "dinner"
     return {
         "name": "",
-        "type": type if type in VALID_TYPES else "dinner",
+        "types": [preset],
         "ingredients": "",
         "instructions": "",
         "source_url": "",
     }
 
 
-def _item_form(item: Item, detail: MealDetail | None) -> dict:
-    if detail is None:
-        detail_type = "dinner"
-        ingredients = ""
-        instructions = ""
-        source_url = ""
-    else:
-        detail_type = detail.type
-        ingredients = detail.ingredients or ""
-        instructions = detail.recipe_text or ""
-        source_url = detail.source_url or ""
-
+def _item_form(db: Session, item: Item, detail: MealDetail | None) -> dict:
+    instructions = detail.recipe_text or "" if detail else ""
+    source_url = detail.source_url or "" if detail else ""
     return {
         "name": item.name,
-        "type": detail_type,
-        "ingredients": ingredients,
+        "types": _item_meal_types(db, item.id),
+        # The textarea is the editable source of truth; prefill it from the
+        # structured ingredients, one per line, in entry order.
+        "ingredients": "\n".join(_item_ingredients(db, item.id)),
         "instructions": instructions,
         "source_url": source_url,
     }
 
 
 def _clean_form(
-    name: str, type: str, ingredients: str, instructions: str, source_url: str
+    name: str, types: list[str], ingredients: str, instructions: str, source_url: str
 ) -> dict:
     """Whitespace rules from the M2 spec: ingredients lose only trailing blank
     lines (internal blank lines are preserved); instructions lose trailing
-    whitespace; name/source_url are trimmed."""
+    whitespace; name/source_url are trimmed. ``types`` is validated to the
+    canonical meal-type set."""
     return {
         "name": name.strip(),
-        "type": type,
+        "types": _parse_meal_types(types),
         "ingredients": ingredients.rstrip("\r\n"),
         "instructions": instructions.rstrip(),
         "source_url": source_url.strip(),
@@ -246,8 +349,8 @@ def _validate_form(
     """Return an error message, or None when the form is valid."""
     if not form["name"]:
         return "Name is required."
-    if form["type"] not in VALID_TYPES:
-        return "Type must be dinner, lunch, or both."
+    if not form["types"]:
+        return "Pick at least one of breakfast, lunch, or dinner."
     if form["source_url"] and _safe_source_url(form["source_url"]) is None:
         return "Source URL must start with http:// or https://."
     normalized = _normalize_name(form["name"])
@@ -288,7 +391,7 @@ def library_page(
     account = require_account(request, db)
     collection = _get_owned_collection_or_404(db, account, collection_id)
 
-    type = type if type in VALID_TYPES else ""
+    type = type if type in VALID_MEAL_TYPES else ""
     status = status if status in ("active", "archived", "all") else "active"
     tag_names = [t.strip() for t in tags.split(",") if t.strip()]
 
@@ -297,10 +400,9 @@ def library_page(
         like = f"%{q}%"
         stmt = stmt.where(Item.name.ilike(like) | Item.normalized_name.ilike(like))
     if type:
-        # Join to meal_detail to filter by type.
-        stmt = (
-            stmt.join(MealDetail, MealDetail.item_id == Item.id)
-            .where(MealDetail.type == type)
+        # Items that have this slot in their meal-type set.
+        stmt = stmt.where(
+            Item.id.in_(select(MealType.item_id).where(MealType.meal_type == type))
         )
     if tag_names:
         item_ids = db.scalars(
@@ -332,18 +434,34 @@ def library_page(
     for item_id, tag_name in item_tags:
         tags_by_item[item_id].append(tag_name)
 
-    def _type_of(item: Item) -> str:
-        detail = item_details.get(item.id)
-        return detail.type if detail is not None else "dinner"
+    type_rows = db.execute(
+        select(MealType.item_id, MealType.meal_type).where(MealType.item_id.in_(item_ids))
+    ).all()
+    raw_types_by_item: dict[int, list[str]] = defaultdict(list)
+    for item_id, meal_type in type_rows:
+        raw_types_by_item[item_id].append(meal_type)
+
+    def _types_of(item: Item) -> list[str]:
+        return _parse_meal_types(raw_types_by_item.get(item.id, []))
+
+    items_with_ingredients = set(
+        db.scalars(
+            select(MealIngredient.item_id)
+            .where(MealIngredient.item_id.in_(item_ids))
+            .distinct()
+        ).all()
+    )
 
     rows = [
         {
             "id": item.id,
             "name": item.name,
-            "type_label": TYPE_LABELS[_type_of(item)],
+            "type_label": _types_label(_types_of(item)),
             "tags": sorted(tags_by_item.get(item.id, [])),
             "kept_label": f"Kept {item.times_kept}×" if item.times_kept > 0 else None,
-            "has_recipe": _has_recipe(item_details.get(item.id)),
+            "has_recipe": _has_recipe(
+                item_details.get(item.id), item.id in items_with_ingredients
+            ),
             "archived": item.archived_at is not None,
         }
         for item in items
@@ -382,11 +500,11 @@ def library_page(
 
     type_filters = [
         {
-            "label": "All" if key == "all" else TYPE_LABELS[key],
+            "label": "All types" if key == "all" else MEAL_TYPE_LABELS[key],
             "value": "" if key == "all" else key,
             "active": type == ("" if key == "all" else key),
         }
-        for key in ("all", "dinner", "lunch", "both")
+        for key in ("all", *MEAL_TYPES)
     ]
     status_filters = [
         {"label": label, "value": value, "active": status == value}
@@ -429,8 +547,8 @@ def new_meal_page(
     type: str = "dinner",
 ):
     """Blank edit page for a new item in the URL's collection (signed-in
-    account, own collection). ``?type=`` presets the track; the in-form cycle
-    button drives it from there."""
+    account, own collection). ``?type=`` presets one slot; the in-form
+    checkboxes drive the set from there."""
     account = require_account(request, db)
     collection = _get_owned_collection_or_404(db, account, collection_id)
     return _render_edit(
@@ -446,17 +564,13 @@ def recipe_view(
     db: Annotated[Session, Depends(get_db)],
 ):
     """Recipe view (signed-in accounts only, own collection's items): name,
-    type/tags, ingredients (bulleted), then instructions, then the optional
+    types/tags, ingredients (bulleted), then instructions, then the optional
     original-source link."""
     account = require_account(request, db)
     collection = _get_owned_collection_or_404(db, account, collection_id)
     item = _get_owned_item_or_404(db, collection, item_id)
     detail = _item_meal_detail(db, item.id)
-    ingredients = [
-        line.strip()
-        for line in (detail.ingredients or "" if detail else "").splitlines()
-        if line.strip()
-    ]
+    ingredients = _item_ingredients(db, item.id)
 
     return templates.TemplateResponse(
         request,
@@ -466,7 +580,7 @@ def recipe_view(
             "collection": collection,
             "detail": detail,
             "tags": _item_tags(db, item.id),
-            "type_label": TYPE_LABELS[detail.type if detail else "dinner"],
+            "type_labels": [MEAL_TYPE_LABELS[t] for t in _item_meal_types(db, item.id)],
             "ingredients": ingredients,
             "safe_source_url": _safe_source_url(detail.source_url if detail else None),
         },
@@ -491,7 +605,7 @@ def edit_meal_page(
         collection,
         item,
         detail,
-        _item_form(item, detail),
+        _item_form(db, item, detail),
         _item_tags(db, item.id),
         error=None,
     )
@@ -503,7 +617,7 @@ def create_meal(
     collection_id: int,
     db: Annotated[Session, Depends(get_db)],
     name: Annotated[str, Form()],
-    type: Annotated[str, Form()],
+    types: Annotated[list[str] | None, Form()] = None,
     tags: Annotated[list[str] | None, Form()] = None,
     ingredients: Annotated[str, Form()] = "",
     instructions: Annotated[str, Form()] = "",
@@ -517,7 +631,7 @@ def create_meal(
     collection = _get_owned_collection_or_404(db, account, collection_id)
 
     tags = tags or []
-    form = _clean_form(name, type, ingredients, instructions, source_url)
+    form = _clean_form(name, types or [], ingredients, instructions, source_url)
     error = _validate_form(form, db, collection.id)
     if error is not None:
         return _render_edit(
@@ -532,11 +646,13 @@ def create_meal(
     db.add(item)
     db.flush()
 
+    _set_meal_types(db, item.id, form["types"])
+    _set_meal_ingredients(
+        db, collection.group_id, item.id, form["ingredients"].splitlines()
+    )
     # Create meal_detail row.
     detail = MealDetail(
         item_id=item.id,
-        type=form["type"],
-        ingredients=form["ingredients"] or None,
         recipe_text=form["instructions"] or None,
         source_url=_safe_source_url(form["source_url"]) or None,
     )
@@ -555,7 +671,7 @@ def update_meal(
     item_id: int,
     db: Annotated[Session, Depends(get_db)],
     name: Annotated[str, Form()],
-    type: Annotated[str, Form()],
+    types: Annotated[list[str] | None, Form()] = None,
     tags: Annotated[list[str] | None, Form()] = None,
     ingredients: Annotated[str, Form()] = "",
     instructions: Annotated[str, Form()] = "",
@@ -569,7 +685,7 @@ def update_meal(
     item = _get_owned_item_or_404(db, collection, item_id)
     detail = _item_meal_detail(db, item.id)
 
-    form = _clean_form(name, type, ingredients, instructions, source_url)
+    form = _clean_form(name, types or [], ingredients, instructions, source_url)
     error = _validate_form(form, db, collection.id, exclude_item_id=item.id)
     if error is not None:
         return _render_edit(
@@ -589,12 +705,14 @@ def update_meal(
     for tag in _resolve_tags(db, collection.group_id, tags):
         db.add(ItemTag(item_id=item.id, tag_id=tag.id))
 
+    _set_meal_types(db, item.id, form["types"])
+    _set_meal_ingredients(
+        db, collection.group_id, item.id, form["ingredients"].splitlines()
+    )
     # Update meal_detail.
     if detail is None:
         detail = MealDetail(item_id=item.id)
         db.add(detail)
-    detail.type = form["type"]
-    detail.ingredients = form["ingredients"] or None
     detail.recipe_text = form["instructions"] or None
     detail.source_url = _safe_source_url(form["source_url"]) or None
 
@@ -631,27 +749,6 @@ def unarchive_meal(
     collection = _get_owned_collection_or_404(db, account, collection_id)
     item = _get_owned_item_or_404(db, collection, item_id)
     item.archived_at = None
-    db.commit()
-    return RedirectResponse(f"/collections/{collection.id}", status_code=303)
-
-
-@router.post("/collections/{collection_id}/items/{item_id}/cycle-type")
-def cycle_type(
-    request: Request,
-    collection_id: int,
-    item_id: int,
-    db: Annotated[Session, Depends(get_db)],
-):
-    """Type cycle dinner → lunch → both → dinner (signed-in account, own
-    collection)."""
-    account = require_account(request, db)
-    collection = _get_owned_collection_or_404(db, account, collection_id)
-    item = _get_owned_item_or_404(db, collection, item_id)
-    detail = _item_meal_detail(db, item.id)
-    if detail is None:
-        detail = MealDetail(item_id=item.id, type="dinner")
-        db.add(detail)
-    detail.type = TYPE_CYCLE[detail.type]
     db.commit()
     return RedirectResponse(f"/collections/{collection.id}", status_code=303)
 
