@@ -8,7 +8,10 @@
       <h1 class="page-title">{{ collection.name }}</h1>
       <div class="page-meta">{{ active_count }} active · {{ archived_count }} archived.</div>
     </div>
-    <a class="floating-add" href="/collections/{{ collection.id }}/items/new">+ Add a meal</a>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <a class="btn btn-secondary" href="/collections/{{ collection.id }}/report">Report</a>
+      <a class="floating-add" href="/collections/{{ collection.id }}/items/new">+ Add a meal</a>
+    </div>
   </div>
 
   <div class="lib-toolbar">

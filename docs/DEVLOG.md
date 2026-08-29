@@ -711,3 +711,24 @@ the new voting surface. **Clean — nothing to fix.** Properties checked, each h
   and group-member management — all correct.
 - User-input `int()` coercion in session routes is guarded (404, never 500); path/form ints are typed so
   FastAPI 422s rather than 500s.
+
+---
+
+## 2026-08-29 — M4 landed: reporting & discovery
+
+Per-collection report at `GET /collections/{id}/report`, built on the M3 voting outcomes. By-meal
+reject rates (offered/kept/rate from Item.times_offered/times_kept, with "kept N of M" alongside the
+percentage so a 1-of-1 doesn't read as a trend), by-tag aggregate reject rates (scoped to the
+collection's own items, not the group's tags), a "not offered lately" discovery list (lowest
+times_offered, archived excluded), and an empty state before any session has run. New app/routes/reports.py.
+
+**§6 tenant-scoping (the hard requirement) — verified.** The route runs `_get_owned_collection_or_404`
+FIRST as the single choke point, then every query filters on `Item.collection_id == collection.id` —
+no query can reach another group's data. Landed green first run (282 tests). Lead verification (direct
+cross-tenant probing): B requesting A's collection report → 404; B's own report contains only B's items
+and numbers, never A's; the by-tag aggregation for a tag name shared across groups counts only the
+requested collection's items. Aggregate/outcome data only — no participant or per-person data anywhere
+in reporting.
+
+All feature milestones (M0–M4 + M5a) done. Remaining: M5 (hardening, PWA, backup/restore, Docker/Caddy,
+deploy docs, join-code rate limiting) and M6 (per-group API + MCP).

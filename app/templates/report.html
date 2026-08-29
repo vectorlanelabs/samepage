@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Report · {{ collection.name }} · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <div class="lib-header">
+    <div>
+      <a class="back-link" href="/collections/{{ collection.id }}">← Back to library</a>
+      <h1 class="page-title">Report</h1>
+      <div class="page-meta">{{ collection.name }}</div>
+    </div>
+  </div>
+
+  <section class="report-section">
+    <h2 class="section-title">By meal</h2>
+    {% if item_rows %}
+      {% for row in item_rows %}
+      <div class="meal-card report-row">
+        <div class="meal-card-top">
+          <span class="meal-card-name">{{ row.name }}</span>
+          <span class="report-pct">{{ row.reject_rate_pct }}% rejected</span>
+        </div>
+        <div style="height:8px;border-radius:4px;background:var(--sp-border);overflow:hidden;">
+          <div style="height:100%;width:{{ row.reject_rate_pct }}%;background:var(--sp-accent);border-radius:4px;"></div>
+        </div>
+        <div class="report-meta">
+          Kept {{ row.kept }} of {{ row.offered }} offered{% if row.last_kept %} · last kept {{ row.last_kept }}{% else %} · never kept{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="empty-state">No voting history yet — run a session to see which meals land.</p>
+    {% endif %}
+  </section>
+
+  <section class="report-section">
+    <h2 class="section-title">By tag</h2>
+    {% if tag_rows %}
+      {% for row in tag_rows %}
+      <div class="meal-card report-row">
+        <div class="meal-card-top">
+          <span class="meal-card-name">{{ row.name }}</span>
+          <span class="report-pct">{{ row.reject_rate_pct }}% rejected</span>
+        </div>
+        <div style="height:8px;border-radius:4px;background:var(--sp-border);overflow:hidden;">
+          <div style="height:100%;width:{{ row.reject_rate_pct }}%;background:var(--sp-accent);border-radius:4px;"></div>
+        </div>
+        <div class="report-meta">Kept {{ row.kept }} of {{ row.offered }} offered</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="empty-state">No tag data yet — tags appear after their meals have been offered.</p>
+    {% endif %}
+  </section>
+
+  {% if not_offered_rows %}
+  <section class="report-section" id="not-offered">
+    <h2 class="section-title">Not offered lately</h2>
+    <div class="meal-card">
+      {% for row in not_offered_rows %}
+      <div class="meal-card-top">
+        <span class="meal-card-name">{{ row.name }}</span>
+        <span class="kept-count">{% if row.times_offered == 0 %}never offered{% else %}offered {{ row.times_offered }}×{% endif %}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
