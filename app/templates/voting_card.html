@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ option.name }} · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <p class="page-meta">Session {{ session.code }} · Option {{ responded + 1 }} of {{ total }}</p>
+
+  <section class="card" style="padding:28px 24px;margin-top:16px;text-align:center;">
+    <h1 style="font-size:34px;line-height:1.15;font-weight:700;margin:0 0 14px;">{{ option.name }}</h1>
+    {% if option.type_label %}
+    <div class="chip-row" style="justify-content:center;">
+      <span class="chip">{{ option.type_label }}</span>
+      {% for t in option.tags %}
+      <span class="chip">{{ t }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if option.recipe_url %}
+    <p style="margin-top:16px;"><a class="text-link" href="{{ option.recipe_url }}">See the recipe →</a></p>
+    {% endif %}
+  </section>
+
+  <div style="display:flex;flex-direction:column;gap:14px;margin-top:24px;">
+    <form method="post" action="/s/{{ session.code }}/vote">
+      <input type="hidden" name="batch_item_id" value="{{ option.batch_item_id }}">
+      <input type="hidden" name="choice" value="yes">
+      <button type="submit" class="btn btn-primary btn-block">Yes</button>
+    </form>
+    <form method="post" action="/s/{{ session.code }}/vote">
+      <input type="hidden" name="batch_item_id" value="{{ option.batch_item_id }}">
+      <input type="hidden" name="choice" value="no">
+      <button type="submit" class="btn btn-secondary btn-block">No</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

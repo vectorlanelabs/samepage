@@ -5,9 +5,19 @@
   <h1 class="page-title">{{ collection_name }}</h1>
   <p class="page-meta">Session code: <span class="sp-code">{{ session.code }}</span></p>
 
-  {% if session.status == 'voting' %}
+  {% if start_error %}
+  <p class="form-error">{{ start_error }}</p>
+  {% endif %}
+
+  {% if session.status == 'voting' and session.collection_id is none %}
   <section class="card" style="padding:20px;margin-top:20px;">
-    <p class="empty-state">Voting starts here — batches arrive in the next release (M3c).</p>
+    <p class="empty-state">Ad hoc voting is coming soon — options entry lands in a later release.</p>
+  </section>
+  {% elif session.status == 'voting' %}
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <h2 class="section-title">Voting in progress</h2>
+    <p class="page-meta"><span hx-get="/s/{{ session.code }}/voting-status" hx-trigger="every 2s" hx-swap="innerHTML">{{ finished }}/{{ roster }} finished voting.</span></p>
+    <p class="empty-state">Results and batch controls arrive in the next release.</p>
   </section>
   {% endif %}
 

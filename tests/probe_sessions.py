@@ -5,15 +5,11 @@ we just write it as a pytest file importing conftest helpers, placed in tests/ d
 """
 from __future__ import annotations
 
-import base64
-import json
-
-from itsdangerous import TimestampSigner
+from conftest import stamp_session
 from sqlalchemy import select
 
 from app.models import Account, Collection, Group, SessionParticipant
 from app.models import Session as VotingSession
-from conftest import stamp_session
 
 
 def _acct(db, email, name=None):
@@ -72,7 +68,7 @@ def test_probe_public_surface_leak(client, post, db_session):
     db_session.add(coll)
     db_session.commit()
     _login(client, db_session, host.email)
-    r = post("/sessions", data={"group_id": str(group.id), "collection_id": str(coll.id), "dinners": "2", "lunches": "0", "picks": "1"}, follow_redirects=False)
+    post("/sessions", data={"group_id": str(group.id), "collection_id": str(coll.id), "dinners": "2", "lunches": "0", "picks": "1"}, follow_redirects=False)
     session = db_session.scalar(select(VotingSession).order_by(VotingSession.id.desc()))
     print("created", session.code)
 
@@ -105,9 +101,9 @@ def test_probe_participant_cookie_cross_session(client, post, db_session):
     host = _acct(db_session, "host@example.com", "Host")
     group = _group(db_session, "G", host.email)
     _login(client, db_session, host.email)
-    r1 = post("/sessions", data={"group_id": str(group.id), "collection_id": "", "dinners": "0", "lunches": "0", "picks": "1"}, follow_redirects=False)
+    post("/sessions", data={"group_id": str(group.id), "collection_id": "", "dinners": "0", "lunches": "0", "picks": "1"}, follow_redirects=False)
     session_a = db_session.scalar(select(VotingSession).order_by(VotingSession.id.desc()))
-    r2 = post("/sessions", data={"group_id": str(group.id), "collection_id": "", "dinners": "0", "lunches": "0", "picks": "1"}, follow_redirects=False)
+    post("/sessions", data={"group_id": str(group.id), "collection_id": "", "dinners": "0", "lunches": "0", "picks": "1"}, follow_redirects=False)
     session_b = db_session.scalar(select(VotingSession).order_by(VotingSession.id.desc()))
     print("session A", session_a.code, "session B", session_b.code)
 
@@ -150,7 +146,7 @@ def test_probe_participant_id_survives_host_login_shared_cookie(client, post, db
     session_a = db_session.scalar(select(VotingSession).order_by(VotingSession.id.desc()))
     client.cookies.clear()
 
-    join = post(f"/s/{session_a.code}/join", data={"display_name": "Pat"}, follow_redirects=False)
+    post(f"/s/{session_a.code}/join", data={"display_name": "Pat"}, follow_redirects=False)
     participant = db_session.scalar(select(SessionParticipant).where(SessionParticipant.session_id == session_a.id))
     print("Pat participant id", participant.id)
 
@@ -173,6 +169,7 @@ def test_probe_stale_participant_id_after_removal(client, post, db_session):
 
     # Use a SEPARATE client (separate cookie jar) to represent Pat, so host login never touches Pat's cookie.
     from fastapi.testclient import TestClient
+
     from app.main import app
     pat = TestClient(app)
     join = pat.post(f"/s/{session_a.code}/join", data={"display_name": "Pat"}, headers={"Origin": "http://testserver"}, follow_redirects=False)

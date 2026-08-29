@@ -1,19 +1,25 @@
-"""Session routes (M3b): create, join by code, live lobby, host start/remove.
+"""Session routes (M3b + M3c): create, join by code, live lobby, host
+start/remove, and the voting flow.
 
 The session lifecycle (plan §5.6) is: ``lobby → voting → complete`` with
-``expired`` reachable from either; this slice ships the lobby phase —
-creation, join-by-code (no account required), the htmx-polled roster, and the
-host's ``start voting`` transition (which only flips the status; the actual
-voting UI is M3c). The join window is lobby-only for now: a visitor hitting a
-``voting`` session sees a waiting state, not a ballot (§5.6), and joins are
-refused outright for ``complete``/``expired`` sessions.
+``expired`` reachable from either. M3b shipped the lobby phase — creation,
+join-by-code (no account required), the htmx-polled roster, and the host's
+``start voting`` transition. M3c extends ``start voting`` to assemble batch #1
+(collection-backed sessions only; ad hoc options entry is a later release) and
+adds the one-option-at-a-time voting flow: the voting card, the done/waiting
+state, the host's watching overview, and the vote submission endpoint.
+Idempotency: a double-submitted ``start`` never assembles a second batch, and a
+recorded vote stands (re-submits never flip it). The join window stays
+lobby-only for now: a visitor hitting a ``voting`` session sees a waiting
+state, not a ballot (§5.6), and joins are refused outright for
+``complete``/``expired`` sessions.
 
 Session codes are the one cross-tenant guessing surface on the shared
 deployment, so they are generated with collision retry against the permanent
 UNIQUE ``session.code`` set and never recycled. ``GET /s/{code}`` and the
-roster poll are deliberately public (no auth) — voting is open by link/code
-per plan §2 — while every host mutation re-checks ``host_account_id``
-server-side.
+roster/voting-status polls are deliberately public (no auth) — voting is open
+by link/code per plan §2 — while every host mutation re-checks
+``host_account_id`` server-side.
 """
 
 from __future__ import annotations
@@ -30,21 +36,36 @@ from app.auth import get_current_account, require_account, require_group_admin
 from app.db import get_db
 from app.models import (
     Account,
+    Batch,
+    BatchItem,
+    BatchResponse,
     Collection,
     Group,
     GroupAdmin,
+    Item,
+    ItemTag,
+    MealDetail,
     SessionParticipant,
     SessionTarget,
+    Tag,
 )
 from app.models import (
     Session as VotingSession,
 )
-from app.session_logic import apply_transition, make_code
+from app.session_logic import (
+    BATCH_SIZE,
+    apply_transition,
+    assemble_batch,
+    make_code,
+    next_seq,
+)
 from app.templating import templates
 
 router = APIRouter()
 
 ENDED_STATUSES = ("complete", "expired")
+
+TYPE_LABELS = {"dinner": "Dinner", "lunch": "Lunch", "both": "Both"}
 
 
 def _owned_groups(db: Session, account: Account) -> list[dict]:
@@ -144,6 +165,175 @@ def _lobby_context(
         "participants": roster,
         "participant_count": len(roster),
         "is_host": is_host,
+    }
+
+
+# --- Batch + voting helpers (M3c) -------------------------------------------
+
+
+def _open_batch(db: Session, session: VotingSession) -> Batch | None:
+    """The session's open batch — at most one by construction — or None."""
+    return db.scalar(
+        select(Batch)
+        .where((Batch.session_id == session.id) & (Batch.status == "open"))
+        .order_by(Batch.seq)
+    )
+
+
+def _batch_items(db: Session, batch: Batch) -> list[BatchItem]:
+    """A batch's options in voting (sort) order."""
+    return list(
+        db.scalars(
+            select(BatchItem)
+            .where(BatchItem.batch_id == batch.id)
+            .order_by(BatchItem.sort_order, BatchItem.id)
+        ).all()
+    )
+
+
+def _responded_item_ids(db: Session, batch: Batch, participant: SessionParticipant) -> set[int]:
+    """The batch_item ids this participant has already answered in this batch."""
+    return set(
+        db.scalars(
+            select(BatchResponse.batch_item_id).where(
+                (BatchResponse.session_participant_id == participant.id)
+                & BatchResponse.batch_item_id.in_(
+                    select(BatchItem.id).where(BatchItem.batch_id == batch.id)
+                )
+            )
+        ).all()
+    )
+
+
+def _next_option(
+    db: Session, batch: Batch | None, participant: SessionParticipant
+) -> BatchItem | None:
+    """The participant's next unanswered option in the open batch (voting
+    order), or None once they've voted on every option."""
+    if batch is None:
+        return None
+    responded = _responded_item_ids(db, batch, participant)
+    for batch_item in _batch_items(db, batch):
+        if batch_item.id not in responded:
+            return batch_item
+    return None
+
+
+def _progress(
+    db: Session, batch: Batch | None, participant: SessionParticipant
+) -> tuple[int, int]:
+    """(responded_count, total_count) for one participant in this batch."""
+    if batch is None:
+        return 0, 0
+    items = _batch_items(db, batch)
+    return len(_responded_item_ids(db, batch, participant)), len(items)
+
+
+def _voting_progress_counts(db: Session, session: VotingSession) -> tuple[int, int]:
+    """(finished, roster): roster is the participant count; finished is how
+    many participants have responded to every option in the open batch."""
+    roster = db.scalar(
+        select(func.count())
+        .select_from(SessionParticipant)
+        .where(SessionParticipant.session_id == session.id)
+    ) or 0
+    open_batch = _open_batch(db, session)
+    if open_batch is None:
+        return roster, roster  # nothing to respond to → vacuously finished
+    total_items = db.scalar(
+        select(func.count()).select_from(BatchItem).where(BatchItem.batch_id == open_batch.id)
+    ) or 0
+    if total_items == 0:
+        return roster, roster
+    counts = db.execute(
+        select(BatchResponse.session_participant_id, func.count(BatchResponse.id))
+        .where(
+            BatchResponse.session_participant_id.in_(
+                select(SessionParticipant.id).where(SessionParticipant.session_id == session.id)
+            ),
+            BatchResponse.batch_item_id.in_(
+                select(BatchItem.id).where(BatchItem.batch_id == open_batch.id)
+            ),
+        )
+        .group_by(BatchResponse.session_participant_id)
+    ).all()
+    finished = sum(1 for _pid, responded in counts if responded == total_items)
+    return finished, roster
+
+
+def _first_track(db: Session, session: VotingSession) -> str | None:
+    """The session's first track with a positive target: 'dinner', then
+    'lunch', then any other track labels alphabetically. None when the session
+    has no targets (defensive — creation always writes at least one)."""
+    targets = db.scalars(
+        select(SessionTarget).where(SessionTarget.session_id == session.id)
+    ).all()
+
+    def sort_key(target: SessionTarget) -> tuple[int, str]:
+        if target.track_label == "dinner":
+            return (0, "")
+        if target.track_label == "lunch":
+            return (1, "")
+        return (2, target.track_label)
+
+    for target in sorted(targets, key=sort_key):
+        if target.target_count > 0:
+            return target.track_label
+    return None
+
+
+def _eligible_item_ids(db: Session, session: VotingSession, track: str) -> list[int]:
+    """Non-archived items in the session's collection whose meal_detail.type
+    matches the track — 'dinner' → type in ('dinner','both'), 'lunch' → type in
+    ('lunch','both'), any other track label → all types — ordered by
+    normalized_name for deterministic batches (recency-weighting is a
+    post-MVP refinement)."""
+    stmt = select(Item.id).where(
+        (Item.collection_id == session.collection_id) & Item.archived_at.is_(None)
+    )
+    if track == "dinner":
+        stmt = stmt.join(MealDetail, MealDetail.item_id == Item.id).where(
+            MealDetail.type.in_(("dinner", "both"))
+        )
+    elif track == "lunch":
+        stmt = stmt.join(MealDetail, MealDetail.item_id == Item.id).where(
+            MealDetail.type.in_(("lunch", "both"))
+        )
+    return list(db.scalars(stmt.order_by(Item.normalized_name, Item.id)).all())
+
+
+def _option_data(db: Session, session: VotingSession, batch_item: BatchItem) -> dict:
+    """Render data for one option on the voting card: name, type label, tags,
+    and the optional recipe link (collection-backed items only in M3c)."""
+    item = db.get(Item, batch_item.item_id) if batch_item.item_id is not None else None
+    if item is None:
+        return {
+            "batch_item_id": batch_item.id,
+            "name": batch_item.ad_hoc_label or "",
+            "type_label": None,
+            "tags": [],
+            "recipe_url": None,
+        }
+    detail = db.scalar(select(MealDetail).where(MealDetail.item_id == item.id))
+    tags = list(
+        db.scalars(
+            select(Tag.name)
+            .join(ItemTag, ItemTag.tag_id == Tag.id)
+            .where(ItemTag.item_id == item.id)
+            .order_by(Tag.name)
+        ).all()
+    )
+    has_recipe = bool(
+        detail and (detail.source_url or detail.recipe_text or (detail.ingredients or "").strip())
+    )
+    return {
+        "batch_item_id": batch_item.id,
+        "name": item.name,
+        "type_label": TYPE_LABELS.get(detail.type if detail else "dinner", "Dinner"),
+        "tags": tags,
+        "recipe_url": (
+            f"/collections/{session.collection_id}/items/{item.id}" if has_recipe else None
+        ),
     }
 
 
@@ -299,7 +489,9 @@ def join_page(request: Request, code: str | None = None):
 def session_page(request: Request, code: str, db: Annotated[Session, Depends(get_db)]):
     """The session front door: ended page for finished sessions, join page for
     strangers (waiting state while voting), the live lobby for participants
-    and the host."""
+    and the host, and — once voting — the one-option-at-a-time voting card /
+    done state for participants and a watching overview for a host who never
+    joined."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
@@ -322,11 +514,52 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
                 "error": None,
             },
         )
-    return templates.TemplateResponse(
-        request,
-        "session_lobby.html",
-        _lobby_context(request, db, session, account, participant),
-    )
+
+    if session.status == "lobby":
+        return templates.TemplateResponse(
+            request,
+            "session_lobby.html",
+            _lobby_context(request, db, session, account, participant),
+        )
+
+    # status == 'voting'
+    if session.collection_id is None:
+        # Ad hoc sessions: no batch exists (options entry is a later release);
+        # session_lobby.html renders the "coming soon" placeholder.
+        return templates.TemplateResponse(
+            request,
+            "session_lobby.html",
+            _lobby_context(request, db, session, account, participant),
+        )
+
+    if participant is not None:
+        open_batch = _open_batch(db, session)
+        responded, total = _progress(db, open_batch, participant)
+        next_option = _next_option(db, open_batch, participant)
+        if next_option is not None:
+            return templates.TemplateResponse(
+                request,
+                "voting_card.html",
+                {
+                    "session": session,
+                    "option": _option_data(db, session, next_option),
+                    "responded": responded,
+                    "total": total,
+                },
+            )
+        finished, roster = _voting_progress_counts(db, session)
+        return templates.TemplateResponse(
+            request,
+            "voting_done.html",
+            {"session": session, "finished": finished, "roster": roster},
+        )
+
+    # The host watching without having joined: an overview + htmx poll.
+    finished, roster = _voting_progress_counts(db, session)
+    context = _lobby_context(request, db, session, account, participant)
+    context["finished"] = finished
+    context["roster"] = roster
+    return templates.TemplateResponse(request, "session_lobby.html", context)
 
 
 @router.post("/s/{code}/join")
@@ -417,9 +650,14 @@ def roster_partial(request: Request, code: str, db: Annotated[Session, Depends(g
 def start_voting(
     request: Request, code: str, db: Annotated[Session, Depends(get_db)]
 ):
-    """Host-only 'start voting' (plan §5.6). Idempotent: a double-submit on an
-    already-voting session applies once (apply_transition no-op), never an
-    error. M3b only flips the status — batches arrive in M3c."""
+    """Host-only 'start voting' (plan §5.6). On a fresh lobby→voting transition
+    this assembles batch #1 in the SAME transaction: the session's first
+    positive track ('dinner', then 'lunch', then others alphabetically), the
+    non-archived items in its collection whose type matches that track, capped
+    at BATCH_SIZE. An empty pool refuses the start (400, session stays in the
+    lobby). Idempotent: a double-submit on an already-voting session applies
+    once (apply_transition no-op) and never assembles a second batch — assembly
+    is guarded by "no open batch exists"."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
@@ -427,12 +665,117 @@ def start_voting(
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can start voting")
     try:
-        session.status = apply_transition(session.status, "voting")
+        target_status = apply_transition(session.status, "voting")
     except ValueError:
         raise HTTPException(400, "Session can't be started from its current state")
+
+    # Collection-backed sessions only; ad hoc option entry is deferred. Guard
+    # with "no open batch exists" so a double-submitted start never assembles
+    # a second batch.
+    if session.collection_id is not None and _open_batch(db, session) is None:
+        track = _first_track(db, session)
+        if track is None:
+            raise HTTPException(400, "This session has no targets to vote on")
+        eligible_ids = _eligible_item_ids(db, session, track)
+        chosen = assemble_batch(eligible_ids, already_offered=set(), size=BATCH_SIZE)
+        if not chosen:
+            context = _lobby_context(
+                request, db, session, account, _viewer_participant(request, db, session)
+            )
+            context["start_error"] = (
+                f"No items available for the {track} track — add items to this collection first."
+            )
+            return templates.TemplateResponse(
+                request, "session_lobby.html", context, status_code=400
+            )
+        existing_seqs = list(
+            db.scalars(select(Batch.seq).where(Batch.session_id == session.id)).all()
+        )
+        batch = Batch(
+            session_id=session.id,
+            seq=next_seq(existing_seqs),
+            track_label=track,
+            status="open",
+        )
+        db.add(batch)
+        db.flush()
+        for sort_order, item_id in enumerate(chosen):
+            db.add(
+                BatchItem(
+                    batch_id=batch.id,
+                    item_id=item_id,
+                    ad_hoc_label=None,
+                    sort_order=sort_order,
+                )
+            )
+
+    session.status = target_status
     session.last_activity_at = func.now()
     db.commit()
     return RedirectResponse(f"/s/{session.code}", status_code=303)
+
+
+@router.post("/s/{code}/vote")
+def vote(
+    request: Request,
+    code: str,
+    db: Annotated[Session, Depends(get_db)],
+    batch_item_id: Annotated[int, Form()],
+    choice: Annotated[str, Form()],
+):
+    """Record one participant's private yes/no vote on one open-batch option
+    (§5.4/§5.5). The voter is the signed session cookie's participant row — no
+    account required; a non-participant (or a participant of a DIFFERENT
+    session) is 403. The option must belong to the session's OPEN batch — a
+    foreign/closed/nonexistent option is 404. Idempotent: the first recorded
+    vote stands; a re-submit or double-tap leaves it unchanged and adds no row.
+    Only the aggregate ever surfaces — individual votes are never exposed."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    participant = _viewer_participant(request, db, session)
+    if participant is None:
+        raise HTTPException(403, "Join the session to vote")
+    open_batch = _open_batch(db, session)
+    if open_batch is None:
+        raise HTTPException(404, "This session has no open batch")
+    batch_item = db.get(BatchItem, batch_item_id)
+    if batch_item is None or batch_item.batch_id != open_batch.id:
+        raise HTTPException(404, "That option isn't in the open batch")
+    if choice not in ("yes", "no"):
+        raise HTTPException(400, "Choice must be 'yes' or 'no'")
+    existing = db.scalar(
+        select(BatchResponse).where(
+            (BatchResponse.batch_item_id == batch_item.id)
+            & (BatchResponse.session_participant_id == participant.id)
+        )
+    )
+    if existing is None:
+        db.add(
+            BatchResponse(
+                batch_item_id=batch_item.id,
+                session_participant_id=participant.id,
+                choice=choice,
+            )
+        )
+    session.last_activity_at = func.now()
+    db.commit()
+    return RedirectResponse(f"/s/{session.code}", status_code=303)
+
+
+@router.get("/s/{code}/voting-status")
+def voting_status_partial(
+    request: Request, code: str, db: Annotated[Session, Depends(get_db)]
+):
+    """htmx poll target for the done/host views: ONLY the _voting_status.html
+    partial ("{finished}/{roster} finished."). Public, like the roster poll."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    finished, roster = _voting_progress_counts(db, session)
+    return templates.TemplateResponse(
+        request, "_voting_status.html", {"finished": finished, "roster": roster}
+    )
 
 
 @router.post("/s/{code}/participants/{pid}/remove")

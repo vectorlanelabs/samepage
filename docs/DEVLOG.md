@@ -598,3 +598,35 @@ switched to Opus 4.8 mid-run at Charlie's direction; state lives in the repo/DEV
 clean. Recorded as a standing rule in the lead's memory.
 
 Next: M3c — the voting flow (one-option-at-a-time card, submit vote, batch auto-close detection).
+
+---
+
+## 2026-08-29 — M3c landed: the voting flow
+
+Third M3 slice. `POST /s/{code}/start` now assembles batch #1 in the same transaction as the lobby→voting
+transition: it picks the first track with a target > 0 (dinner before lunch, D-track-order), filters the
+collection's non-archived items by meal type (dinner→dinner/both, lunch→lunch/both), orders them by
+normalized_name, and takes up to BATCH_SIZE via session_logic.assemble_batch. Guards an unwinnable start:
+an empty pool → 400, the session stays in 'lobby', no batch. Voters get one full-screen option card at a
+time (name, type, tags, recipe peek, "Option X of N") with Yes/No; `POST /s/{code}/vote` records one
+private response with **first-vote-stands idempotency** (a re-tap or resubmit never flips a recorded
+vote, adds no row). When a participant finishes all options they see the done/waiting state; the host who
+didn't join watches an overview — both live-updated via htmx polling `/s/{code}/voting-status` ("finished/
+roster"). Ad-hoc sessions and batch close/rollup/results are deferred to M3d (placeholder shown).
+
+Implementation: `deepseek-v4-flash`, dispatch + one --continue. Lead verification found and fixed:
+- Two real Jinja bugs the implementer shipped: `is None` written where Jinja needs `is none` (uppercase
+  None reads as a nonexistent test name → TemplateRuntimeError), breaking the host-overview and ad-hoc
+  views. **Fixed** across the session templates.
+- One test-helper defect (not a product bug): `_stamp_participant` set a second `session` cookie that
+  collided with the server-set one (httpx CookieConflict), so a test's participant-switch silently never
+  reached the server and the finished-count assertion failed. Proven in isolation that the PRODUCT is
+  correct (2/2 with a clean cookie switch); **fixed** the helper to clear the jar first (one-cookie
+  browser behavior), and fixed the test-local `_open_batch` to filter by status=='open'.
+
+Inline defensive review (lead, no subagent): first-vote-stands idempotency (yes→no stays yes, no dup),
+item-name XSS escaped on the card, outsider vote → 403, empty-pool start → 400/stays-lobby/no-batch — all
+confirmed live. Suite: **246 passed**, ruff clean.
+
+Next: M3d — batch close (rollup + batch_response deletion per §5.5), unanimous auto-keep, majority
+host-accept, results screen, start next batch.
