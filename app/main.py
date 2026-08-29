@@ -14,8 +14,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from alembic.config import Config
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from alembic import command
 from app.routes import auth, groups, home, library
@@ -71,6 +74,16 @@ app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "st
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _redirect_unauthenticated(request: Request, exc: StarletteHTTPException):
+    """A 401 on a browser page load redirects to /login instead of a bare JSON
+    error. API-style requests (no ``text/html`` in Accept) keep the default
+    JSON body — relevant once M6's token-authenticated routes exist."""
+    if exc.status_code == 401 and "text/html" in request.headers.get("accept", ""):
+        return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
+    return await http_exception_handler(request, exc)
 
 
 app.include_router(home.router)

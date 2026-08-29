@@ -7,16 +7,24 @@ from app.credentials import hash_password
 from app.models import Account, Collection, Group, Item, ItemTag, MealDetail, Tag
 
 
-def _make_group(db_session, owner_email="owner@example.com", group_name="Test Group"):
-    """Create an account and group."""
-    account = Account(
-        email=owner_email,
-        password_hash=hash_password("testpass123"),
-        display_name="Owner",
-    )
+def _get_or_make_account(db_session, email="admin@example.com", password="testpass123", display_name="Admin"):
+    """Get-or-create so `_make_group` and `_make_account` can be called in either
+    order and still refer to the same account row (they share the same default
+    email) — every library route now requires the caller to own the group whose
+    collection it's touching, so tests need the logged-in account to actually be
+    the group's owner, not a separate look-alike account."""
+    account = db_session.scalar(select(Account).where(Account.email == email))
+    if account is not None:
+        return account
+    account = Account(email=email, password_hash=hash_password(password), display_name=display_name)
     db_session.add(account)
-    db_session.flush()
+    db_session.commit()
+    return account
 
+
+def _make_group(db_session, owner_email="admin@example.com", group_name="Test Group"):
+    """Create a group owned by the (possibly just-created) account at owner_email."""
+    account = _get_or_make_account(db_session, email=owner_email)
     group = Group(name=group_name, owner_account_id=account.id)
     db_session.add(group)
     db_session.commit()
@@ -79,14 +87,7 @@ def _make_item(
 
 
 def _make_account(db_session, email="admin@example.com", password="testpass123", display_name="Admin"):
-    account = Account(
-        email=email,
-        password_hash=hash_password(password),
-        display_name=display_name,
-    )
-    db_session.add(account)
-    db_session.commit()
-    return account
+    return _get_or_make_account(db_session, email=email, password=password, display_name=display_name)
 
 
 def _login(post, email="admin@example.com", password="testpass123"):
@@ -106,11 +107,12 @@ def _tags_of(db_session, item_id):
 # ---------- Browse / search / filter (public) ----------
 
 
-def test_library_page_lists_items(client, db_session):
+def test_library_page_lists_items(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "Taco Tuesday", tags=["takeout"])
     _make_item(db_session, collection.id, group.id, "Pancakes", type="both")
+    _login(post)
     resp = client.get("/library")
     assert resp.status_code == 200
     assert "Meal Library" in resp.text
@@ -119,11 +121,12 @@ def test_library_page_lists_items(client, db_session):
     assert "2 active · 0 archived." in resp.text
 
 
-def test_library_search_filters(client, db_session):
+def test_library_search_filters(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "taco soup", type="both")
     _make_item(db_session, collection.id, group.id, "bacon and eggs", type="both")
+    _login(post)
     resp = client.get("/library", params={"q": "taco"})
     assert "taco soup" in resp.text
     assert "bacon and eggs" not in resp.text
@@ -133,12 +136,13 @@ def test_library_search_filters(client, db_session):
     assert "taco soup" not in resp.text
 
 
-def test_library_type_filter(client, db_session):
+def test_library_type_filter(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "Steak", type="dinner")
     _make_item(db_session, collection.id, group.id, "Quesadillas", type="both")
     _make_item(db_session, collection.id, group.id, "Salad bar", type="lunch")
+    _login(post)
     resp = client.get("/library", params={"type": "both"})
     assert "Quesadillas" in resp.text
     assert "Steak" not in resp.text
@@ -148,12 +152,13 @@ def test_library_type_filter(client, db_session):
     assert "Steak" not in resp.text
 
 
-def test_library_tag_filter_or_semantics(client, db_session):
+def test_library_tag_filter_or_semantics(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "Whataburger", tags=["takeout"])
     _make_item(db_session, collection.id, group.id, "Pizza Rolls", tags=["takeout", "snack"])
     _make_item(db_session, collection.id, group.id, "Homemade bread", tags=["snack"])
+    _login(post)
     resp = client.get("/library", params={"tags": "takeout"})
     assert "Whataburger" in resp.text
     assert "Pizza Rolls" in resp.text
@@ -165,11 +170,12 @@ def test_library_tag_filter_or_semantics(client, db_session):
     assert "Homemade bread" in resp.text
 
 
-def test_archived_hidden_by_default_visible_with_status(client, db_session):
+def test_archived_hidden_by_default_visible_with_status(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "Old pasta", archived=True)
     _make_item(db_session, collection.id, group.id, "Fresh tacos")
+    _login(post)
     resp = client.get("/library")
     assert "Fresh tacos" in resp.text
     assert "Old pasta" not in resp.text
@@ -181,29 +187,52 @@ def test_archived_hidden_by_default_visible_with_status(client, db_session):
     assert "Fresh tacos" not in resp.text
 
 
-def test_library_kept_label_and_recipe_link(client, db_session):
+def test_library_kept_label_and_recipe_link(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     item = _make_item(db_session, collection.id, group.id, "Brisket", recipe_text="Slow cook it.")
     item.times_kept = 3
     db_session.commit()
+    _login(post)
     resp = client.get("/library")
     assert "Kept 3×" in resp.text
     assert "Recipe →" in resp.text
 
 
-def test_library_empty_when_no_collection(client, db_session):
-    """Library page shows empty state when no meal collection exists."""
+def test_library_never_shows_another_groups_items(client, post, db_session):
+    """Regression: /library must resolve the signed-in account's OWN meal
+    collection, never just 'the first meal collection in the whole table' —
+    a bug that let anyone (even signed out) see every group's meal library."""
+    other_group = _make_group(db_session, owner_email="other-owner@example.com", group_name="Other Household")
+    other_collection = _make_collection(db_session, other_group.id)
+    _make_item(db_session, other_collection.id, other_group.id, "Someone Else's Secret Casserole")
+
+    group = _make_group(db_session)  # the admin@example.com account/group under test
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "My Own Tacos")
+
+    _login(post)
+    resp = client.get("/library")
+    assert resp.status_code == 200
+    assert "My Own Tacos" in resp.text
+    assert "Someone Else's Secret Casserole" not in resp.text
+
+
+def test_library_empty_when_no_collection(client, post, db_session):
+    """Library page shows empty state when the signed-in account has no meal
+    collection yet (a group exists, but nobody has run the seed loader)."""
+    _make_group(db_session)  # creates the admin@example.com account, no collection
+    _login(post)
     resp = client.get("/library")
     assert resp.status_code == 200
     # Should render gracefully without collection
     assert "Meal Library" in resp.text
 
 
-# ---------- Recipe view (public) ----------
+# ---------- Recipe view (signed-in accounts, own group only) ----------
 
 
-def test_recipe_view_renders(client, db_session):
+def test_recipe_view_renders(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     item = _make_item(
@@ -217,6 +246,7 @@ def test_recipe_view_renders(client, db_session):
         recipe_text="Brown the beef. Simmer an hour.",
         source_url="https://example.com/chili",
     )
+    _login(post)
     resp = client.get(f"/library/{item.id}")
     assert resp.status_code == 200
     assert "Chili" in resp.text
@@ -228,18 +258,32 @@ def test_recipe_view_renders(client, db_session):
     assert "Kept 0×" not in resp.text  # no kept line when times_kept == 0
 
 
-def test_recipe_view_empty_state(client, db_session):
+def test_recipe_view_empty_state(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     item = _make_item(db_session, collection.id, group.id, "Mystery night")
+    _login(post)
     resp = client.get(f"/library/{item.id}")
     assert resp.status_code == 200
     assert "No recipe saved yet" in resp.text
     assert "A clean full-page cooking view" in resp.text
 
 
-def test_recipe_view_unknown_404(client, db_session):
+def test_recipe_view_unknown_404(client, post, db_session):
+    _make_group(db_session)  # creates the admin@example.com account
+    _login(post)
     assert client.get("/library/999999").status_code == 404
+
+
+def test_recipe_view_another_groups_item_404(client, post, db_session):
+    """An item belonging to a group you don't own/admin is 404, not 403 — it
+    must not be distinguishable from an item that doesn't exist at all."""
+    other_group = _make_group(db_session, owner_email="other-owner@example.com")
+    other_collection = _make_collection(db_session, other_group.id)
+    other_item = _make_item(db_session, other_collection.id, other_group.id, "Their secret recipe")
+    _make_group(db_session)  # the admin@example.com account/group under test
+    _login(post)
+    assert client.get(f"/library/{other_item.id}").status_code == 404
 
 
 # ---------- Admin gating ----------
@@ -249,12 +293,11 @@ def test_admin_gating(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     _make_item(db_session, collection.id, group.id, "Steak")
-    # No session at all: 401 (not signed in).
+    # No session at all: 401 (not signed in) on every route, including plain browsing.
     assert post("/library", data={"name": "X", "type": "dinner"}).status_code == 401
     assert client.get("/library/new").status_code == 401
     assert client.get("/library/1/edit").status_code == 401
-    # Public pages still viewable when not signed in.
-    assert client.get("/library").status_code == 200
+    assert client.get("/library").status_code == 401
 
 
 # ---------- Create ----------

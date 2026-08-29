@@ -1,11 +1,13 @@
 """Item library routes (M2b, T2.1–T2.2): browse/search/filter, create, edit,
 archive/unarchive, type cycle, and the recipe view.
 
-The library list and the recipe view are public — the household reaches them
-from any device. Create/edit/archive/cycle-type require a signed-in account
-(``require_account``) — an interim M2a/M2b policy; proper "must be an admin of
-the owning group" gating lands in a future slice once group-scoping is fully
-wired.
+Every route requires a signed-in account, and every item lookup is scoped to
+a meal collection owned by a group the signed-in account owns or admins —
+this is a shared multi-tenant deployment, so an account must never be able to
+browse, view, or mutate another group's library by guessing an item id or
+just visiting the page while logged out. A nonexistent-or-not-yours item
+returns 404, never 403, so browsing doesn't reveal that another group's item
+exists.
 """
 
 from __future__ import annotations
@@ -22,9 +24,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_account, require_account
+from app.auth import require_account
 from app.db import get_db
-from app.models import Collection, Item, ItemTag, MealDetail, Tag
+from app.models import Account, Collection, Group, GroupAdmin, Item, ItemTag, MealDetail, Tag
 
 router = APIRouter()
 
@@ -51,19 +53,52 @@ def _type_pill_style(meal_type: str, interactive: bool = False) -> str:
     )
 
 
-def _get_meal_collection(db: Session) -> Collection | None:
-    """Get the meal-kind collection, or None if none exists."""
+def _account_owns_collection(db: Session, account: Account, collection_id: int) -> bool:
+    """True iff `collection_id` belongs to a group `account` owns or admins."""
+    collection = db.get(Collection, collection_id)
+    if collection is None:
+        return False
+    group = db.get(Group, collection.group_id)
+    if group is None:
+        return False
+    if group.owner_account_id == account.id:
+        return True
+    return (
+        db.scalar(
+            select(GroupAdmin).where(
+                (GroupAdmin.group_id == group.id) & (GroupAdmin.account_id == account.id)
+            )
+        )
+        is not None
+    )
+
+
+def _get_meal_collection(db: Session, account: Account) -> Collection | None:
+    """The signed-in account's own meal-kind collection — a collection owned by
+    a group `account` owns or admins. Never another group's collection, even
+    if one exists first in the table."""
     return db.scalar(
         select(Collection)
-        .where(Collection.kind == "meal")
+        .join(Group, Group.id == Collection.group_id)
+        .outerjoin(
+            GroupAdmin,
+            (GroupAdmin.group_id == Group.id) & (GroupAdmin.account_id == account.id),
+        )
+        .where(
+            Collection.kind == "meal",
+            (Group.owner_account_id == account.id) | (GroupAdmin.account_id == account.id),
+        )
         .order_by(Collection.id)
         .limit(1)
     )
 
 
-def _get_item_or_404(db: Session, item_id: int) -> Item:
+def _get_owned_item_or_404(db: Session, account: Account, item_id: int) -> Item:
+    """An item, but only if it belongs to a collection `account` owns or
+    admins — 404 (not 403) for anything else, so browsing never reveals that
+    another group's item exists."""
     item = db.get(Item, item_id)
-    if item is None:
+    if item is None or not _account_owns_collection(db, account, item.collection_id):
         raise HTTPException(404, "No such item")
     return item
 
@@ -240,12 +275,13 @@ def library_page(
     tags: str = "",
     status: str = "active",
 ):
-    """Public library browse: search (q), type / tag (OR) / status filters."""
-    current = get_current_account(request, db)
-    can_edit = current is not None
+    """Library browse (signed-in accounts only): search (q), type / tag (OR) /
+    status filters, scoped to the account's own group's collection."""
+    account = require_account(request, db)
+    can_edit = True
 
-    # Resolve the meal collection; if none exists, show empty state.
-    collection = _get_meal_collection(db)
+    # Resolve the account's own meal collection; if none exists, show empty state.
+    collection = _get_meal_collection(db, account)
     if collection is None:
         return templates.TemplateResponse(
             request,
@@ -398,8 +434,8 @@ def new_meal_page(
 ):
     """Blank edit page for a new item (admin-only). ``?type=`` presets the
     track; the in-form cycle button drives it from there."""
-    require_account(request, db)
-    collection = _get_meal_collection(db)
+    account = require_account(request, db)
+    collection = _get_meal_collection(db, account)
     if collection is None:
         raise HTTPException(400, "No meal collection exists yet. An admin needs to seed the library first.")
     return _render_edit(
@@ -411,9 +447,11 @@ def new_meal_page(
 def recipe_view(
     request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
-    """Public recipe view: name, type/tags, ingredients (bulleted), then
-    instructions, then the optional original-source link."""
-    item = _get_item_or_404(db, item_id)
+    """Recipe view (signed-in accounts only, own group's items): name,
+    type/tags, ingredients (bulleted), then instructions, then the optional
+    original-source link."""
+    account = require_account(request, db)
+    item = _get_owned_item_or_404(db, account, item_id)
     detail = _item_meal_detail(db, item.id)
     ingredients = [
         line.strip()
@@ -443,8 +481,8 @@ def edit_meal_page(
     request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Edit page for an existing item (admin-only)."""
-    require_account(request, db)
-    item = _get_item_or_404(db, item_id)
+    account = require_account(request, db)
+    item = _get_owned_item_or_404(db, account, item_id)
     detail = _item_meal_detail(db, item.id)
     collection = db.get(Collection, item.collection_id)
     if collection is None:
@@ -473,8 +511,8 @@ def create_meal(
     source_url: Annotated[str, Form()] = "",
 ):
     """Create an item (admin-only). 303 to the new item's edit page."""
-    require_account(request, db)
-    collection = _get_meal_collection(db)
+    account = require_account(request, db)
+    collection = _get_meal_collection(db, account)
     if collection is None:
         raise HTTPException(400, "No meal collection exists yet. An admin needs to seed the library first.")
 
@@ -525,9 +563,9 @@ def update_meal(
 ):
     """Update an item (admin-only): rename recomputes normalized_name; the
     collision check excludes this item itself."""
-    require_account(request, db)
+    account = require_account(request, db)
     tags = tags or []
-    item = _get_item_or_404(db, item_id)
+    item = _get_owned_item_or_404(db, account, item_id)
     detail = _item_meal_detail(db, item.id)
     collection = db.get(Collection, item.collection_id)
     if collection is None:
@@ -571,8 +609,8 @@ def archive_meal(
     request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Archive (admin-only, reversible — never deleted, D16)."""
-    require_account(request, db)
-    item = _get_item_or_404(db, item_id)
+    account = require_account(request, db)
+    item = _get_owned_item_or_404(db, account, item_id)
     item.archived_at = func.now()
     db.commit()
     return RedirectResponse("/library", status_code=303)
@@ -583,8 +621,8 @@ def unarchive_meal(
     request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Restore an archived item (admin-only)."""
-    require_account(request, db)
-    item = _get_item_or_404(db, item_id)
+    account = require_account(request, db)
+    item = _get_owned_item_or_404(db, account, item_id)
     item.archived_at = None
     db.commit()
     return RedirectResponse("/library", status_code=303)
@@ -595,8 +633,8 @@ def cycle_type(
     request: Request, item_id: int, db: Annotated[Session, Depends(get_db)]
 ):
     """Type cycle dinner → lunch → both → dinner (admin-only)."""
-    require_account(request, db)
-    item = _get_item_or_404(db, item_id)
+    account = require_account(request, db)
+    item = _get_owned_item_or_404(db, account, item_id)
     detail = _item_meal_detail(db, item.id)
     if detail is None:
         detail = MealDetail(item_id=item.id, type="dinner")

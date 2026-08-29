@@ -22,9 +22,17 @@ router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).resolve().parents[1] / "templates")
 
 
-def _login_page(request: Request, error: str | None, status_code: int = 200):
+def _safe_next(value: str | None) -> str:
+    """Only allow a same-site relative path — never an absolute/protocol-relative
+    URL (open-redirect guard)."""
+    if value and value.startswith("/") and not value.startswith("//"):
+        return value
+    return "/"
+
+
+def _login_page(request: Request, error: str | None, status_code: int = 200, next: str | None = None):
     return templates.TemplateResponse(
-        request, "login.html", {"error": error}, status_code=status_code
+        request, "login.html", {"error": error, "next": next}, status_code=status_code
     )
 
 
@@ -35,11 +43,11 @@ def _signup_page(request: Request, error: str | None, status_code: int = 200):
 
 
 @router.get("/login")
-def login_page(request: Request, db: Annotated[Session, Depends(get_db)]):
-    # Redirect to / if already signed in.
+def login_page(request: Request, db: Annotated[Session, Depends(get_db)], next: str | None = None):
+    # Redirect to / (or `next`) if already signed in.
     if get_current_account(request, db) is not None:
-        return RedirectResponse("/", status_code=303)
-    return _login_page(request, error=None)
+        return RedirectResponse(_safe_next(next), status_code=303)
+    return _login_page(request, error=None, next=next)
 
 
 @router.post("/login")
@@ -48,19 +56,21 @@ def login(
     email: Annotated[str, Form()],
     password: Annotated[str, Form()],
     db: Annotated[Session, Depends(get_db)],
+    next: Annotated[str, Form()] = "",
 ):
     """Verify email + password.
 
     Failure paths re-render the login form with an error (HTTP 401). Success
-    stores ``account_id`` in the signed session cookie and 303-redirects to / (PRG).
+    stores ``account_id`` in the signed session cookie and 303-redirects to
+    `next` (if it was a same-site path) or / otherwise (PRG).
     """
     email = email.strip().lower()
     account = db.scalar(select(Account).where(Account.email == email))
     if account is None or not verify_password(password, account.password_hash):
-        return _login_page(request, "Email or password doesn't match.", status_code=401)
+        return _login_page(request, "Email or password doesn't match.", status_code=401, next=next)
 
     request.session["account_id"] = account.id
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(_safe_next(next), status_code=303)
 
 
 @router.get("/signup")

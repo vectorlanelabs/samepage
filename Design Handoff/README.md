@@ -81,3 +81,6 @@ No images/icons — all visual elements are typography, color, and simple CSS sh
 ## Files
 - `Dinner Decider.dc.html` — the full interactive design reference (open directly in a browser).
 - `support.js` — runtime shim required only to render the `.dc.html` file in a browser; not relevant to the production build.
+- `assets/samepage-favicon.png` — the icon mark cropped from the brand logo, used as the app favicon and sidebar/auth icon.
+- `assets/samepage-wordmark-only.png` — the "Same Page" wordmark cropped from the brand logo (icon removed), used next to the icon in the sidebar and auth screen.
+- `assets/samepage-wordmark-full-logo.png` — the original full logo file as provided (icon + wordmark together), kept for reference/other uses (app store listing, marketing, etc).
