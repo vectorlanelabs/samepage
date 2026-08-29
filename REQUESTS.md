@@ -24,10 +24,19 @@ attention — split into what needs a decision from you vs. what's just parked.
   **Options:** (1) skip it — the JSON API is enough; (2) say go and I'll add FastMCP and verify it against
   a real MCP client; (3) a lighter approach you prefer.
 
+Note from Charlie: 
+
+As for the api vs. mcp - I want to be able to tell my LLM *with minimal configuration* "Go add this recipe to my group in Same Page" 
+or "here's a photo of my game cabinet, extract the game titles and add them to my game collection in Same Page" ... and I want other 
+users to be able to do the same. That sounds like MCP to me, because API seems like a lot more setup. Tell me if I'm wrong, but I 
+don't think I can go into chatgpt or claude and add an API like I can add an MCP
+
 - [ ] **Scrub the seed data from git history too?** The seed pipeline, the `D20 Dinner Decider.xlsx`, and
   the dice provenance are deleted from the current tree (production launches from a blank DB), but they
   still exist in git history. Removing them from history is a destructive rewrite (breaks existing
   clones), so I did not do it unasked. Say the word if you want it.
+  
+  note from charlie: I don't care about the seed data in history - the whole point here was to have a clean database on first deploy so that we can properly test
 
 ## Parked (decided — no action needed unless you disagree)
 
