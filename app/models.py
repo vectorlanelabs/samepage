@@ -77,6 +77,28 @@ class GroupAdmin(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 
+class ApiToken(Base):
+    """One live API token per group (M6a, plan §8 M6): only the SHA-256 hash
+    is stored — the plaintext is shown to the group owner exactly once at
+    generation. The UNIQUE constraint on ``group_id`` means a group has at
+    most one live token; regenerating replaces the row (delete old, insert
+    new in one transaction), so an owner always has at most one live token.
+
+    NOTE (future ownership transfer): when a group ownership-transfer feature
+    is built later, it MUST revoke/rotate this token — the departing owner
+    knows it. No transfer route exists yet, so nothing to wire now.
+    """
+
+    __tablename__ = "api_token"
+    __table_args__ = (UniqueConstraint("group_id", name="uq_api_token_group"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("group.id"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Collection(Base):
     __tablename__ = "collection"
 

@@ -807,3 +807,27 @@ change can't silently break installability. Suite: **295 passed**, ruff clean.
 M5 is functionally complete (M5a SSO, M5b rate limiting, M5c PWA, M5d deploy artifacts). Only M6
 (per-group API + MCP) remains. The app is deployment-ready pending Charlie's Google OAuth client, domain,
 and CI go-word (REQUESTS.md).
+
+---
+
+## 2026-08-29 — M6a landed: per-group API tokens + JSON API
+
+The external-tools surface (plan §8, "AI lives outside the app"). New `app/tokens.py` (256-bit
+`secrets.token_urlsafe(32)`, SHA-256 hashed — correct for high-entropy random tokens, not PBKDF2),
+`ApiToken` table (migration 0010, UNIQUE(group_id) → one active token per group), owner-only token
+management on the group detail page (generate with one-time plaintext reveal, regenerate, revoke; admins
+can't). `app/routes/api.py`: `require_api_group` resolves a `Bearer` token to exactly one group as the
+single scoping choke point (plan §8) and stamps last_used_at; `/api/v1` endpoints list/read/create/patch
+library items and read the reject-rate report, all scoped to the token's group. No session/voting/
+participant endpoints (verb scope). Origin-exempt (Bearer auth makes CSRF irrelevant).
+
+Implementation: `deepseek-v4-flash`, dispatch + one --continue; landed green (316 tests). Lead
+verification (direct probing, the defensive review): no/bad Bearer → 401; a group-A token sees only A's
+collections and gets 404 on B's items/report and on a PATCH of B's item (B unchanged) — the cross-group
+isolation the plan requires; create works with NO Origin header (proving the API is correctly
+origin-exempt, unlike browser forms); CRUD validation right (name collision 409, blank 400, bad type
+400); the report JSON contains no participant/vote-person field; last_used_at updates. Rotation-on-
+ownership-transfer is a code-comment TODO (no transfer route exists yet to wire it to).
+
+Suite: **316 passed**, ruff clean. Next: M6b — wrap these operations as an MCP (FastMCP) server. That
+completes the milestone list.

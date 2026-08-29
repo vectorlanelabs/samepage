@@ -52,6 +52,40 @@
     {% endif %}
   </section>
 
+  {% if is_owner %}
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <h2 class="section-title">API access</h2>
+    <p class="page-meta" style="margin-bottom:12px;">
+      A per-group token lets external AI tools read and write this group's library and read its reports over the JSON API (no sessions or voting). Only the group owner manages the token.
+    </p>
+
+    {% if api_token_plaintext %}
+    <div class="token-reveal" style="border:2px solid #4468D2;border-radius:8px;padding:12px;margin-bottom:14px;background:#eef2ff;">
+      <strong>Copy this token now — it won't be shown again.</strong>
+      <div style="font-family:var(--font-mono,monospace);word-break:break-all;margin-top:6px;">{{ api_token_plaintext }}</div>
+    </div>
+    {% endif %}
+
+    {% if api_token %}
+    <p class="page-meta">
+      Token active since {{ api_token.created_at.strftime("%b %d, %Y") }}{% if api_token.last_used_at %} · last used {{ api_token.last_used_at.strftime("%b %d, %Y") }}{% else %} · never used{% endif %}.
+    </p>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <form method="post" action="/groups/{{ group.id }}/api-token" class="inline-form">
+        <button type="submit" class="btn btn-secondary">Regenerate</button>
+      </form>
+      <form method="post" action="/groups/{{ group.id }}/api-token/revoke" class="inline-form">
+        <button type="submit" class="btn btn-secondary danger-text">Revoke</button>
+      </form>
+    </div>
+    {% else %}
+    <form method="post" action="/groups/{{ group.id }}/api-token" class="inline-form">
+      <button type="submit" class="btn btn-primary">Generate token</button>
+    </form>
+    {% endif %}
+  </section>
+  {% endif %}
+
   <p class="auth-note">Admins manage collections and host sessions. Voting never requires membership.</p>
 </div>
 {% endblock %}

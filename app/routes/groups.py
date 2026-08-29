@@ -1,4 +1,6 @@
-"""Group management routes (M2a): list, create, detail, add admin, remove admin."""
+"""Group management routes (M2a): list, create, detail, add admin, remove admin.
+M6a adds the owner-only API-token management routes (generate/regenerate with a
+one-time plaintext reveal, and revoke)."""
 
 from __future__ import annotations
 
@@ -6,13 +8,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.auth import is_group_owner, require_account, require_group_admin
 from app.db import get_db
-from app.models import Account, Group, GroupAdmin
+from app.models import Account, ApiToken, Group, GroupAdmin
 from app.templating import templates
+from app.tokens import generate_token, hash_token
 
 router = APIRouter()
 
@@ -44,7 +47,8 @@ def _groups_context(db: Session, account: Account) -> dict:
 
 
 def _group_detail_context(db: Session, group: Group, account: Account) -> dict:
-    """Build context dict for group detail template with owner and admins list."""
+    """Build context dict for group detail template with owner and admins list,
+    plus the group's API-token status (created/last-used, never the hash)."""
     owner = db.get(Account, group.owner_account_id)
     admin_accounts = db.scalars(
         select(Account)
@@ -60,11 +64,17 @@ def _group_detail_context(db: Session, group: Group, account: Account) -> dict:
         }
         for a in admin_accounts
     ]
+    api_token = db.scalar(select(ApiToken).where(ApiToken.group_id == group.id))
     return {
         "group": group,
         "owner": owner,
         "admins": admins,
         "is_owner": account.id == group.owner_account_id,
+        "api_token": (
+            {"created_at": api_token.created_at, "last_used_at": api_token.last_used_at}
+            if api_token is not None
+            else None
+        ),
     }
 
 
@@ -205,4 +215,54 @@ def remove_admin(
         db.delete(admin_row)
         db.commit()
 
+    return RedirectResponse(f"/groups/{group.id}", status_code=303)
+
+
+@router.post("/groups/{group_id}/api-token")
+def create_api_token(
+    request: Request,
+    group_id: int,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Generate (or regenerate) the group's API token — owner-only (403 for
+    admins/others; 404 for a foreign or nonexistent group, no existence
+    oracle). Any existing token is replaced in the same transaction (a group
+    has at most one live token — the DB enforces it with a UNIQUE constraint),
+    and the PLAINTEXT is rendered once in the response; only its SHA-256 hash
+    is ever stored."""
+    account, group = require_group_admin(request, db, group_id)
+
+    if not is_group_owner(account, group):
+        raise HTTPException(403, "Owner required")
+
+    token = generate_token()
+    db.execute(delete(ApiToken).where(ApiToken.group_id == group.id))
+    db.add(ApiToken(group_id=group.id, token_hash=hash_token(token)))
+    db.commit()
+
+    context = _group_detail_context(db, group, account)
+    context["api_token_plaintext"] = token
+    return templates.TemplateResponse(
+        request,
+        "group_detail.html",
+        context,
+        status_code=200,
+    )
+
+
+@router.post("/groups/{group_id}/api-token/revoke")
+def revoke_api_token(
+    request: Request,
+    group_id: int,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Revoke the group's API token — owner-only, idempotent: a revoke with no
+    token present is a no-op redirect back to the group page."""
+    account, group = require_group_admin(request, db, group_id)
+
+    if not is_group_owner(account, group):
+        raise HTTPException(403, "Owner required")
+
+    db.execute(delete(ApiToken).where(ApiToken.group_id == group.id))
+    db.commit()
     return RedirectResponse(f"/groups/{group.id}", status_code=303)
