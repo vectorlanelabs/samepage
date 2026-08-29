@@ -39,13 +39,11 @@
   {% endif %}
 
   {% if not ingredients and not (detail and detail.recipe_text) %}
-  <p class="empty-state" style="text-align:left;padding:20px 0 0;">No recipe saved yet — the household's own version can be added from this meal's edit screen, not just a link out.</p>
+  <p class="empty-state" style="text-align:left;padding:20px 0 0;">No recipe saved yet. Add one from this meal's edit screen.</p>
   {% endif %}
 
   <div class="recipe-footer">
     <span>Offered {{ meal.times_offered }}× · kept {{ meal.times_kept }}×</span>
   </div>
-
-  <div class="recipe-note">A clean full-page cooking view &amp; printing arrive with recipe intake (v2).</div>
 </div>
 {% endblock %}

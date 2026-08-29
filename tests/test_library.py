@@ -487,7 +487,6 @@ def test_recipe_view_empty_state(client, post, db_session):
     resp = client.get(f"/collections/{collection.id}/items/{item.id}")
     assert resp.status_code == 200
     assert "No recipe saved yet" in resp.text
-    assert "A clean full-page cooking view" in resp.text
 
 
 def test_recipe_view_unknown_404(client, post, db_session):
