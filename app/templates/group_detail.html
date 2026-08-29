@@ -1,51 +1,57 @@
 {% extends "base.html" %}
 {% block title %}{{ group.name }} · Groups · Same Page{% endblock %}
 {% block content %}
-<div style="max-width:800px;margin:0 auto;padding:32px 24px;">
-  <a href="/groups" style="font:600 13px var(--dd-font-body);color:var(--dd-accent);text-decoration:none;display:inline-block;margin-bottom:24px;">← Back to groups</a>
+<div class="page page--narrow">
+  <a class="back-link" href="/groups">← Back to groups</a>
 
-  <h1 style="font-family:var(--dd-font-display);font-weight:600;font-size:28px;margin:0 0 8px;color:var(--dd-text);">{{ group.name }}</h1>
-  <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);margin:0 0 32px;">Owned by <strong>{{ owner.display_name }}</strong></p>
+  <h1 class="page-title">{{ group.name }}</h1>
+  <p class="page-meta">Owned by <strong>{{ owner.display_name }}</strong></p>
 
   {% if error %}
-  <p style="font:700 12px var(--dd-font-body);color:var(--dd-dinner);margin:0 0 24px;">{{ error }}</p>
+  <p class="form-error">{{ error }}</p>
   {% endif %}
 
-  <!-- Admins section -->
-  <div style="background:var(--dd-card);border-radius:var(--dd-radius-card);box-shadow:var(--dd-shadow-card);padding:24px;margin-bottom:32px;">
-    <h2 style="font-family:var(--dd-font-display);font-weight:600;font-size:16px;margin:0 0 16px;color:var(--dd-text);">Admins</h2>
-
-    {% if admins %}
-    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+  <section class="card" style="padding:20px;margin-top:20px;">
+    <h2 class="section-title">Members</h2>
+    <div class="member-list">
+      <div class="member-row">
+        <span class="member-avatar" aria-hidden="true">{{ owner.display_name[:1]|upper }}</span>
+        <div class="member-info">
+          <div class="member-name">{{ owner.display_name }}<span class="owner-badge">★ owner</span></div>
+          <div class="member-email">{{ owner.email }}</div>
+        </div>
+      </div>
+      {% if admins %}
       {% for admin in admins %}
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--dd-bg);border-radius:8px;">
-        <div>
-          <p style="font:600 13px var(--dd-font-body);margin:0;color:var(--dd-text);">{{ admin.display_name }}</p>
-          <p style="font:600 11.5px var(--dd-font-body);margin:4px 0 0;color:var(--dd-text-muted);">{{ admin.email }}{% if admin.is_self %} (you){% endif %}</p>
+      <div class="member-row">
+        <span class="member-avatar" aria-hidden="true">{{ admin.display_name[:1]|upper }}</span>
+        <div class="member-info">
+          <div class="member-name">{{ admin.display_name }}{% if admin.is_self %} (you){% endif %}</div>
+          <div class="member-email">{{ admin.email }}</div>
         </div>
         {% if is_owner %}
-        <form method="post" action="/groups/{{ group.id }}/admins/{{ admin.id }}/remove" style="margin:0;">
-          <button type="submit" style="font:600 12px var(--dd-font-body);background:none;border:none;color:var(--dd-text-muted);cursor:pointer;padding:0;text-decoration:underline;">Remove</button>
+        <form method="post" action="/groups/{{ group.id }}/admins/{{ admin.id }}/remove" class="inline-form">
+          <button type="submit" class="danger-text">Remove</button>
         </form>
         {% endif %}
       </div>
       {% endfor %}
+      {% else %}
+      <p class="empty-state" style="padding:16px 0 8px;text-align:left;">No additional admins yet.</p>
+      {% endif %}
     </div>
-    {% else %}
-    <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:0 0 16px;">No additional admins yet.</p>
-    {% endif %}
 
-    <!-- Add admin form (owner-only) -->
     {% if is_owner %}
-    <div style="border-top:1px solid var(--dd-border);padding-top:16px;">
-      <h3 style="font-family:var(--dd-font-display);font-weight:600;font-size:14px;margin:0 0 12px;color:var(--dd-text);">Add Admin</h3>
-      <form method="post" action="/groups/{{ group.id }}/admins" style="display:flex;gap:12px;">
-        <input type="email" name="email" placeholder="Email address" required
-               style="flex:1;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
-        <button type="submit" class="pill">Add</button>
+    <div class="invite-row">
+      <div class="field-label" style="margin-top:0;">Invite an admin by email</div>
+      <form method="post" action="/groups/{{ group.id }}/admins" class="invite-form">
+        <input type="email" name="email" placeholder="name@example.com" required class="input">
+        <button type="submit" class="btn btn-primary">Invite</button>
       </form>
     </div>
     {% endif %}
-  </div>
+  </section>
+
+  <p class="auth-note">Admins manage collections and host sessions. Voting never requires membership.</p>
 </div>
 {% endblock %}

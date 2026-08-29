@@ -32,7 +32,6 @@ from app.templating import templates
 router = APIRouter()
 
 TYPE_LABELS = {"dinner": "Dinner", "lunch": "Lunch", "both": "Both"}
-TYPE_HUES = {"dinner": 25, "lunch": 140, "both": 300}
 TYPE_CYCLE = {"dinner": "lunch", "lunch": "both", "both": "dinner"}
 VALID_TYPES = frozenset(TYPE_LABELS)
 
@@ -40,16 +39,6 @@ VALID_TYPES = frozenset(TYPE_LABELS)
 def _normalize_name(name: str) -> str:
     """D11 dedupe key, shared with scripts/seed.py: casefold + collapse."""
     return re.sub(r"\s+", " ", name.casefold()).strip()
-
-
-def _type_pill_style(meal_type: str, interactive: bool = False) -> str:
-    hue = TYPE_HUES[meal_type]
-    cursor = "cursor:pointer;" if interactive else ""
-    return (
-        f"flex:none;border:none;border-radius:999px;padding:6px 10px;"
-        f"font:700 10.5px var(--dd-font-body);{cursor}"
-        f"background:oklch(0.92 0.05 {hue});color:oklch(0.4 0.1 {hue});"
-    )
 
 
 def _account_owns_collection(db: Session, account: Account, collection_id: int) -> bool:
@@ -169,8 +158,6 @@ def _render_edit(
     instructions/source_url) — from the item/detail for GETs, from the submitted
     POST body for 400 re-renders so nothing the user typed is lost.
     """
-    meal_type = form["type"] if form["type"] in VALID_TYPES else "dinner"
-    hue = TYPE_HUES[meal_type]
     return templates.TemplateResponse(
         request,
         "meal_edit.html",
@@ -181,12 +168,6 @@ def _render_edit(
             "selected_tags": selected_tags,
             "all_tags": _all_tags(db, collection.group_id),
             "error": error,
-            "track_label": TYPE_LABELS[meal_type],
-            "track_style": (
-                f"border:none;border-radius:999px;padding:9px 16px;margin-top:6px;"
-                f"font:700 12px var(--dd-font-body);cursor:pointer;"
-                f"background:oklch(0.92 0.05 {hue});color:oklch(0.4 0.1 {hue});"
-            ),
         },
         status_code=status_code,
     )
@@ -360,7 +341,6 @@ def library_page(
             "id": item.id,
             "name": item.name,
             "type_label": TYPE_LABELS[_type_of(item)],
-            "type_style": _type_pill_style(_type_of(item), interactive=True),
             "tags": sorted(tags_by_item.get(item.id, [])),
             "kept_label": f"Kept {item.times_kept}×" if item.times_kept > 0 else None,
             "has_recipe": _has_recipe(item_details.get(item.id)),
@@ -486,7 +466,6 @@ def recipe_view(
             "detail": detail,
             "tags": _item_tags(db, item.id),
             "type_label": TYPE_LABELS[detail.type if detail else "dinner"],
-            "type_style": _type_pill_style(detail.type if detail else "dinner"),
             "ingredients": ingredients,
             "safe_source_url": _safe_source_url(detail.source_url if detail else None),
         },

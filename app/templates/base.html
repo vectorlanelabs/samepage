@@ -4,20 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Same Page{% endblock %}</title>
+<link rel="icon" href="/static/favicon.png">
+<link rel="apple-touch-icon" href="/static/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/htmx.min.js" defer></script>
 </head>
 <body>
 <div class="shell">
   <aside class="sidebar">
-    <div class="brand">Same Page</div>
+    <a class="brand" href="/">
+      <span class="brand-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
+      Same Page
+    </a>
     <nav class="nav">
-      <a class="nav-link" href="/">Home</a>
-      <a class="nav-link" href="/collections">Collections</a>
-      <a class="nav-link" href="/groups">Groups</a>
+      <a class="nav-link{% if request.url.path == '/' %} is-active{% endif %}" href="/">Home</a>
+      <a class="nav-link{% if request.url.path.startswith('/collections') %} is-active{% endif %}" href="/collections">Collections</a>
+      <a class="nav-link{% if request.url.path.startswith('/groups') %} is-active{% endif %}" href="/groups">Groups</a>
     </nav>
     <div class="sidebar-spacer"></div>
     {% if current_account %}
@@ -29,11 +34,14 @@
   </aside>
 
   <div class="topbar">
-    <div class="brand">Same Page</div>
+    <a class="brand" href="/">
+      <span class="brand-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
+      Same Page
+    </a>
     <nav class="nav">
-      <a class="nav-link" href="/">Home</a>
-      <a class="nav-link" href="/collections">Collections</a>
-      <a class="nav-link" href="/groups">Groups</a>
+      <a class="nav-link{% if request.url.path == '/' %} is-active{% endif %}" href="/">Home</a>
+      <a class="nav-link{% if request.url.path.startswith('/collections') %} is-active{% endif %}" href="/collections">Collections</a>
+      <a class="nav-link{% if request.url.path.startswith('/groups') %} is-active{% endif %}" href="/groups">Groups</a>
     </nav>
     {% if current_account %}
     <span class="nav-account">{{ current_account.display_name }}</span>

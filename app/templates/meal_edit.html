@@ -1,56 +1,63 @@
 {% extends "base.html" %}
 {% block title %}{% if meal is none %}Add a meal{% else %}Edit {{ meal.name }}{% endif %} · Same Page{% endblock %}
 {% block content %}
-<div style="background:var(--dd-card);border-radius:var(--dd-radius-card);padding:32px;box-shadow:var(--dd-shadow-card);">
-  <div style="display:flex;align-items:center;gap:10px;">
-    <a href="/collections/{{ collection.id }}" style="border:none;background:none;color:var(--dd-text-muted);font:700 13px var(--dd-font-body);cursor:pointer;">← Back</a>
-    <h1 style="font:600 20px var(--dd-font-display);color:var(--dd-text);margin:0;">{% if meal is none %}Add a meal{% else %}Edit {{ meal.name }}{% endif %}</h1>
+<div class="page page--narrow">
+  <div class="page-head">
+    <a class="back-link" href="/collections/{{ collection.id }}">← Back</a>
+    <h1 class="page-title">{% if meal is none %}Add a meal{% else %}Edit {{ meal.name }}{% endif %}</h1>
   </div>
 
   {% if error %}
-  <p style="font:700 12px var(--dd-font-body);color:var(--dd-dinner);margin:14px 0 0;">{{ error }}</p>
+  <p class="form-error">{{ error }}</p>
   {% endif %}
 
-  <form method="post" action="{% if meal is none %}/collections/{{ collection.id }}/items{% else %}/collections/{{ collection.id }}/items/{{ meal.id }}{% endif %}" style="margin:0;">
-    <div style="font:700 10.5px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin-top:18px;">Name</div>
-    <input type="text" name="name" value="{{ form.name }}" placeholder="e.g. Sunday roast chicken"
-           style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
+  <form method="post" action="{% if meal is none %}/collections/{{ collection.id }}/items{% else %}/collections/{{ collection.id }}/items/{{ meal.id }}{% endif %}" class="edit-form">
+    <div class="field-label">Name</div>
+    <input type="text" name="name" value="{{ form.name }}" placeholder="e.g. Sunday roast chicken" class="input">
 
-    <div style="font:700 10.5px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin-top:16px;">Track</div>
-    <input type="hidden" name="type" id="meal-type" value="{{ form.type }}">
-    <button type="button" id="track-cycle" style="{{ track_style }}">{{ track_label }}</button>
+    <div class="field-label">Type</div>
+    <div class="segmented">
+      <label class="segment{% if form.type == 'lunch' %} segment--on{% endif %}">
+        <input type="radio" name="type" value="lunch" {% if form.type == 'lunch' %}checked{% endif %}>
+        Lunch
+      </label>
+      <label class="segment{% if form.type == 'dinner' %} segment--on{% endif %}">
+        <input type="radio" name="type" value="dinner" {% if form.type == 'dinner' %}checked{% endif %}>
+        Dinner
+      </label>
+      <label class="segment{% if form.type == 'both' %} segment--on{% endif %}">
+        <input type="radio" name="type" value="both" {% if form.type == 'both' %}checked{% endif %}>
+        Both
+      </label>
+    </div>
 
-    <div style="font:700 10.5px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin-top:16px;">Tags</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+    <div class="field-label">Tags</div>
+    <div class="chip-row">
       {% for tag in all_tags %}
-      <label class="tag-chip"
-             style="flex:none;border-radius:999px;padding:6px 12px;font:700 11px var(--dd-font-body);cursor:pointer;{% if tag.name in selected_tags %}background:var(--dd-primary);color:#fff;{% else %}background:oklch(0.94 0.01 260);color:oklch(0.5 0.02 260);{% endif %}">
-        <input type="checkbox" name="tags" value="{{ tag.name }}" {% if tag.name in selected_tags %}checked{% endif %} style="display:none;">
-        {{ tag.name }}
+      <label class="tag-chip{% if tag.name in selected_tags %} tag-chip--on{% endif %}">
+        <input type="checkbox" name="tags" value="{{ tag.name }}" {% if tag.name in selected_tags %}checked{% endif %}>
+        {{ tag.name }}<span class="tag-chip-x" aria-hidden="true">✕</span>
       </label>
       {% endfor %}
     </div>
 
-    <div style="font:700 10.5px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin-top:16px;">Ingredients (one per line)</div>
-    <textarea name="ingredients" rows="5" placeholder="e.g. 1 lb chicken thighs&#10;2 cups rice&#10;1 onion, diced"
-              style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:500 13px var(--dd-font-body);min-height:100px;resize:vertical;">{{ form.ingredients }}</textarea>
+    <div class="field-label">Ingredients (one per line)</div>
+    <textarea name="ingredients" rows="5" placeholder="e.g. 1 lb chicken thighs&#10;2 cups rice&#10;1 onion, diced" class="input textarea">{{ form.ingredients }}</textarea>
 
-    <div style="font:700 10.5px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin-top:16px;">Instructions</div>
-    <textarea name="instructions" rows="5" placeholder="The steps, the way we actually make it…"
-              style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:500 13px var(--dd-font-body);min-height:110px;resize:vertical;">{{ form.instructions }}</textarea>
+    <div class="field-label">Instructions</div>
+    <textarea name="instructions" rows="5" placeholder="The steps, the way we actually make it…" class="input textarea">{{ form.instructions }}</textarea>
 
-    <div style="font:700 10.5px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin-top:16px;">Original source (optional)</div>
-    <input type="text" name="source_url" value="{{ form.source_url }}" placeholder="https://… — where this was originally found"
-           style="width:100%;box-sizing:border-box;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
+    <div class="field-label">Original source (optional)</div>
+    <input type="text" name="source_url" value="{{ form.source_url }}" placeholder="https://… — where this was originally found" class="input">
 
-    <button type="submit" style="margin-top:18px;padding:14px 26px;border:none;border-radius:999px;background:var(--dd-primary);color:#fff;font:600 15px var(--dd-font-display);cursor:pointer;">Save meal</button>
+    <button type="submit" class="btn btn-primary btn-block" style="margin-top:20px;">Save meal</button>
   </form>
 
   {% if meal is not none %}
-  <div style="display:flex;gap:16px;margin-top:14px;">
-    <a href="/collections/{{ collection.id }}/items/{{ meal.id }}" style="border:none;background:none;color:oklch(0.5 0.12 140);font:700 12px var(--dd-font-body);cursor:pointer;">View recipe →</a>
-    <form method="post" action="/collections/{{ collection.id }}/items/{{ meal.id }}/{% if meal.archived_at %}unarchive{% else %}archive{% endif %}" style="margin:0;">
-      <button type="submit" style="border:none;background:none;color:var(--dd-text-muted);font:700 12px var(--dd-font-body);cursor:pointer;padding:0;">{% if meal.archived_at %}Restore meal{% else %}Archive meal{% endif %}</button>
+  <div class="edit-footer">
+    <a class="text-link" href="/collections/{{ collection.id }}/items/{{ meal.id }}">View recipe →</a>
+    <form method="post" action="/collections/{{ collection.id }}/items/{{ meal.id }}/{% if meal.archived_at %}unarchive{% else %}archive{% endif %}" class="inline-form">
+      <button type="submit" class="danger-text">{% if meal.archived_at %}Restore meal{% else %}Archive this meal{% endif %}</button>
     </form>
   </div>
   {% endif %}
@@ -58,30 +65,9 @@
 
 <script>
 (function () {
-  var TYPES = ['dinner', 'lunch', 'both'];
-  var LABELS = {dinner: 'Dinner', lunch: 'Lunch', both: 'Both'};
-  var HUES = {dinner: 25, lunch: 140, both: 300};
-  var input = document.getElementById('meal-type');
-  var btn = document.getElementById('track-cycle');
-  function paint(t) {
-    var hue = HUES[t];
-    btn.style.background = 'oklch(0.92 0.05 ' + hue + ')';
-    btn.style.color = 'oklch(0.4 0.1 ' + hue + ')';
-    btn.textContent = LABELS[t];
-  }
-  if (btn && input) {
-    btn.addEventListener('click', function () {
-      var next = TYPES[(TYPES.indexOf(input.value) + 1) % TYPES.length];
-      input.value = next;
-      paint(next);
-    });
-    paint(input.value);
-  }
   document.querySelectorAll('.tag-chip').forEach(function (label) {
     function paint() {
-      var on = label.querySelector('input').checked;
-      label.style.background = on ? 'oklch(0.7 0.16 300)' : 'oklch(0.94 0.01 260)';
-      label.style.color = on ? '#fff' : 'oklch(0.5 0.02 260)';
+      label.classList.toggle('tag-chip--on', label.querySelector('input').checked);
     }
     label.addEventListener('click', function (e) {
       e.preventDefault();

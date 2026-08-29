@@ -435,3 +435,32 @@ interface so Apple/others are later additions (Facebook ruled out); pure SSO, no
 recovery = manual ownership transfer, same escape hatch as before. Full spec in plan §4; new ROADMAP
 row M5a (lands pre-deployment, after M3 — voting doesn't touch auth). Three of the four M5 security
 blockers die with the password surface; join-by-code limiting survives.
+
+---
+
+## 2026-08-29 — M2d landed: Quiet Kitchen reskin
+
+Every existing screen restyled to the delivered design: `app.css` rewritten from scratch on the
+handoff's `--sp-*` tokens (light + OS dark), templates moved from inline-style walls to component
+classes, CSS wordmark + glyph, favicon/PWA icon, Hanken Grotesk / IBM Plex Mono. The reskin also
+retired the last `--dd-*` residue and the Python-side style generation in `library.py` (a sanctioned
+deviation from the templates-only freeze: the deleted functions existed solely to emit inline CSS —
+accepted, logged, and the leftover dead constants swept by the lead).
+
+Implementation: `deepseek-v4-flash`, one spec dispatch + three `--continue` rounds. Lead verification
+caught two real mobile-layout defects the implementer missed, both fixed by the lead in the browser
+against the live app: (1) `.shell` stayed flex-row under 900px, rendering the topbar beside the
+content instead of above it — the whole phone layout was broken until a one-line
+`flex-direction: column`; (2) the phone topbar wrapped into three ragged rows — now a single row
+(name indicator hidden on phone, nav scrollable). Visual pass covered signup, collections hub,
+library, recipe, light + dark, phone + desktop, against the design prototype.
+
+Oscar review (Sonnet): **ship**, clean on all priority probes (live renders of every route signed
+in/out, XSS payload probes through item/tag/group/display names + reflected params, end-to-end form
+POSTs with DB assertions, token coherence, orphaned-context sweep). Four nits, all dispositioned:
+dead `--sp-bp-desktop` token **fixed** (dropped — vanilla CSS can't consume it in @media);
+`--sp-host-tint` unused **kept deliberately** with a comment (M3 host screens use it, it's part of
+the design's token set); six spacing-only inline styles **rejected as a defect** (explicitly
+permitted by the spec); missing favicon test **fixed** (`test_favicon_served`); no focus-visible
+styling **fixed** (accent-colored `:focus-visible` rules, also replacing the browser default ring).
+Suite: **128 passed**, ruff clean.

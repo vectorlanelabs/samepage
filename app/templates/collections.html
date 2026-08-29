@@ -1,25 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Collections · Same Page{% endblock %}
 {% block content %}
-<div style="max-width:1200px;margin:0 auto;padding:32px 24px;">
-  <h1 style="font-family:var(--dd-font-display);font-weight:600;font-size:28px;margin:0 0 24px;color:var(--dd-text);">Collections</h1>
+<div class="page">
+  <h1 class="page-title">Collections</h1>
 
   {% if groups %}
     {% for g in groups %}
-    <div style="font:700 10.5px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin:24px 0 8px;">{{ g.name }}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+    <div class="group-heading">{{ g.name }}</div>
+    <div class="hub-grid">
       {% for c in g.collections %}
-      <a href="/collections/{{ c.id }}" style="text-decoration:none;">
-        <div style="background:var(--dd-card);border-radius:var(--dd-radius-card);box-shadow:var(--dd-shadow-card);padding:20px;transition:transform 0.2s ease,box-shadow 0.2s ease;cursor:pointer;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--dd-shadow-card-hover)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='var(--dd-shadow-card)'">
-          <h3 style="font-family:var(--dd-font-display);font-weight:600;font-size:16px;margin:0;color:var(--dd-text);">{{ c.name }}</h3>
-          <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:8px 0 0;">{{ c.active_count }} active items</p>
+      <a class="hub-card" href="/collections/{{ c.id }}">
+        <div>
+          <div class="hub-card-name">{{ c.name }}</div>
+          <div class="hub-card-meta">{{ c.active_count }} active items</div>
         </div>
+        <span class="hub-card-arrow" aria-hidden="true">›</span>
       </a>
       {% endfor %}
     </div>
     {% endfor %}
   {% else %}
-  <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);text-align:center;padding:48px 24px;">No collections yet — create a group and seed its library.</p>
+  <p class="empty-state">No meal collection yet — an admin needs to seed the library.</p>
   {% endif %}
 </div>
 {% endblock %}

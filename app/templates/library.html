@@ -1,88 +1,84 @@
 {% extends "base.html" %}
 {% block title %}Meal Library · Same Page{% endblock %}
 {% block content %}
-<style>
-@media (max-width: 899px) {
-  .lib-grid { grid-template-columns: 1fr !important; }
-}
-</style>
-<div style="background:var(--dd-card);border-radius:var(--dd-radius-card);padding:32px;box-shadow:var(--dd-shadow-card);">
-  <div style="display:flex;align-items:center;justify-content:space-between;">
-    <h1 style="font-family:var(--dd-font-display);font-weight:600;font-size:22px;margin:0;color:var(--dd-text);">Meal Library</h1>
-    <a href="/collections/{{ collection.id }}/items/new" style="padding:11px 18px;border:none;border-radius:999px;background:var(--dd-primary-soft);color:var(--dd-primary-strong);font:700 13px var(--dd-font-display);cursor:pointer;">+ Add a meal</a>
+<div class="page">
+  <div class="lib-header">
+    <div>
+      <a class="back-link" href="/collections">← Collections</a>
+      <h1 class="page-title">{{ collection.name }}</h1>
+      <div class="page-meta">{{ active_count }} active · {{ archived_count }} archived.</div>
+    </div>
+    <a class="floating-add" href="/collections/{{ collection.id }}/items/new">+ Add a meal</a>
   </div>
-  <p style="font:600 11.5px var(--dd-font-body);color:var(--dd-text-muted);margin:6px 0 0;">{{ active_count }} active · {{ archived_count }} archived.</p>
 
-  <div style="display:flex;gap:10px;margin-top:16px;align-items:flex-start;flex-wrap:wrap;">
-    <form method="get" action="/collections/{{ collection.id }}" style="flex:1 1 200px;min-width:160px;margin:0;display:flex;gap:8px;">
-      <input type="text" name="q" value="{{ q }}" placeholder="Search meals…"
-             style="flex:1;min-width:0;box-sizing:border-box;padding:10px 12px;border-radius:12px;border:1px solid oklch(0.88 0.01 260);font:600 13px var(--dd-font-body);">
+  <div class="lib-toolbar">
+    <form method="get" action="/collections/{{ collection.id }}" class="lib-search">
+      <input type="text" name="q" value="{{ q }}" placeholder="Search meals…" class="input">
       <input type="hidden" name="type" value="{{ type }}">
       <input type="hidden" name="tags" value="{{ tags }}">
       <input type="hidden" name="status" value="{{ status }}">
-      <button type="submit" style="border:none;border-radius:999px;padding:10px 16px;background:oklch(0.94 0.01 260);color:oklch(0.5 0.02 260);font:700 11.5px var(--dd-font-body);cursor:pointer;">Search</button>
+      <button type="submit" class="btn btn-secondary">Search</button>
     </form>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+    <div class="chip-row">
       {% for tf in type_filters %}
-      <form method="get" action="/collections/{{ collection.id }}" style="margin:0;">
+      <form method="get" action="/collections/{{ collection.id }}" class="chip-form">
         <input type="hidden" name="q" value="{{ q }}">
         <input type="hidden" name="tags" value="{{ tags }}">
         <input type="hidden" name="status" value="{{ status }}">
-        <button type="submit" name="type" value="{{ tf.value }}"
-                style="flex:1;border:none;border-radius:999px;padding:8px 14px;font:700 11.5px var(--dd-font-body);cursor:pointer;white-space:nowrap;{% if tf.active %}background:var(--dd-primary);color:#fff;{% else %}background:oklch(0.94 0.01 260);color:oklch(0.5 0.02 260);{% endif %}">{{ tf.label }}</button>
+        <button type="submit" name="type" value="{{ tf.value }}" class="chip{% if tf.active %} chip--on{% endif %}">{{ tf.label }}</button>
       </form>
       {% endfor %}
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+    <div class="chip-row">
       {% for sf in status_filters %}
-      <form method="get" action="/collections/{{ collection.id }}" style="margin:0;">
+      <form method="get" action="/collections/{{ collection.id }}" class="chip-form">
         <input type="hidden" name="q" value="{{ q }}">
         <input type="hidden" name="type" value="{{ type }}">
         <input type="hidden" name="tags" value="{{ tags }}">
-        <button type="submit" name="status" value="{{ sf.value }}"
-                style="flex:1;border:none;border-radius:999px;padding:8px 14px;font:700 11.5px var(--dd-font-body);cursor:pointer;white-space:nowrap;{% if sf.active %}background:var(--dd-primary);color:#fff;{% else %}background:oklch(0.94 0.01 260);color:oklch(0.5 0.02 260);{% endif %}">{{ sf.label }}</button>
+        <button type="submit" name="status" value="{{ sf.value }}" class="chip{% if sf.active %} chip--on{% endif %}">{{ sf.label }}</button>
       </form>
       {% endfor %}
     </div>
   </div>
 
-  <div style="font:700 10.5px var(--dd-font-body);letter-spacing:.04em;text-transform:uppercase;color:var(--dd-text-muted);margin-top:14px;">Tags</div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+  {% if tag_filters %}
+  <div class="field-label lib-tags-label">Tags</div>
+  <div class="chip-row">
     {% for tag in tag_filters %}
-    <a href="{{ tag.url }}"
-       style="flex:none;border-radius:999px;padding:6px 12px;font:700 11px var(--dd-font-body);cursor:pointer;{% if tag.selected %}background:var(--dd-primary);color:#fff;{% else %}background:oklch(0.94 0.01 260);color:oklch(0.5 0.02 260);{% endif %}">{{ tag.name }}</a>
+    <a href="{{ tag.url }}" class="chip{% if tag.selected %} chip--on{% endif %}">{{ tag.name }}</a>
     {% endfor %}
   </div>
+  {% endif %}
 
-  <div class="lib-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px;">
+  <div class="lib-grid">
   {% for m in meals %}
-    <div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;background:oklch(0.97 0.015 260);border-radius:16px;{% if m.archived %}opacity:.55;{% endif %}">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <a href="/collections/{{ collection.id }}/items/{{ m.id }}" style="font:700 14px var(--dd-font-body);color:var(--dd-text);flex:1;">{{ m.name }}</a>
-        <form method="post" action="/collections/{{ collection.id }}/items/{{ m.id }}/cycle-type" style="margin:0;">
-          <button type="submit" style="{{ m.type_style }}">{{ m.type_label }}</button>
+    <div class="meal-card{% if m.archived %} meal-card--archived{% endif %}">
+      <div class="meal-card-top">
+        <a href="/collections/{{ collection.id }}/items/{{ m.id }}" class="meal-card-name">{{ m.name }}</a>
+        <form method="post" action="/collections/{{ collection.id }}/items/{{ m.id }}/cycle-type" class="meal-type-form">
+          <button type="submit" class="chip">{{ m.type_label }}</button>
         </form>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <div class="meal-card-meta">
         {% for t in m.tags %}
-        <span style="font:700 9.5px var(--dd-font-body);color:oklch(0.5 0.02 260);background:#fff;border-radius:999px;padding:2px 8px;">{{ t }}</span>
+        <span class="chip">{{ t }}</span>
         {% endfor %}
         {% if m.kept_label %}
-        <span style="font:700 9.5px var(--dd-font-body);color:oklch(0.5 0.12 140);margin-left:auto;">{{ m.kept_label }}</span>
+        <span class="kept-count">{{ m.kept_label }}</span>
         {% endif %}
       </div>
-      <div style="display:flex;gap:12px;align-items:center;">
-        <a href="/collections/{{ collection.id }}/items/{{ m.id }}/edit" style="border:none;background:none;color:oklch(0.55 0.14 300);font:700 11px var(--dd-font-body);cursor:pointer;">Edit</a>
+      <div class="meal-card-actions">
+        <a class="text-link" href="/collections/{{ collection.id }}/items/{{ m.id }}/edit">Edit</a>
         {% if m.has_recipe %}
-        <a href="/collections/{{ collection.id }}/items/{{ m.id }}" style="border:none;background:none;color:oklch(0.5 0.12 140);font:700 11px var(--dd-font-body);cursor:pointer;">Recipe →</a>
+        <a class="text-link" href="/collections/{{ collection.id }}/items/{{ m.id }}">Recipe →</a>
         {% endif %}
-        <form method="post" action="/collections/{{ collection.id }}/items/{{ m.id }}/{% if m.archived %}unarchive{% else %}archive{% endif %}" style="margin:0 0 0 auto;">
-          <button type="submit" style="border:none;background:none;color:var(--dd-text-muted);font:700 11px var(--dd-font-body);cursor:pointer;padding:0;">{% if m.archived %}Restore{% else %}Archive{% endif %}</button>
+        <form method="post" action="/collections/{{ collection.id }}/items/{{ m.id }}/{% if m.archived %}unarchive{% else %}archive{% endif %}" class="meal-archive-form">
+          <button type="submit" class="danger-text">{% if m.archived %}Restore{% else %}Archive{% endif %}</button>
         </form>
       </div>
     </div>
   {% else %}
-    <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);margin:0;grid-column:1 / -1;">No meals match these filters.</p>
+    <p class="empty-state lib-empty">No meals match these filters.</p>
   {% endfor %}
   </div>
 </div>

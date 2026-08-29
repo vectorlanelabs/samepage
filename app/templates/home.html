@@ -2,27 +2,27 @@
 {% block title %}Home · Same Page{% endblock %}
 {% block content %}
 {% if account %}
-<section class="hero-card">
+<section class="card hero-card">
   <h1 class="hero-title">What's for dinner?</h1>
-  <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);margin:8px 0 0;">Voting isn't built yet — browse the meal library or manage your groups below.</p>
+  <p class="hero-sub">Voting isn't built yet — browse the meal library or manage your groups below.</p>
 </section>
 <section class="stat-grid">
   <a class="stat-card" href="/collections">
-    <div class="stat-label">📖 Meal Library</div>
+    <div class="stat-label">Meal Library</div>
     <div class="stat-count">{{ active_meal_count }} meals</div>
   </a>
   <a class="stat-card" href="/groups">
-    <div class="stat-label">👥 Groups</div>
+    <div class="stat-label">Groups</div>
     <div class="stat-count">{{ active_group_count }} groups</div>
   </a>
 </section>
 {% else %}
-<section class="hero-card">
+<section class="card hero-card hero-card--center">
   <h1 class="hero-title">Same Page</h1>
-  <p style="font:600 13px var(--dd-font-body);color:var(--dd-text-muted);margin:8px 0 0;">Sign in to see your groups and meal library.</p>
-  <div style="display:flex;gap:10px;margin-top:16px;">
-    <a class="pill" href="/login">Sign in →</a>
-    <a class="pill" href="/signup" style="background:var(--dd-primary-soft);color:var(--dd-primary-strong);">Sign up →</a>
+  <p class="hero-sub">Sign in to see your groups and meal library.</p>
+  <div class="hero-cta">
+    <a class="btn btn-primary" href="/login">Sign in</a>
+    <a class="btn btn-secondary" href="/signup">Sign up</a>
   </div>
 </section>
 {% endif %}
