@@ -241,17 +241,35 @@ def _get_session_by_code(db: Session, code: str) -> VotingSession | None:
     return db.scalar(select(VotingSession).where(VotingSession.code == code.strip().lower()))
 
 
-def _viewer_participant(request: Request, db: Session, session: VotingSession) -> SessionParticipant | None:
-    """The participant row the signed session cookie points at, IF it still
-    exists AND belongs to this session. A stale/foreign participant id is
-    treated as no participant at all (join page again)."""
+def _viewer_participant(
+    request: Request,
+    db: Session,
+    session: VotingSession,
+    account: Account | None,
+) -> SessionParticipant | None:
+    """The participant row this viewer belongs to, in priority order:
+
+    1. The signed session cookie's participant row, IF it still exists AND
+       belongs to this session. A stale/foreign participant id is treated as
+       no participant at all (join page again).
+    2. A signed-in account's own row in THIS session (HOTFIX3): the host is
+       auto-inserted at session creation, and any signed-in member's row
+       follows them across devices — the sign-in cookie alone is enough to
+       vote. The session cookie (1) keeps precedence when valid.
+    """
     participant_id = request.session.get("participant_id")
-    if participant_id is None:
-        return None
-    participant = db.get(SessionParticipant, participant_id)
-    if participant is None or participant.session_id != session.id:
-        return None
-    return participant
+    if participant_id is not None:
+        participant = db.get(SessionParticipant, participant_id)
+        if participant is not None and participant.session_id == session.id:
+            return participant
+    if account is not None:
+        return db.scalar(
+            select(SessionParticipant).where(
+                (SessionParticipant.session_id == session.id)
+                & (SessionParticipant.account_id == account.id)
+            )
+        )
+    return None
 
 
 def _roster_rows(
@@ -1004,6 +1022,19 @@ def create_session(
             )
         )
     db.commit()
+    # HOTFIX3: the host is a participant too. Auto-insert their row at
+    # creation so the roster starts at 1 ("1 person has joined" on the share
+    # screen) and the host gets voting cards after start — unanimity and the
+    # auto-close count are driven purely by roster membership, so the host's
+    # "yes" is required like anyone else's. The cookie marks them "you".
+    host_participant = SessionParticipant(
+        session_id=session.id,
+        account_id=account.id,
+        display_name=account.display_name,
+    )
+    db.add(host_participant)
+    db.commit()
+    request.session["participant_id"] = host_participant.id
     # M7 S4: the host lands on the share screen — the invite surface — right
     # after creating the session, then walks to the lobby.
     return RedirectResponse(f"/s/{session.code}/share", status_code=303)
@@ -1043,7 +1074,7 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
         _enforce_join_rate_limit(request)
         raise HTTPException(404, "Session not found")
     account = get_current_account(request, db)
-    participant = _viewer_participant(request, db, session)
+    participant = _viewer_participant(request, db, session, account)
     is_host = account is not None and account.id == session.host_account_id
     if participant is None and not is_host:
         # Stranger traffic stays limited; members/hosts skip it entirely.
@@ -1192,7 +1223,7 @@ def session_recipe_page(
         _enforce_join_rate_limit(request)
         raise HTTPException(404, "Session not found")
     account = get_current_account(request, db)
-    participant = _viewer_participant(request, db, session)
+    participant = _viewer_participant(request, db, session, account)
     is_host = account is not None and account.id == session.host_account_id
     if participant is None and not is_host:
         # Stranger traffic stays limited; members/hosts skip it entirely.
@@ -1369,6 +1400,19 @@ def join_session(
             request, "session_ended.html", {"session": session, "chrome": "session"}
         )
     account = get_current_account(request, db)
+    if account is not None:
+        # HOTFIX3: a signed-in account already at the table (the host's
+        # auto-row, or a re-POST from a member) rejoins as THEMSELVES — re-point
+        # the cookie at their existing row and move on, never a duplicate.
+        existing = db.scalar(
+            select(SessionParticipant).where(
+                (SessionParticipant.session_id == session.id)
+                & (SessionParticipant.account_id == account.id)
+            )
+        )
+        if existing is not None:
+            request.session["participant_id"] = existing.id
+            return RedirectResponse(f"/s/{session.code}", status_code=303)
     if session.status == "voting":
         # §5.6: no mid-batch joins — the roster denominator is frozen at batch
         # start. M3c opens the between-batches window; today it's a waiting state.
@@ -1424,7 +1468,7 @@ def roster_partial(request: Request, code: str, db: Annotated[Session, Depends(g
         # done state / host overview (HOTFIX: lobby polls never auto-advanced).
         return Response(status_code=200, headers={"HX-Refresh": "true"})
     account = get_current_account(request, db)
-    participant = _viewer_participant(request, db, session)
+    participant = _viewer_participant(request, db, session, account)
     viewer_participant_id = participant.id if participant is not None else None
     is_host = account is not None and account.id == session.host_account_id
     roster = _roster_rows(db, session, viewer_participant_id)
@@ -1480,7 +1524,7 @@ def start_voting(
         chosen = assemble_batch(eligible_ids, already_offered=set(), size=BATCH_SIZE)
         if not chosen:
             context = _lobby_context(
-                request, db, session, account, _viewer_participant(request, db, session)
+                request, db, session, account, _viewer_participant(request, db, session, account)
             )
             context["start_error"] = (
                 f"No items available for the {track} track — add items to this collection first."
@@ -1546,7 +1590,8 @@ def vote(
         # Stale tap on a finished/expired session → the current screen (the
         # completion/ended page) beats a JSON error.
         return RedirectResponse(f"/s/{session.code}", status_code=303)
-    participant = _viewer_participant(request, db, session)
+    account = get_current_account(request, db)
+    participant = _viewer_participant(request, db, session, account)
     if participant is None:
         raise HTTPException(403, "Join the session to vote")
     open_batch = _open_batch(db, session)

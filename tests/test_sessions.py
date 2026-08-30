@@ -662,7 +662,10 @@ def test_signed_out_join_flow(client, post, db_session):
     assert resp.headers["location"] == f"/s/{session.code}"
 
     participant = db_session.scalar(
-        select(SessionParticipant).where(SessionParticipant.session_id == session.id)
+        select(SessionParticipant).where(
+            (SessionParticipant.session_id == session.id)
+            & (SessionParticipant.account_id.is_(None))
+        )
     )
     assert participant is not None
     assert participant.account_id is None
@@ -3172,3 +3175,238 @@ def test_home_join_session_entry_signed_in(client, db_session):
     assert 'href="/sessions/new"' in resp.text
     assert "Join with a code" in resp.text
     assert 'href="/join"' in resp.text
+
+
+# ---------------------------------------------------------------------------
+# HOTFIX3: the host is a participant too
+# ---------------------------------------------------------------------------
+
+
+def _create_session_via_http(client, post, db_session, *, host_email="host@example.com", dinners="1"):
+    """POST /sessions as ``host_email`` and return (session, host). The host's
+    auto-inserted participant row and cookie are created server-side."""
+    host = _get_or_make_account(db_session, host_email, "Host")
+    group = _make_group(db_session, "Household", host.email)
+    collection = _make_collection(db_session, group.id, "Weeknight dinners")
+    _login(client, db_session, host.email)
+    resp = post(
+        "/sessions",
+        data={
+            "group_id": str(group.id),
+            "collection_id": str(collection.id),
+            "dinners": dinners,
+            "lunches": "0",
+            "picks": "3",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    session = db_session.scalar(select(VotingSession).order_by(VotingSession.id.desc()))
+    assert session is not None
+    return session, host, collection
+
+
+def test_create_session_auto_inserts_host_row_and_starts_share_count_at_one(
+    client, post, db_session
+):
+    """HOTFIX3: POST /sessions inserts the host's participant row and points
+    the cookie at it — the roster starts at 1 ('★ you, host') and the share
+    screen's joined count reads '1 person has joined' immediately."""
+    session, host, _collection = _create_session_via_http(
+        client, post, db_session, dinners="2"
+    )
+    rows = db_session.scalars(
+        select(SessionParticipant).where(SessionParticipant.session_id == session.id)
+    ).all()
+    assert len(rows) == 1
+    assert rows[0].account_id == host.id
+    assert rows[0].display_name == "Host"
+
+    # The host's lobby marks them at the table, 'you, host' (cookie + auto-row).
+    lobby = client.get(f"/s/{session.code}")
+    assert lobby.status_code == 200
+    assert "1 at the table" in lobby.text
+    assert "★ you, host" in lobby.text
+
+    # The share screen and its every-3s poll start at 1, not 'Nobody'.
+    share = client.get(f"/s/{session.code}/share")
+    assert share.status_code == 200
+    assert "1 person has joined" in share.text
+    assert client.get(f"/s/{session.code}/joined-count").text == "1 person has joined"
+
+
+def test_host_votes_on_fresh_device_via_account_fallback(client, post, db_session):
+    """HOTFIX3: the host's auto-row follows their sign-in across devices. With
+    only the account cookie (no participant cookie) the host still gets their
+    voting card, can vote, and reaches the done state with Close voting."""
+    session, host, _collection = _create_session_via_http(
+        client, post, db_session, dinners="2"
+    )
+    _make_item(db_session, _collection.id, "Apple", type="dinner")
+    _make_item(db_session, _collection.id, "Banana", type="dinner")
+
+    # Guests join signed-out (a signed-in host re-POSTing /join would re-point
+    # their auto-row instead of adding a guest).
+    client.cookies.clear()
+    for name in ("Sam", "Lee"):
+        resp = post(
+            f"/s/{session.code}/join", data={"display_name": name}, follow_redirects=False
+        )
+        assert resp.status_code == 303
+
+    # Host starts voting.
+    _login(client, db_session, host.email)
+    resp = post(f"/s/{session.code}/start", follow_redirects=False)
+    assert resp.status_code == 303
+    batch = _open_batch(db_session, session.id)
+    assert batch is not None
+    items = _batch_items(db_session, batch.id)
+    assert len(items) == 2
+
+    # Fresh device: only the sign-in cookie survives — no participant cookie.
+    client.cookies.clear()
+    _login(client, db_session, host.email)
+
+    # The account fallback gives the host their card and accepts their votes.
+    card = client.get(f"/s/{session.code}")
+    assert card.status_code == 200
+    assert "1 / 2" in card.text
+    for item, expected_next in ((items[0], "2 / 2"), (items[1], None)):
+        resp = post(
+            f"/s/{session.code}/vote",
+            data={"batch_item_id": str(item.id), "choice": "yes"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        if expected_next is not None:
+            assert expected_next in client.get(f"/s/{session.code}").text
+
+    # All items voted → the done state, with the host's Close voting action.
+    done = client.get(f"/s/{session.code}")
+    assert done.status_code == 200
+    assert "That's all two." in done.text
+    assert f'action="/s/{session.code}/close"' in done.text
+    assert "Close voting" in done.text
+    # Guests haven't answered: the poll shows the host finished 1 of 3.
+    assert "1 / 3" in done.text
+
+
+def test_join_is_idempotent_for_signed_in_accounts_already_in_roster(
+    client, post, db_session
+):
+    """HOTFIX3: a signed-in account already at the table — the host's auto-row
+    or a previous join — re-POSTing /join re-points the cookie and redirects,
+    never inserting a duplicate row."""
+    session, _host, _collection = _create_session_via_http(client, post, db_session)
+
+    # The host re-POSTs /join after creation: same row, straight to the session.
+    resp = post(
+        f"/s/{session.code}/join", data={"display_name": "Host"}, follow_redirects=False
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(SessionParticipant)
+            .where(SessionParticipant.session_id == session.id)
+        )
+        == 1
+    )
+
+    # A signed-in guest joins twice: one row, second POST redirects.
+    guest = _get_or_make_account(db_session, "sam@example.com", "Sam")
+    client.cookies.clear()  # drop the host's session cookie before switching
+    _login(client, db_session, guest.email)
+    for _ in range(2):
+        resp = post(
+            f"/s/{session.code}/join", data={"display_name": "Sam"}, follow_redirects=False
+        )
+        assert resp.status_code == 303
+        assert resp.headers["location"] == f"/s/{session.code}"
+    rows = db_session.scalars(
+        select(SessionParticipant)
+        .where(SessionParticipant.session_id == session.id)
+        .order_by(SessionParticipant.id)
+    ).all()
+    assert len(rows) == 2  # host + Sam, no duplicates
+    assert all(p.account_id is not None for p in rows)
+
+
+def test_unanimity_requires_host_yes_with_auto_row(client, post, db_session):
+    """HOTFIX3: the host's auto-row is in the frozen roster, so unanimity is
+    impossible without the host's yes — guests all-yes + host no on one item
+    rolls up as majority (outcome NULL, 'awaiting host'), while an item with
+    every yes including the host's is kept_unanimous."""
+    session, host, _collection = _create_session_via_http(
+        client, post, db_session, dinners="2"
+    )
+    _make_item(db_session, _collection.id, "Apple", type="dinner")
+    _make_item(db_session, _collection.id, "Banana", type="dinner")
+
+    # Guests join signed-out.
+    client.cookies.clear()
+    for name in ("Sam", "Lee"):
+        resp = post(
+            f"/s/{session.code}/join", data={"display_name": name}, follow_redirects=False
+        )
+        assert resp.status_code == 303
+
+    # Start voting.
+    _login(client, db_session, host.email)
+    resp = post(f"/s/{session.code}/start", follow_redirects=False)
+    assert resp.status_code == 303
+    batch = _open_batch(db_session, session.id)
+    assert batch is not None
+    items = _batch_items(db_session, batch.id)
+    assert len(items) == 2
+
+    host_row = db_session.scalar(
+        select(SessionParticipant).where(
+            (SessionParticipant.session_id == session.id)
+            & (SessionParticipant.account_id == host.id)
+        )
+    )
+    sam = db_session.scalar(
+        select(SessionParticipant).where(
+            (SessionParticipant.session_id == session.id)
+            & (SessionParticipant.display_name == "Sam")
+        )
+    )
+    lee = db_session.scalar(
+        select(SessionParticipant).where(
+            (SessionParticipant.session_id == session.id)
+            & (SessionParticipant.display_name == "Lee")
+        )
+    )
+    assert host_row is not None and sam is not None and lee is not None
+
+    # Guests vote yes on everything; the host (account fallback) votes NO on
+    # Apple and yes on Banana — the last vote auto-closes the batch.
+    for bi in items:
+        _cast(client, post, db_session, session, sam, bi.id, "yes")
+        _cast(client, post, db_session, session, lee, bi.id, "yes")
+    client.cookies.clear()
+    _login(client, db_session, host.email)
+    resp = post(
+        f"/s/{session.code}/vote",
+        data={"batch_item_id": str(items[0].id), "choice": "no"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    resp = post(
+        f"/s/{session.code}/vote",
+        data={"batch_item_id": str(items[1].id), "choice": "yes"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    db_session.expire_all()
+    assert batch.status == "closed"
+    by_id = {bi.id: bi for bi in _batch_items(db_session, batch.id)}
+    # Apple: yes=2 (Sam+Lee), no=1 (host) → majority, outcome stays NULL.
+    assert (by_id[items[0].id].yes_count, by_id[items[0].id].no_count) == (2, 1)
+    assert by_id[items[0].id].outcome is None
+    # Banana: all three yes → kept_unanimous.
+    assert (by_id[items[1].id].yes_count, by_id[items[1].id].no_count) == (3, 0)
+    assert by_id[items[1].id].outcome == "kept_unanimous"
