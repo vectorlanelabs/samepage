@@ -50,7 +50,7 @@ Budget: 14 cycles. Standing decision: breakfast/lunch/dinner multi-select tracks
 | S4 | Share screen: `/s/{code}/share` (host-only) — 40px mono code, Copy invite link, native Share, joined count, Go to the lobby; create redirects here (F4) | [x] aac5435 |
 | S5 | BUG: session-scoped recipe view for voters (participant/host of that session, item offered in that session); voting card links there (F5) | [x] 6181fff |
 | S6 | Voting screen: progress bar, context line (collection · group), centered card + bottom-pinned Yes/No (F6) | [x] 6181fff |
-| S7 | Results + complete: outcome color labels (accent/host/faint), persistent kept-by-host group, white majority card w/ violet label, quiet counts, End session early (danger), target-met copy, completion screen per artboard (F7, F11-complete) | [ ] |
+| S7 | Results + complete: outcome color labels (accent/host/faint), persistent kept-by-host group, white majority card w/ violet label, quiet counts, End session early (danger), target-met copy, completion screen per artboard (F7, F11-complete) | [x] d1b1f03 |
 | S8 | Join/lobby/waiting compositions: invite landing w/ session+group+chips, voter lobby centered + avatar chips, host lobby "N at the table" + lock caption + code pill, waiting ✓ + progress card (F11, F12-lobby) | [ ] |
 | S9 | Library phone: compact rows-in-card, actions off browse (archive stays in edit), one-line Type/Tags/Time filter row, edit-screen tags = applied-only + "+ tag" adder (F8-phone, F9) | [ ] |
 | S10 | Library desktop: sidebar w/ collections + pinned Host, table layout (name/type/tags/kept/last kept) + Sort + Clear (F8-desktop) | [ ] |

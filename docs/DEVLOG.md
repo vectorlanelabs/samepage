@@ -929,3 +929,18 @@ the `claude` CLI is not authed in this environment — noted for future cycles).
   privacy + poll exemption (verified by burning the limiter), invite_url Host-header
   independence, no-JS fallback. REQUESTS.md: confirm SP_BASE_URL in Coolify.
 - Tests 348 → 362, ruff clean. Not pushed.
+
+## 2026-08-29 — M7 cycle 4 (S7: results + completion) — d1b1f03
+
+- Shipped: outcome color grouping (accent/violet/faint), persistent kept-by-host group on
+  both views, quiet counts, computed titles/subtitles ("target met" replaces "3 of 2"),
+  "Start next batch · N to go", "End session early" danger text, completion screen per
+  artboard ("Dinner's sorted.", colored pills, secondary Done).
+- Review (sonnet) majors, both fixed: Keep/Pass had lost their 44px tap floor (measured
+  ~31px); voters had lost ALL pending-review visibility — restored as a count-only line
+  ("The host is reviewing N options."), a deliberate middle ground between the old
+  item-level breakdown and the artboard's silence. Minors fixed: 1-pick/1-option
+  pluralization, dead group_name query dropped, voter-view kept_host assertion added.
+  Verified clean: form contracts byte-identical, remaining_total arithmetic, ad-hoc
+  fallbacks, session-scoped completion aggregates, apostrophe escaping.
+- Tests 362 → 369, ruff clean. Not pushed.
