@@ -451,6 +451,44 @@ def test_library_hides_time_dropdown_without_time_tags(client, post, db_session)
     assert 'name="tags"' in resp.text
 
 
+def test_library_time_param_ignores_non_duration_values(client, post, db_session):
+    r"""A time param that does not match the time-tag shape (^\d+\s?min$) is
+    ignored server-side — it filters nothing, as if absent."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Sesame noodles", tags=["takeout"])
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}", params={"time": "Veggie"})
+    assert resp.status_code == 200
+    # "Veggie" is not a duration — no time filter applies, the item stays.
+    assert "Sesame noodles" in resp.text
+
+
+def test_cross_group_tag_names_do_not_leak_items(client, post, db_session):
+    """A tag name that exists only in another group's Tag rows — passed via
+    ?tags= or ?time= (a "40 min" name for the time case) — returns zero items
+    from this collection and 200: the tag filter stays collection-scoped."""
+    group_a = _make_group(db_session)
+    collection = _make_collection(db_session, group_a.id)
+    _make_item(db_session, collection.id, group_a.id, "Sesame noodles", tags=["takeout"])
+    group_b = _make_group(db_session)
+    collection_b = _make_collection(db_session, group_b.id)
+    _make_item(
+        db_session, collection_b.id, group_b.id, "Foreign meal", tags=["secret", "40 min"]
+    )
+    _login(client, db_session)
+    # ?tags= for a name that exists only in group B's rows.
+    resp = client.get(f"/collections/{collection.id}", params={"tags": "secret"})
+    assert resp.status_code == 200
+    assert "Sesame noodles" not in resp.text
+    assert "Foreign meal" not in resp.text
+    # ?time= for a duration tag that exists only in group B's rows.
+    resp = client.get(f"/collections/{collection.id}", params={"time": "40 min"})
+    assert resp.status_code == 200
+    assert "Sesame noodles" not in resp.text
+    assert "Foreign meal" not in resp.text
+
+
 def test_archived_hidden_by_default_visible_with_status(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
@@ -775,6 +813,36 @@ def test_edit_page_tag_chips_applied_and_adder(client, post, db_session):
     # No JS toggle script and no per-chip ✕ span (the ✕ is CSS-on-checked now).
     assert "document.querySelectorAll('.tag-chip')" not in resp.text
     assert "tag-chip-x" not in resp.text
+
+
+def test_edit_page_recipe_link_only_with_recipe_content(client, post, db_session):
+    """'View recipe →' renders only when the item actually has recipe content
+    (structured ingredients, instructions, or a source URL) — the same
+    definition the old library row used."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    plain = _make_item(db_session, collection.id, group.id, "Plain meal", tags=["takeout"])
+    with_ingredients = _make_item(
+        db_session, collection.id, group.id, "With ingredients", ingredients="chicken\nrice"
+    )
+    with_instructions = _make_item(
+        db_session, collection.id, group.id, "With instructions", recipe_text="Bake it."
+    )
+    with_source = _make_item(
+        db_session,
+        collection.id,
+        group.id,
+        "With source",
+        source_url="https://example.com/recipe",
+    )
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}/items/{plain.id}/edit")
+    assert resp.status_code == 200
+    assert "View recipe →" not in resp.text
+    for item in (with_ingredients, with_instructions, with_source):
+        resp = client.get(f"/collections/{collection.id}/items/{item.id}/edit")
+        assert resp.status_code == 200
+        assert "View recipe →" in resp.text
 
 
 def test_update_unchecking_a_tag_removes_it(client, post, db_session):

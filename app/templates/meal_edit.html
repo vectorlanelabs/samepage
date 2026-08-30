@@ -65,7 +65,9 @@
 
   {% if meal is not none %}
   <div class="edit-footer">
+    {% if has_recipe %}
     <a class="text-link" href="/collections/{{ collection.id }}/items/{{ meal.id }}">View recipe →</a>
+    {% endif %}
     <form method="post" action="/collections/{{ collection.id }}/items/{{ meal.id }}/{% if meal.archived_at %}unarchive{% else %}archive{% endif %}" class="inline-form">
       <button type="submit" class="danger-text">{% if meal.archived_at %}Restore meal{% else %}Archive this meal{% endif %}</button>
     </form>

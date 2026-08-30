@@ -997,8 +997,15 @@ button { font-family: var(--sp-font-sans); }
 /* The ✕ renders on checked chips only (pure CSS, no JS). */
 .tag-chip:has(input:checked)::after { content: " ✕"; }
 
-/* Applied chips disappear the moment they're unchecked (before submit). */
-.tag-applied .tag-chip:has(input:not(:checked)) { display: none; }
+/* Unchecking an applied chip must NOT hide it (display:none drops keyboard
+   focus to <body>) — it stays in the layout and tab order, reading as
+   "pending removal" until checked again. The ✕ is checked-only (::after on
+   :has(input:checked)), so it disappears on its own. */
+.tag-applied .tag-chip:has(input:not(:checked)) {
+  opacity: 0.5;
+  background: transparent;
+  border: 1px dashed var(--sp-border-strong);
+}
 
 /* "+ tag" adder: a dashed pill that reveals the remaining group tags. */
 .tag-adder { margin-top: 10px; }

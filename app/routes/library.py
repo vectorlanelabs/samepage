@@ -263,6 +263,14 @@ def _render_edit(
     applied = set(selected_tags)
     applied_tags = [t for t in all_tags if t.name in applied]
     other_tags = [t for t in all_tags if t.name not in applied]
+    # "View recipe →" renders only when the item actually has recipe content —
+    # the same definition the old library row used (ingredients, or a
+    # meal_detail carrying instructions/source). Persisted state, so a 400
+    # re-render doesn't flip it based on a half-submitted form.
+    ingredient_names = _item_ingredients(db, item.id) if item is not None else []
+    has_recipe = bool(ingredient_names) or bool(
+        detail is not None and (detail.source_url or detail.recipe_text)
+    )
     return templates.TemplateResponse(
         request,
         "meal_edit.html",
@@ -274,6 +282,7 @@ def _render_edit(
             "all_tags": all_tags,
             "applied_tags": applied_tags,
             "other_tags": other_tags,
+            "has_recipe": has_recipe,
             "meal_type_options": [
                 {"value": t, "label": MEAL_TYPE_LABELS[t], "checked": t in form["types"]}
                 for t in MEAL_TYPES
@@ -403,7 +412,13 @@ def library_page(
     status = status if status in ("active", "archived", "all") else "active"
     tag_names = [t.strip() for t in tags.split(",") if t.strip()]
     # The Time dropdown is one more tag filter — AND-ed with the Tags select.
-    time_names = [t.strip() for t in time.split(",") if t.strip()]
+    # Only values shaped like a duration (^\d+\s?min$, the same regex that
+    # splits the dropdown) are applied; anything else is ignored, as if absent.
+    time_names: list[str] = []
+    for part in time.split(","):
+        name = part.strip()
+        if name and TIME_TAG_RE.match(name):
+            time_names.append(name)
 
     stmt = select(Item).where(Item.collection_id == collection.id)
     if q:
