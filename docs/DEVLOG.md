@@ -978,3 +978,14 @@ the `claude` CLI is not authed in this environment — noted for future cycles).
   safe, now locked). Verified clean: filter AND semantics, malformed-input battery, adder
   submit-when-collapsed, archived toggle scoping.
 - Tests 372 → 379, ruff clean. Not pushed.
+
+## 2026-08-29 — M7 cycle 7 (S10: desktop library) — db5f799
+
+- Shipped: desktop table layout (dual markup, a11y-verified no duplicate announcements),
+  whitelisted Sort (SQLite nulls-last tested), tenant-scoped sidebar Collections nav +
+  pinned Host button, library-area-wide via shared include.
+- Review (sonnet): approve with caveats — cleanest slice of the run. Fixed: desktop cells
+  inherited the row-anchor accent color; sidebar nav extended from browse-only to
+  edit/recipe/report (lead scope decision). Verified clean: sort injection shape,
+  zero-group Host path, session chrome untouched, cross-tenant sidebar negatives.
+- Tests 379 → 389, ruff clean. Not pushed.
