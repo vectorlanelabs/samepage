@@ -1015,3 +1015,12 @@ the `claude` CLI is not authed in this environment — noted for future cycles).
 - M7 COMPLETE: 9 feature commits, tests 327 → 392, every slice independently verified and
   adversarially reviewed; one implementer process breach (cycle 6) caught and recorded.
   Branch quiet-kitchen-fidelity is NOT pushed — Charlie pushes (push = prod deploy).
+
+## 2026-08-29 — M7 shipped to production
+
+Charlie approved; main fast-forwarded to 12f94e0 and pushed. CI green (run 33288762353),
+Coolify redeployed. Production validated: new asset hash (9c187ecfba) live, landing/join/
+login serving the M7 compositions and lean copy (zero "no account" strings), session routes
+404-clean on bogus codes, dark tokens + PWA assets served. Signed-in flows are covered by
+the 392-test suite CI ran against this exact commit (prod sign-in is Google-only; no test
+account exists in prod by design).

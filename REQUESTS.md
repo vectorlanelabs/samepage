@@ -100,11 +100,12 @@ don't think I can go into chatgpt or claude and add an API like I can add an MCP
   tracks), but the handoff still shows Lunch/Dinner/Both and only Dinners/Lunches steppers. Non-blocking:
   M7 keeps breakfast and styles the controls per the design system; please refresh the artboards when
   convenient.
-- [ ] **M7 (design-fidelity) commits are parked on `quiet-kitchen-fidelity` — not pushed.** Pushing to
-  `main` auto-deploys prod, so the lead pauses before any push per Charlie's instruction. When you're
-  happy: merge/push yourself, or check this box and say the word.
+- [x] **M7 (design-fidelity) shipped.** Charlie gave the go 2026-08-29; fast-forwarded main to
+  12f94e0, CI green, Coolify deployed, production validated (new build hash 9c187ecfba, M7
+  surfaces + copy verified live).
 
-- [ ] **Confirm `SP_BASE_URL` is set in the Coolify production env.** The new share screen's
+- [x] **Confirm `SP_BASE_URL` is set in the Coolify production env.** Charlie confirmed 2026-08-29
+  ("the url is there"). The new share screen's
   "Copy invite link" (and, pre-existing, the Google OAuth callback) build absolute URLs from it;
   nothing in the repo proves it's configured. If OAuth works in prod it almost certainly is —
   30-second check. (Review note, M7 cycle 3.)
