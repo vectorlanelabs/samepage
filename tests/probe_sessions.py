@@ -118,9 +118,9 @@ def test_probe_participant_cookie_cross_session(client, post, db_session):
     page_b = client.get(f"/s/{session_b.code}")
     print("GET B with A's participant cookie -> status", page_b.status_code)
     print("  shows join form (name='display_name')?", 'name="display_name"' in page_b.text)
-    print("  shows lobby (Waiting room)?", "Waiting room" in page_b.text)
+    print("  shows lobby (Here so far)?", "Here so far" in page_b.text)
     assert 'name="display_name"' in page_b.text
-    assert "Waiting room" not in page_b.text
+    assert "Here so far" not in page_b.text
 
     # Host removes Pat from A, then Pat's browser (still holding stale participant_id) hits A again.
     _login(client, db_session, host.email)
@@ -178,7 +178,7 @@ def test_probe_stale_participant_id_after_removal(client, post, db_session):
     print("participant id", participant.id, "pat cookies", dict(pat.cookies))
 
     before = pat.get(f"/s/{session_a.code}")
-    print("pat sees lobby before removal:", "Waiting room" in before.text, before.status_code)
+    print("pat sees lobby before removal:", "Here so far" in before.text, before.status_code)
 
     # host removes Pat via the primary `client`
     rm = post(f"/s/{session_a.code}/participants/{participant.id}/remove", follow_redirects=False)

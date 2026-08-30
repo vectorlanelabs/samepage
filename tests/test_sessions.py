@@ -414,7 +414,7 @@ def test_create_session_happy_path_meal_collection(client, post, db_session):
     lobby = client.get(f"/s/{session.code}")
     assert lobby.status_code == 200
     assert "Weeknight dinners" in lobby.text
-    assert "Waiting room" in lobby.text
+    assert "at the table" in lobby.text
     assert "Start voting" in lobby.text
     assert session.code in lobby.text
     assert f'hx-get="/s/{session.code}/roster"' in lobby.text
@@ -653,9 +653,9 @@ def test_signed_out_join_flow(client, post, db_session):
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert session.code in page.text
-    assert 'class="sp-code"' in page.text
+    assert "You're invited to vote" in page.text
     assert 'name="display_name"' in page.text
-    assert "Waiting room" not in page.text
+    assert "Here so far" not in page.text
 
     resp = post(f"/s/{session.code}/join", data={"display_name": "  Sam  "}, follow_redirects=False)
     assert resp.status_code == 303
@@ -672,7 +672,7 @@ def test_signed_out_join_flow(client, post, db_session):
     lobby = client.get(f"/s/{session.code}")
     assert lobby.status_code == 200
     assert "Sam" in lobby.text
-    assert "Waiting for the host to start…" in lobby.text
+    assert "Waiting for the host to start" in lobby.text
     assert "Start voting" not in lobby.text
 
 
@@ -685,6 +685,42 @@ def test_join_blank_name_400(client, post, db_session):
     assert resp.status_code == 400
     assert "Display name is required." in resp.text
     assert _participant_count(db_session) == 0
+
+
+def test_join_blank_name_signed_in_rerenders_empty_input(client, post, db_session):
+    """Slice E fix: a signed-in account who POSTs a blank display name gets the
+    400 error re-render with the field EMPTY — posted_name takes precedence and
+    the account-name prefill is suppressed in the error branch."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Household", host.email)
+    session = _make_session(db_session, group.id, host.id)
+    viewer = _get_or_make_account(db_session, "viewer@example.com", "Viewer")
+    _login(client, db_session, viewer.email)
+
+    # The GET shows the account's name pre-filled…
+    page = client.get(f"/s/{session.code}")
+    assert 'value="Viewer"' in page.text
+
+    # …but a blank POST re-renders with value="" (no prefill fall-through).
+    resp = post(f"/s/{session.code}/join", data={"display_name": "   "})
+    assert resp.status_code == 400
+    assert "Display name is required." in resp.text
+    assert 'value=""' in resp.text
+    assert 'value="Viewer"' not in resp.text
+    assert _participant_count(db_session) == 0
+
+
+def test_join_sign_in_link_has_next_param(client, db_session):
+    """Slice E fix: the join screen's 'Sign in' link carries
+    ?next=/s/{code} so a signed-in account returns straight to the session."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Household", host.email)
+    session = _make_session(db_session, group.id, host.id)
+
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert f'href="/login?next=/s/{session.code}"' in page.text
+    assert "Sign in" in page.text
 
 
 def test_join_signed_in_prefills_name_but_override_wins(client, post, db_session):
@@ -710,21 +746,76 @@ def test_join_signed_in_prefills_name_but_override_wins(client, post, db_session
     assert participant.display_name == "Zoe"
 
     lobby = client.get(f"/s/{session.code}")
-    assert "Zoe" in lobby.text
-    assert "you" in lobby.text
+    # The joined viewer's own chip is labeled "You" (M7 S8), not their name.
+    assert "You" in lobby.text
+
+
+def test_join_lobby_copy_show_batch_preview(client, post, db_session):
+    """M7 S8: the invite landing shows collection-with-group + option chips,
+    the host lobby shows the lock caption with the first batch's count, and a
+    joined voter sees the 'You'll vote on…' line — all derived from the first
+    positive track's eligible items."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Household", host.email)
+    collection = _make_collection(db_session, group.id, "Weeknight dinners")
+    for name in ("Apple", "Banana", "Cherry"):
+        _make_item(db_session, collection.id, name, type="dinner")
+    session = _make_session(db_session, group.id, host.id, collection_id=collection.id)
+    db_session.add(SessionTarget(session_id=session.id, track_label="dinner", target_count=2))
+    db_session.commit()
+
+    # Stranger: invite landing with subject + the data-derived chip only —
+    # the artboard's fabricated "~5 minutes" estimate is gone for good.
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "You're invited to vote" in page.text
+    assert "Weeknight dinners with Household" in page.text
+    assert "3 options" in page.text
+    assert '<span class="chip chip--static">3 options</span>' in page.text
+    assert "~5 minutes" not in page.text
+    assert 'name="display_name"' in page.text
+
+    # Host: lobby title + lock caption referencing the same count.
+    _login(client, db_session, host.email)
+    lobby = client.get(f"/s/{session.code}")
+    assert lobby.status_code == 200
+    assert "0 at the table" in lobby.text
+    assert "Starting locks the roster. Batch 1 has 3 options." in lobby.text
+    assert "Start voting" in lobby.text
+
+    # Voter: waiting title + the preview line, self labeled "You".
+    client.cookies.clear()
+    post(f"/s/{session.code}/join", data={"display_name": "Sam"}, follow_redirects=False)
+    voter = client.get(f"/s/{session.code}")
+    assert voter.status_code == 200
+    assert "Waiting for the host to start" in voter.text
+    assert "You'll vote on 3 dinner options, one at a time." in voter.text
+    assert "Here so far" in voter.text
+    assert "1 person" in voter.text
+    assert "You" in voter.text
 
 
 def test_voting_session_join_is_waiting_state(client, post, db_session):
     """§5.6: no mid-vote joins — a visitor hitting a voting session sees the
-    waiting state, not a ballot; the join POST is refused (no row created)."""
+    waiting state, not a ballot; the '{n} options' chip is lobby-only, so it
+    does NOT render on the voting view; the join POST is refused (no row)."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
-    session = _make_session(db_session, group.id, host.id, status="voting")
+    collection = _make_collection(db_session, group.id, "Weeknight dinners")
+    _make_item(db_session, collection.id, "Apple", type="dinner")
+    _make_item(db_session, collection.id, "Banana", type="dinner")
+    session = _make_session(
+        db_session, group.id, host.id, status="voting", collection_id=collection.id
+    )
+    db_session.add(SessionTarget(session_id=session.id, track_label="dinner", target_count=1))
+    db_session.commit()
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Voting has already started — ask the host." in page.text
     assert 'name="display_name"' not in page.text
+    assert '<span class="chip chip--static">' not in page.text
+    assert "2 options" not in page.text
 
     resp = post(f"/s/{session.code}/join", data={"display_name": "Sam"})
     assert resp.status_code == 200
@@ -899,7 +990,7 @@ def test_roster_partial_remove_buttons_only_for_host(client, db_session):
     assert resp.status_code == 200
     assert "Sam" in resp.text
     assert "Host Person" in resp.text
-    assert "2 joined" in resp.text
+    assert "2 people" in resp.text
     assert "Remove" not in resp.text
     assert "host" in resp.text
 
@@ -1550,11 +1641,17 @@ def test_voting_done_and_finished_counts(client, post, db_session):
     # Sam has voted on everything; Lee (roster 2) hasn't voted at all.
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "All your votes are in." in page.text
-    assert "1/2 finished." in page.text
+    assert "That's all two." in page.text
+    assert "Voters finished" in page.text
+    assert "1 of 2" in page.text
+    assert 'class="waiting-progress-track"' in page.text
+    assert 'class="waiting-progress-fill"' in page.text
+    assert "width: 50.0%" in page.text
     status = client.get(f"/s/{session.code}/voting-status")
     assert status.status_code == 200
-    assert "1/2 finished." in status.text
+    assert "Voters finished" in status.text
+    assert "1 of 2" in status.text
+    assert "width: 50.0%" in status.text
 
     # Lee votes on everything → finished == roster.
     _stamp_participant(client, lee.id)
@@ -1567,7 +1664,9 @@ def test_voting_done_and_finished_counts(client, post, db_session):
         assert resp.status_code == 303
     status = client.get(f"/s/{session.code}/voting-status")
     assert status.status_code == 200
-    assert "2/2 finished." in status.text
+    assert "Voters finished" in status.text
+    assert "2 of 2" in status.text
+    assert "width: 100.0%" in status.text
 
 
 def test_host_overview_when_not_joined(client, post, db_session):
@@ -1587,7 +1686,9 @@ def test_host_overview_when_not_joined(client, post, db_session):
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "0/1 finished voting." in page.text
+    assert "Voters finished" in page.text
+    assert "0 of 1" in page.text
+    assert "width: 0.0%" in page.text
     assert f'hx-get="/s/{session.code}/voting-status"' in page.text
     assert "Option 1 of" not in page.text
     assert "All your votes are in." not in page.text

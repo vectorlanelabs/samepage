@@ -1,21 +1,53 @@
-{% if participants %}
-<p class="page-meta" style="margin-top:0;">Waiting room · {{ participant_count }} joined</p>
-<ul style="list-style:none;margin:0;padding:0;">
-  {% for p in participants %}
-  <li style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--sp-hairline);">
-    <span>
-      {{ p.display_name }}
-      {% if p.is_you %}<span class="chip">you</span>{% endif %}
-      {% if p.is_host_row %}<span class="chip">host</span>{% endif %}
-    </span>
-    {% if is_host and not p.is_host_row %}
-    <form class="inline-form" method="post" action="/s/{{ session.code }}/participants/{{ p.id }}/remove">
-      <button type="submit" class="danger-text">Remove</button>
-    </form>
-    {% endif %}
-  </li>
-  {% endfor %}
-</ul>
+{# Roster partial (M7 S8), polled via htmx every 2s. Two compositions:
+   - host view: "N at the table" title + rows (avatar, name, ★ host / you,
+     Remove as danger text) — the title lives here so it updates as people join;
+   - voter view: "Here so far / N people" card of small inline pills (22px
+     avatar + name; host pill avatar tinted --sp-host, viewer's own pill
+     tinted --sp-accent-tint).
+   Aggregates only — names are public roster data, never vote data. #}
+{% if is_host %}
+<h1 class="lobby-title">{{ participant_count }} at the table</h1>
+<div class="card roster-card">
+  {% if participants %}
+  <ul class="roster-list">
+    {% for p in participants %}
+    <li class="roster-row">
+      <span class="member-avatar roster-avatar" aria-hidden="true">{{ p.display_name[:1]|upper }}</span>
+      <span class="roster-name">
+        {{ p.display_name }}
+        {% if p.is_host_row and p.is_you %}<span class="chip chip--host roster-badge">★ you, host</span>
+        {% elif p.is_host_row %}<span class="chip chip--host roster-badge">★ host</span>
+        {% elif p.is_you %}<span class="chip roster-badge">you</span>{% endif %}
+      </span>
+      {% if is_host and not p.is_host_row %}
+      <form class="inline-form" method="post" action="/s/{{ session.code }}/participants/{{ p.id }}/remove">
+        <button type="submit" class="danger-text">Remove</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-state">Nobody has joined yet — share the code above.</p>
+  {% endif %}
+</div>
 {% else %}
-<p class="empty-state">Nobody has joined yet — share the code above.</p>
+<div class="card here-card">
+  <div class="here-head">
+    <span class="here-label">Here so far</span>
+    <span class="here-count">{{ participant_count }} {{ "person" if participant_count == 1 else "people" }}</span>
+  </div>
+  {% if participants %}
+  <ul class="here-chips">
+    {% for p in participants %}
+    <li class="here-chip{% if p.is_you %} here-chip--you{% endif %}{% if p.is_host_row %} here-chip--host{% endif %}">
+      <span class="here-avatar" aria-hidden="true">{{ p.display_name[:1]|upper }}</span>
+      <span class="here-chip-name">{{ "You" if p.is_you else p.display_name }}{% if p.is_host_row %} · host{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-state">Nobody has joined yet — share the code above.</p>
+  {% endif %}
+</div>
 {% endif %}

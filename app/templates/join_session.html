@@ -6,27 +6,33 @@
   Same Page
 </div>
 <div class="page page--narrow">
-  <h1 class="page-title">Join session</h1>
-  <p class="page-meta">Code: <span class="sp-code">{{ session.code }}</span></p>
+  <h1 class="join-title">You're invited to vote</h1>
+  <p class="join-subject">{{ collection_name }}{% if group_name %} with {{ group_name }}{% endif %}</p>
+
+  {% if session.status == 'lobby' and first_batch_count_label %}
+  <div class="chip-row join-chips">
+    <span class="chip chip--static">{{ first_batch_count_label }}</span>
+  </div>
+  {% endif %}
 
   {% if session.status == 'voting' %}
-  <section class="card" style="padding:20px;margin-top:20px;">
+  <section class="card" style="padding:20px;margin-top:24px;">
     <p class="empty-state">Voting has already started — ask the host.</p>
   </section>
   {% else %}
   {% if error %}
   <p class="form-error">{{ error }}</p>
   {% endif %}
-  <section class="card" style="padding:20px;margin-top:20px;">
+  <section class="card" style="padding:22px 20px;margin-top:24px;">
     <form method="post" action="/s/{{ session.code }}/join">
       <div class="field-label">Your name</div>
-      <input type="text" name="display_name" value="{{ posted_name or prefill_name }}" class="input"
+      <input type="text" name="display_name" value="{{ posted_name if error else (posted_name or prefill_name) }}" class="input"
              placeholder="e.g. Sam" maxlength="80" required autofocus>
-      {% if prefill_name %}
-      <p class="page-meta">Signed in as {{ prefill_name }} — you can join as someone else if you like.</p>
-      {% endif %}
-      <button type="submit" class="btn btn-primary" style="margin-top:14px;">Join</button>
+      <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Join the session</button>
     </form>
+    {% if not prefill_name %}
+    <p class="join-account">Have an account? <a class="text-link" href="/login?next=/s/{{ session.code }}">Sign in</a></p>
+    {% endif %}
   </section>
   {% endif %}
 </div>

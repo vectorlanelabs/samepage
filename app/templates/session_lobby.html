@@ -2,8 +2,10 @@
 {% block title %}{{ session.code }} · Same Page{% endblock %}
 {% block content %}
 <div class="page page--narrow">
-  <h1 class="page-title">{{ collection_name }}</h1>
-  <p class="page-meta">Session code: <span class="sp-code">{{ session.code }}</span></p>
+  <div class="vote-head lobby-head">
+    <span class="vote-context">{{ collection_name }}{% if group_name %} · {{ group_name }}{% endif %}</span>
+    <span class="sp-code">{{ session.code }}</span>
+  </div>
 
   {% if start_error %}
   <p class="form-error">{{ start_error }}</p>
@@ -16,43 +18,41 @@
   {% elif session.status == 'voting' %}
   <section class="card" style="padding:20px;margin-top:20px;">
     <h2 class="section-title">Voting in progress</h2>
-    <p class="page-meta"><span hx-get="/s/{{ session.code }}/voting-status" hx-trigger="every 2s" hx-swap="innerHTML">{{ finished }}/{{ roster }} finished voting.</span></p>
+    <div class="waiting-progress" hx-get="/s/{{ session.code }}/voting-status" hx-trigger="every 2s" hx-swap="innerHTML">
+      {% include "_voting_status.html" %}
+    </div>
     {% if has_open_batch %}
     <form method="post" action="/s/{{ session.code }}/close" style="margin-top:16px;">
       <button type="submit" class="btn btn-secondary btn-block">Close voting</button>
     </form>
     {% endif %}
   </section>
-  {% endif %}
-
-  {% if is_host and session.status == 'lobby' %}
-  <section class="card" style="padding:20px;margin-top:20px;">
-    <h2 class="section-title">Waiting room</h2>
-    <p class="page-meta">Share this code with your group — no account needed to join.</p>
+  {% elif is_host %}
+  <section>
     <div hx-get="/s/{{ session.code }}/roster" hx-trigger="every 2s" hx-swap="innerHTML">
       {% include "_roster.html" %}
     </div>
+    <p class="lobby-invite-link"><a class="text-link" href="/s/{{ session.code }}/share">Show invite code</a></p>
+    {% if first_batch_count_label %}
+    <p class="lobby-lock-caption">Starting locks the roster. Batch 1 has {{ first_batch_count_label }}.</p>
+    {% endif %}
     <form method="post" action="/s/{{ session.code }}/start" style="margin-top:20px;">
-      <button type="submit" class="btn btn-primary btn-block">Start voting</button>
+      <button type="submit" class="btn btn-ink btn-block">Start voting</button>
     </form>
   </section>
-  {% elif is_host %}
-  <section class="card" style="padding:20px;margin-top:20px;">
-    <h2 class="section-title">Waiting room</h2>
-    <div hx-get="/s/{{ session.code }}/roster" hx-trigger="every 2s" hx-swap="innerHTML">
-      {% include "_roster.html" %}
-    </div>
-  </section>
   {% elif session.status == 'lobby' %}
-  <section class="card" style="padding:20px;margin-top:20px;">
-    <h2 class="section-title">Waiting room</h2>
-    <p class="page-meta">Waiting for the host to start…</p>
-    <div hx-get="/s/{{ session.code }}/roster" hx-trigger="every 2s" hx-swap="innerHTML">
-      {% include "_roster.html" %}
-    </div>
+  <section class="lobby-waiting">
+    <span class="lobby-waiting-dot" aria-hidden="true"></span>
+    <h1 class="lobby-title">Waiting for the host to start</h1>
+    {% if first_batch_options %}
+    <p class="lobby-subtitle">You'll vote on {{ first_batch_options }}, one at a time.</p>
+    {% endif %}
   </section>
+  <div hx-get="/s/{{ session.code }}/roster" hx-trigger="every 2s" hx-swap="innerHTML" style="margin-top:18px;">
+    {% include "_roster.html" %}
+  </div>
   {% else %}
-  <section class="card" style="padding:20px;margin-top:20px;">
+  <section>
     <div hx-get="/s/{{ session.code }}/roster" hx-trigger="every 2s" hx-swap="innerHTML">
       {% include "_roster.html" %}
     </div>

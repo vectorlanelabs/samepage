@@ -2,11 +2,18 @@
 {% block title %}{{ session.code }} · Same Page{% endblock %}
 {% block content %}
 <div class="page page--narrow">
-  <h1 class="page-title">All your votes are in.</h1>
-  <section class="card" style="padding:20px;margin-top:20px;">
-    <p class="page-meta">Waiting for others — <span hx-get="/s/{{ session.code }}/voting-status" hx-trigger="every 2s" hx-swap="innerHTML">{{ finished }}/{{ roster }} finished.</span></p>
-    {% if is_host and has_open_batch %}
-    <form method="post" action="/s/{{ session.code }}/close" style="margin-top:16px;">
+  <div class="vote-head">
+    <span class="vote-context">{{ collection_name }} · Batch {{ batch_seq }}</span>
+  </div>
+  <section class="card waiting-card">
+    <p class="waiting-count">{{ total }} of {{ total }}</p>
+    <span class="waiting-check" aria-hidden="true">✓</span>
+    <h1 class="waiting-title">That's all {{ total_word }}.</h1>
+    <p class="waiting-sub">Results appear the moment everyone's done.</p>
+    <div class="waiting-progress" hx-get="/s/{{ session.code }}/voting-status" hx-trigger="every 2s" hx-swap="innerHTML">
+      {% include "_voting_status.html" %}
+    </div>
+    {% if is_host and has_open_batch %}    <form method="post" action="/s/{{ session.code }}/close" style="margin-top:16px;">
       <button type="submit" class="btn btn-secondary btn-block">Close voting</button>
     </form>
     {% endif %}

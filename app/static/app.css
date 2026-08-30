@@ -1851,8 +1851,6 @@ button { font-family: var(--sp-font-sans); }
   font-size: 13px;
   font-weight: 600;
   color: var(--sp-sub);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   margin: 14px 0 2px;
 }
 
@@ -1886,4 +1884,305 @@ button { font-family: var(--sp-font-sans); }
 .complete-pill--host {
   color: var(--sp-host);
   background: var(--sp-host-tint);
+}
+
+/* ---------- Join landing + lobbies + waiting (M7 S8) ---------- */
+
+/* Join screen hero: invite title, collection-with-group subject, chips. */
+.join-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  line-height: 1.2;
+  color: var(--sp-ink);
+  text-align: center;
+  margin: 22px 0 0;
+}
+
+.join-subject {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  text-align: center;
+  margin: 8px 0 0;
+}
+
+.join-chips {
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.join-account {
+  font-size: 13px;
+  color: var(--sp-sub);
+  text-align: center;
+  margin: 18px 0 2px;
+}
+
+/* Host-only badge chip (★ host / ★ you, host in the lobby rows). */
+.chip--host {
+  background: var(--sp-host-tint);
+  color: var(--sp-host);
+}
+
+/* Lobby context row (collection · group + code pill). */
+.lobby-head { margin-bottom: 18px; }
+
+.lobby-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--sp-ink);
+  margin: 0;
+}
+
+.lobby-subtitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 8px 0 0;
+}
+
+/* Voter lobby waiting block: accent dot, then centered title + sub line. */
+.lobby-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-top: 12px;
+}
+
+.lobby-waiting-dot {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--sp-accent);
+  opacity: 0.85;
+  margin-bottom: 14px;
+}
+
+.lobby-lock-caption {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 18px 0 0;
+}
+
+/* Quiet 'Show invite code' text link under the host's roster card. */
+.lobby-invite-link {
+  margin: 14px 0 0;
+}
+
+/* Host roster rows ("N at the table"). */
+.roster-card {
+  margin-top: 16px;
+  padding: 4px 20px 8px;
+}
+
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.roster-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--sp-hairline);
+}
+
+.roster-row:last-child { border-bottom: none; }
+
+.roster-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+
+.roster-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.roster-badge {
+  min-height: 22px;
+  padding: 3px 9px;
+  font-size: 11px;
+}
+
+/* Voter "Here so far" card — small inline pills, count-only. */
+.here-card {
+  margin-top: 16px;
+  padding: 16px 20px 18px;
+}
+
+.here-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.here-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sp-sub);
+}
+
+.here-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.here-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.here-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  background: var(--sp-chip-bg);
+  padding: 6px 13px 6px 7px;
+}
+
+.here-avatar {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--sp-avatar);
+  color: var(--sp-chip-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.here-chip-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sp-ink);
+  white-space: nowrap;
+}
+
+.here-chip--you {
+  background: var(--sp-accent-tint);
+}
+
+.here-chip--you .here-avatar {
+  background: var(--sp-accent);
+  color: #fff;
+}
+
+.here-chip--host .here-avatar {
+  background: var(--sp-host);
+  color: #fff;
+}
+
+/* Waiting state (voting_done): count, big ✓, title, voters progress. */
+.waiting-card {
+  margin-top: 20px;
+  padding: 30px 22px 26px;
+  text-align: center;
+}
+
+.waiting-count {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sp-sub);
+  margin: 0;
+}
+
+.waiting-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: var(--sp-accent-tint);
+  color: var(--sp-accent);
+  font-size: 28px;
+  font-weight: 700;
+  margin: 16px 0 4px;
+}
+
+.waiting-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--sp-ink);
+  margin: 0;
+}
+
+.waiting-sub {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 10px 0 0;
+}
+
+.waiting-progress {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 24px 0 2px;
+}
+
+/* Voters-finished progress bar (polled via _voting_status.html): label row +
+   6px chip track with an accent fill. */
+.waiting-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.waiting-progress-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.waiting-progress-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sp-accent);
+}
+
+.waiting-progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--sp-chip-bg);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.waiting-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--sp-accent);
+  transition: width 0.4s ease;
 }

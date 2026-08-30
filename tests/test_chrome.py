@@ -270,7 +270,7 @@ def test_lobby_page_renders_session_chrome(client, db_session):
     assert resp.status_code == 200
     body = resp.text
     _assert_session_chrome(body)
-    assert "Waiting room" in body
+    assert "at the table" in body
     assert "Start voting" in body
 
 

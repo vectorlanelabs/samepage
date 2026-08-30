@@ -273,6 +273,62 @@ def _roster_rows(
     ]
 
 
+# Small-number words for the waiting state's "That's all fifteen." line (the
+# artboard's own wording — batches cap at BATCH_SIZE = 15). Falls back to the
+# numeral for anything outside the map.
+_SMALL_NUMBER_WORDS = {
+    1: "one",
+    2: "two",
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+    7: "seven",
+    8: "eight",
+    9: "nine",
+    10: "ten",
+    11: "eleven",
+    12: "twelve",
+    13: "thirteen",
+    14: "fourteen",
+    15: "fifteen",
+}
+
+
+def _number_words(n: int) -> str:
+    return _SMALL_NUMBER_WORDS.get(n, str(n))
+
+
+def _count_label(count: int) -> str:
+    """'15 options' / '1 option'."""
+    return f"{count} option" if count == 1 else f"{count} options"
+
+
+def _track_options_label(track_label: str, count: int) -> str:
+    """'15 dinner options' for meal tracks, '15 options' for any other label
+    (with singular handling). Used by the voter lobby's 'You'll vote on…' line."""
+    if track_label in _MEAL_TRACK_ORDER:
+        return f"{count} {track_label} option" if count == 1 else f"{count} {track_label} options"
+    return _count_label(count)
+
+
+def _first_batch_preview(db: Session, session: VotingSession) -> tuple[str, int] | None:
+    """(track_label, item_count) for the batch 'start voting' would assemble —
+    the first positive track's eligible items capped at BATCH_SIZE. None for
+    ad hoc sessions (options entry is deferred) or when nothing is eligible.
+    Feeds the join screen's '15 options' chips, the voter lobby's 'You'll vote
+    on…' line, and the host lobby's 'Batch 1 has N options' caption."""
+    if session.collection_id is None:
+        return None
+    track = _first_track(db, session)
+    if track is None:
+        return None
+    eligible = _eligible_item_ids(db, session, track)
+    if not eligible:
+        return None
+    return track, min(len(eligible), BATCH_SIZE)
+
+
 def _lobby_context(
     request: Request,
     db: Session,
@@ -281,17 +337,50 @@ def _lobby_context(
     participant: SessionParticipant | None,
 ) -> dict:
     collection = db.get(Collection, session.collection_id) if session.collection_id else None
+    group = db.get(Group, session.group_id)
     is_host = account is not None and account.id == session.host_account_id
     viewer_participant_id = participant.id if participant is not None else None
     roster = _roster_rows(db, session, viewer_participant_id)
-    return {
+    preview = _first_batch_preview(db, session)
+    context = {
         "session": session,
         "collection_name": collection.name if collection else "Ad hoc session",
+        "group_name": group.name if group else "",
         "participants": roster,
         "participant_count": len(roster),
         "is_host": is_host,
         "chrome": "session",
     }
+    if preview:
+        context["first_batch_count_label"] = _count_label(preview[1])
+        context["first_batch_options"] = _track_options_label(preview[0], preview[1])
+    return context
+
+
+def _join_context(
+    request: Request,
+    db: Session,
+    session: VotingSession,
+    account: Account | None,
+) -> dict:
+    """Context for the stranger-facing join landing (M7 S8): the artboard's
+    emotional beat — brand, 'You're invited to vote', collection with group,
+    real '{n} options' chip, name field, 'Join the session'."""
+    collection = db.get(Collection, session.collection_id) if session.collection_id else None
+    group = db.get(Group, session.group_id)
+    preview = _first_batch_preview(db, session)
+    context = {
+        "session": session,
+        "collection_name": collection.name if collection else "Ad hoc session",
+        "group_name": group.name if group else "",
+        "prefill_name": account.display_name if account else "",
+        "posted_name": "",
+        "error": None,
+        "chrome": "session",
+    }
+    if preview:
+        context["first_batch_count_label"] = _count_label(preview[1])
+    return context
 
 
 # --- Batch + voting helpers (M3c) -------------------------------------------
@@ -971,13 +1060,7 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
         return templates.TemplateResponse(
             request,
             "join_session.html",
-            {
-                "session": session,
-                "prefill_name": account.display_name if account else "",
-                "posted_name": "",
-                "error": None,
-                "chrome": "session",
-            },
+            _join_context(request, db, session, account),
         )
 
     if session.status == "lobby":
@@ -1038,6 +1121,12 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
                 },
             )
         finished, roster = _voting_progress_counts(db, session)
+        collection = (
+            db.get(Collection, session.collection_id)
+            if session.collection_id is not None
+            else None
+        )
+        open_batch_items = _batch_items(db, open_batch) if open_batch is not None else []
         return templates.TemplateResponse(
             request,
             "voting_done.html",
@@ -1047,6 +1136,10 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
                 "roster": roster,
                 "is_host": is_host,
                 "has_open_batch": open_batch is not None,
+                "collection_name": collection.name if collection else "Ad hoc session",
+                "batch_seq": open_batch.seq if open_batch is not None else None,
+                "total": len(open_batch_items),
+                "total_word": _number_words(len(open_batch_items)),
                 "chrome": "session",
             },
         )
@@ -1274,37 +1367,28 @@ def join_session(
         return templates.TemplateResponse(
             request, "session_ended.html", {"session": session, "chrome": "session"}
         )
+    account = get_current_account(request, db)
     if session.status == "voting":
         # §5.6: no mid-batch joins — the roster denominator is frozen at batch
         # start. M3c opens the between-batches window; today it's a waiting state.
         return templates.TemplateResponse(
             request,
             "join_session.html",
-            {
-                "session": session,
-                "prefill_name": "",
-                "posted_name": "",
-                "error": None,
-                "chrome": "session",
-            },
+            _join_context(request, db, session, account),
         )
 
     display_name = display_name.strip()
     if not display_name:
+        context = _join_context(request, db, session, account)
+        context["posted_name"] = display_name
+        context["error"] = "Display name is required."
         return templates.TemplateResponse(
             request,
             "join_session.html",
-            {
-                "session": session,
-                "prefill_name": "",
-                "posted_name": display_name,
-                "error": "Display name is required.",
-                "chrome": "session",
-            },
+            context,
             status_code=400,
         )
 
-    account = get_current_account(request, db)
     participant = SessionParticipant(
         session_id=session.id,
         account_id=account.id if account else None,
@@ -1704,7 +1788,7 @@ def voting_status_partial(
     request: Request, code: str, db: Annotated[Session, Depends(get_db)]
 ):
     """htmx poll target for the done/host views: ONLY the _voting_status.html
-    partial ("{finished}/{roster} finished."). Public, like the roster poll."""
+    partial ("Voters finished {finished} of {roster}"). Public, like the roster poll."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
