@@ -1,7 +1,7 @@
 """Model round-trip + integrity constraints for every table in PLAN-v2-samepage.md §5."""
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.models import (
@@ -485,3 +485,36 @@ def test_batch_item_partial_unique_index_rejects_duplicate_adhoc_label(db_sessio
         db_session.add(BatchItem(batch_id=chain["batch"].id, ad_hoc_label="Pizza place"))
         db_session.commit()
     db_session.rollback()
+
+
+def test_session_participant_pk_autoincrement_never_reuses_ids(db_session):
+    """HOTFIX4: session_participant's PK is AUTOINCREMENT — an id freed by
+    §5.5 finish-deletes is never handed out again, so a stale cookie from a
+    finished session can never silently become a new session's participant
+    (the rowid-alias INTEGER PRIMARY KEY recycled ids before this fix)."""
+    ddl = db_session.scalar(
+        text("SELECT sql FROM sqlite_master WHERE type='table' AND name='session_participant'")
+    )
+    assert ddl is not None and "AUTOINCREMENT" in ddl
+
+    chain = _seed_session_chain(db_session)
+    first = SessionParticipant(session_id=chain["session"].id, account_id=None, display_name="Sam")
+    db_session.add(first)
+    db_session.commit()
+    old_id = first.id
+
+    # §5.5 finish-delete, then a brand-new session's first joiner.
+    db_session.delete(first)
+    db_session.commit()
+    second_session = Session(
+        code="HOTFIX4",
+        status="lobby",
+        group_id=chain["group"].id,
+        host_account_id=chain["account"].id,
+    )
+    db_session.add(second_session)
+    db_session.flush()
+    second = SessionParticipant(session_id=second_session.id, account_id=None, display_name="Lee")
+    db_session.add(second)
+    db_session.commit()
+    assert second.id > old_id  # AUTOINCREMENT: strictly increasing, never reused

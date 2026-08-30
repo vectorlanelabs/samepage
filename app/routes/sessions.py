@@ -241,6 +241,52 @@ def _get_session_by_code(db: Session, code: str) -> VotingSession | None:
     return db.scalar(select(VotingSession).where(VotingSession.code == code.strip().lower()))
 
 
+# HOTFIX4: the participant cookie. The old shape was a flat ``participant_id``;
+# after §5.5 finish-deletes every participant row, SQLite's plain INTEGER
+# PRIMARY KEY recycled ids, so a stale cookie could silently BECOME whoever got
+# the recycled id in a NEW session. Participant ids are now AUTOINCREMENT
+# (never reused), and the cookie maps session code -> participant id so one
+# browser can hold distinct identities in several live sessions at once (the
+# flat cookie was last-join-wins). The cap keeps the signed cookie small —
+# entries are evicted oldest-first, the most recent re-inserted last.
+_SESSION_PARTICIPANT_COOKIE_KEY = "session_participants"
+_SESSION_PARTICIPANT_COOKIE_CAP = 20
+
+
+def _session_cookie_participant_id(request: Request, code: str) -> int | None:
+    """The participant id this browser holds for ``code``: the per-session map
+    first, then the legacy flat ``participant_id`` cookie (pre-HOTFIX4
+    browsers). The caller still verifies the row exists AND belongs to the
+    session, so a stale/foreign id never resolves to a participant."""
+    participants = request.session.get(_SESSION_PARTICIPANT_COOKIE_KEY)
+    if isinstance(participants, dict):
+        participant_id = participants.get(code)
+        if isinstance(participant_id, int):
+            return participant_id
+    legacy = request.session.get("participant_id")
+    if isinstance(legacy, int):
+        return legacy
+    return None
+
+
+def _set_session_cookie_participant(
+    request: Request, code: str, participant_id: int
+) -> None:
+    """Record this browser's participant row for ``code`` in the per-session
+    map (HOTFIX4 shape). The entry is re-inserted last so the cap evicts the
+    oldest session first; legacy flat cookies are left in place but lose
+    precedence to the map."""
+    session = request.session
+    participants = session.get(_SESSION_PARTICIPANT_COOKIE_KEY)
+    if not isinstance(participants, dict):
+        participants = {}
+    participants.pop(code, None)
+    participants[code] = participant_id
+    while len(participants) > _SESSION_PARTICIPANT_COOKIE_CAP:
+        del participants[next(iter(participants))]  # oldest first (insertion order)
+    session[_SESSION_PARTICIPANT_COOKIE_KEY] = participants
+
+
 def _viewer_participant(
     request: Request,
     db: Session,
@@ -249,15 +295,17 @@ def _viewer_participant(
 ) -> SessionParticipant | None:
     """The participant row this viewer belongs to, in priority order:
 
-    1. The signed session cookie's participant row, IF it still exists AND
-       belongs to this session. A stale/foreign participant id is treated as
-       no participant at all (join page again).
+    1. The signed session cookie's participant row for THIS session code, IF
+       it still exists AND belongs to this session. A stale/foreign
+       participant id is treated as no participant at all (join page again).
+       The map is per code (HOTFIX4), so one browser keeps distinct
+       identities per session; a legacy flat cookie still resolves.
     2. A signed-in account's own row in THIS session (HOTFIX3): the host is
        auto-inserted at session creation, and any signed-in member's row
        follows them across devices — the sign-in cookie alone is enough to
        vote. The session cookie (1) keeps precedence when valid.
     """
-    participant_id = request.session.get("participant_id")
+    participant_id = _session_cookie_participant_id(request, session.code)
     if participant_id is not None:
         participant = db.get(SessionParticipant, participant_id)
         if participant is not None and participant.session_id == session.id:
@@ -1034,7 +1082,7 @@ def create_session(
     )
     db.add(host_participant)
     db.commit()
-    request.session["participant_id"] = host_participant.id
+    _set_session_cookie_participant(request, session.code, host_participant.id)
     # M7 S4: the host lands on the share screen — the invite surface — right
     # after creating the session, then walks to the lobby.
     return RedirectResponse(f"/s/{session.code}/share", status_code=303)
@@ -1411,7 +1459,7 @@ def join_session(
             )
         )
         if existing is not None:
-            request.session["participant_id"] = existing.id
+            _set_session_cookie_participant(request, session.code, existing.id)
             return RedirectResponse(f"/s/{session.code}", status_code=303)
     if session.status == "voting":
         # §5.6: no mid-batch joins — the roster denominator is frozen at batch
@@ -1442,7 +1490,7 @@ def join_session(
     db.add(participant)
     session.last_activity_at = func.now()
     db.commit()
-    request.session["participant_id"] = participant.id
+    _set_session_cookie_participant(request, session.code, participant.id)
     return RedirectResponse(f"/s/{session.code}", status_code=303)
 
 

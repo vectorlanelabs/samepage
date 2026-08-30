@@ -58,3 +58,25 @@ def test_models_match_migrations(tmp_path, monkeypatch):
         if model_cols[table] != migration_cols[table]
     }
     assert not mismatches, f"Column drift between models and migrations: {mismatches}"
+
+
+def test_migration_head_participant_pk_autoincrement(tmp_path, monkeypatch):
+    """HOTFIX4: the migration chain (what production runs) ends with the
+    AUTOINCREMENT participant PK — the same DDL the models emit — so the
+    id-reuse guard holds on the migrated schema too (a batch-rebuilt table
+    could otherwise silently lose the flag)."""
+    migration_db = tmp_path / "migration.db"
+    monkeypatch.setenv("SP_DB_PATH", str(migration_db))
+    command.upgrade(Config("alembic.ini"), "head")
+
+    engine = sa.create_engine(f"sqlite:///{migration_db}")
+    try:
+        sql = engine.connect().execute(
+            sa.text(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type='table' AND name='session_participant'"
+            )
+        ).scalar()
+        assert sql is not None and "AUTOINCREMENT" in sql
+    finally:
+        engine.dispose()

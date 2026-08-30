@@ -37,7 +37,13 @@ from app.models import (
 from app.models import (
     Session as VotingSession,
 )
-from app.routes.sessions import _track_progress
+from app.routes.sessions import (
+    _SESSION_PARTICIPANT_COOKIE_CAP,
+    _SESSION_PARTICIPANT_COOKIE_KEY,
+    _session_cookie_participant_id,
+    _set_session_cookie_participant,
+    _track_progress,
+)
 from app.session_logic import BATCH_SIZE, WORDLIST, make_code
 from app.settings import settings
 
@@ -130,15 +136,34 @@ def _make_item(
     return item
 
 
-def _stamp_participant(client, participant_id: int) -> None:
-    """Point the client's signed session cookie at a participant row (like
-    conftest.stamp_session does for accounts). Clears the jar first — a real
-    browser holds ONE session cookie, but the test client accumulates a second
-    'session' entry (server-set + manually-set) that httpx then can't
-    disambiguate, so the switch silently wouldn't reach the server."""
+def _stamp_participant(client, participant_id: int, code: str) -> None:
+    """Point the client's signed session cookie at a participant row in the
+    per-session map (HOTFIX4 shape: {code: participant_id}). Clears the jar
+    first — a real browser holds ONE session cookie, but the test client
+    accumulates a second 'session' entry (server-set + manually-set) that httpx
+    then can't disambiguate, so the switch silently wouldn't reach the server."""
+    client.cookies.clear()
+    payload = base64.b64encode(
+        json.dumps({_SESSION_PARTICIPANT_COOKIE_KEY: {code: participant_id}}).encode()
+    )
+    client.cookies.set("session", TimestampSigner("test-secret-for-tests").sign(payload).decode())
+
+
+def _stamp_legacy_participant(client, participant_id: int) -> None:
+    """Stamp the PRE-HOTFIX4 flat cookie shape ({participant_id: N}) — what
+    old-app browsers hold. Exercises the legacy fallback in
+    _session_cookie_participant_id."""
     client.cookies.clear()
     payload = base64.b64encode(json.dumps({"participant_id": participant_id}).encode())
     client.cookies.set("session", TimestampSigner("test-secret-for-tests").sign(payload).decode())
+
+
+class _FakeCookieRequest:
+    """Minimal stand-in for the Starlette request the cookie-map helpers touch:
+    they only read/write ``request.session``, which is a plain dict here."""
+
+    def __init__(self) -> None:
+        self.session: dict = {}
 
 
 def _open_batch(db_session, session_id: int) -> Batch | None:
@@ -1431,7 +1456,7 @@ def test_session_recipe_guest_participant_200(client, db_session):
     sam = SessionParticipant(session_id=session.id, account_id=None, display_name="Sam")
     db_session.add(sam)
     db_session.commit()
-    _stamp_participant(client, sam.id)  # guest: participant cookie, no account
+    _stamp_participant(client, sam.id, session.code)  # guest: participant cookie, no account
 
     # The voting card's recipe link is session-scoped (Slice B).
     card = client.get(f"/s/{session.code}")
@@ -1479,7 +1504,7 @@ def test_session_recipe_other_session_participant_404(client, db_session):
     sam = SessionParticipant(session_id=session_b.id, account_id=None, display_name="Sam")
     db_session.add(sam)
     db_session.commit()
-    _stamp_participant(client, sam.id)  # joined session_b, not session_a
+    _stamp_participant(client, sam.id, session_b.code)  # joined session_b, not session_a
 
     resp = client.get(f"/s/{session_a.code}/recipe/{apple.id}")
     assert resp.status_code == 404
@@ -1627,6 +1652,168 @@ def test_vote_batch_item_not_in_open_batch_404(client, post, db_session):
     assert resp.status_code == 404
 
 
+# --- HOTFIX4: per-session participant cookie + never-reused participant ids ---
+
+
+def test_stale_cookie_from_finished_session_does_not_become_new_participant(
+    client, post, db_session
+):
+    """HOTFIX4: the production bug — a browser still holding a finished
+    session's participant cookie must never silently BECOME whoever joins a
+    new session. Participant ids are AUTOINCREMENT (never recycled) AND the
+    cookie maps session code -> participant id, so the stale entry cannot
+    resolve in the new session: the browser lands on the join page again."""
+    group = _make_group(db_session)
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    session_a = _make_session(db_session, group.id, host.id)
+    post(f"/s/{session_a.code}/join", data={"display_name": "Sam"}, follow_redirects=False)
+    sam_id = db_session.scalar(
+        select(SessionParticipant.id).where(SessionParticipant.session_id == session_a.id)
+    )
+    assert sam_id is not None
+
+    # §5.5 finish deletes every participant row of session_a.
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session_a.code}/finish", follow_redirects=False)
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert session_a.status == "complete"
+    assert _participant_count(db_session) == 0
+
+    # A brand-new session: its first joiner gets a FRESH id — AUTOINCREMENT
+    # never hands out the recycled sam_id the old rowid-alias PK would have.
+    session_b = _make_session(db_session, group.id, host.id)
+    post(f"/s/{session_b.code}/join", data={"display_name": "Lee"}, follow_redirects=False)
+    lee = db_session.scalar(
+        select(SessionParticipant).where(SessionParticipant.session_id == session_b.id)
+    )
+    assert lee is not None and lee.id > sam_id
+
+    # The browser still holds its stale cookie for session_a. In session_b it
+    # must NOT resolve to Lee: the map is keyed by session code, and even the
+    # legacy flat fallback cannot match (the row is gone and never recreated).
+    _stamp_participant(client, sam_id, session_a.code)
+    page = client.get(f"/s/{session_b.code}")
+    assert page.status_code == 200
+    assert 'name="display_name"' in page.text  # join page — not silently a voter
+
+
+def test_browser_keeps_distinct_identities_per_session(client, post, db_session):
+    """HOTFIX4: the per-session cookie map means one browser can be Sam in
+    session A and Zoe in session B at the same time — the old flat cookie was
+    last-join-wins, so the second join silently re-pointed (and broke)
+    identity in the first session."""
+    group = _make_group(db_session)
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    session_a = _make_session(db_session, group.id, host.id)
+    session_b = _make_session(db_session, group.id, host.id)
+    post(f"/s/{session_a.code}/join", data={"display_name": "Sam"}, follow_redirects=False)
+    post(f"/s/{session_b.code}/join", data={"display_name": "Zoe"}, follow_redirects=False)
+
+    sam = db_session.scalar(
+        select(SessionParticipant).where(SessionParticipant.session_id == session_a.id)
+    )
+    zoe = db_session.scalar(
+        select(SessionParticipant).where(SessionParticipant.session_id == session_b.id)
+    )
+    assert sam is not None and zoe is not None and sam.id != zoe.id
+
+    # A co-joiner in session A (direct row) makes the rosters distinguishable.
+    rae = SessionParticipant(session_id=session_a.id, account_id=None, display_name="Rae")
+    db_session.add(rae)
+    db_session.commit()
+
+    # Session A still sees the browser as its own participant ("You" on their
+    # chip; co-joiner Rae by name; Zoe from B absent)…
+    page = client.get(f"/s/{session_a.code}")
+    assert page.status_code == 200
+    assert "Here so far" in page.text
+    assert "You" in page.text
+    assert "Rae" in page.text
+    assert "Zoe" not in page.text
+    # …and session B still sees the browser as Zoe — joining B did not clobber
+    # the A identity, and the browser is not "Rae" (or anyone else) there.
+    page = client.get(f"/s/{session_b.code}")
+    assert page.status_code == 200
+    assert "Here so far" in page.text
+    assert "You" in page.text
+    # Assert absence on the chrome-free roster partial instead of the full
+    # page: the "Same Page" <title> contains the substring "Sam", so a
+    # page.text check can never prove Sam's identity is absent from B.
+    roster_b = client.get(f"/s/{session_b.code}/roster")
+    assert roster_b.status_code == 200
+    assert "Sam" not in roster_b.text
+    assert "Rae" not in roster_b.text
+
+
+def test_legacy_flat_participant_cookie_still_resolves(client, post, db_session):
+    """HOTFIX4: pre-HOTFIX4 browsers hold the old flat {participant_id: N}
+    cookie. The new helper falls back to it for a live same-session
+    participant, so an upgraded server doesn't log everyone out mid-vote.
+
+    Two items keep the batch OPEN after the single vote — a roster-of-one
+    vote on a one-item batch would auto-close it, and close deletes the
+    per-person vote rows by design (privacy invariant), so there'd be no
+    row left to assert."""
+    session, _, _ = _make_voting_setup(
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
+        targets=[("dinner", 1)],
+    )
+    _login(client, db_session, "host@example.com")
+    post(f"/s/{session.code}/join", data={"display_name": "Sam"}, follow_redirects=False)
+    sam = db_session.scalar(
+        select(SessionParticipant).where(SessionParticipant.session_id == session.id)
+    )
+    assert sam is not None
+    post(f"/s/{session.code}/start", follow_redirects=False)
+
+    # Old-shape cookie only (no per-session map): the legacy fallback.
+    _stamp_legacy_participant(client, sam.id)
+    first = _batch_items(db_session, _open_batch(db_session, session.id).id)[0]
+    resp = post(
+        f"/s/{session.code}/vote",
+        data={"batch_item_id": str(first.id), "choice": "yes"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    rows = db_session.scalars(
+        select(BatchResponse).where(BatchResponse.batch_item_id == first.id)
+    ).all()
+    assert len(rows) == 1 and rows[0].session_participant_id == sam.id
+
+
+def test_participant_cookie_map_caps_oldest_first():
+    """HOTFIX4: the per-session map is capped so the signed cookie stays small
+    (20 sessions); the oldest entry is evicted first, and re-joining a session
+    refreshes its position instead of double-counting it."""
+    request = _FakeCookieRequest()
+    for i in range(_SESSION_PARTICIPANT_COOKIE_CAP + 1):
+        _set_session_cookie_participant(request, f"code-{i:03d}", 100 + i)
+    assert (
+        len(request.session[_SESSION_PARTICIPANT_COOKIE_KEY])
+        == _SESSION_PARTICIPANT_COOKIE_CAP
+    )
+    assert _session_cookie_participant_id(request, "code-000") is None  # oldest evicted
+    assert (
+        _session_cookie_participant_id(request, f"code-{_SESSION_PARTICIPANT_COOKIE_CAP:03d}")
+        == 100 + _SESSION_PARTICIPANT_COOKIE_CAP
+    )
+
+    # Re-inserting a live code refreshes it to the newest position…
+    _set_session_cookie_participant(request, "code-001", 101)
+    assert (
+        len(request.session[_SESSION_PARTICIPANT_COOKIE_KEY])
+        == _SESSION_PARTICIPANT_COOKIE_CAP
+    )
+    assert _session_cookie_participant_id(request, "code-001") == 101
+    # …so the next insert evicts code-002 (now the oldest), not code-001.
+    _set_session_cookie_participant(request, "code-extra", 999)
+    assert _session_cookie_participant_id(request, "code-002") is None
+    assert _session_cookie_participant_id(request, "code-001") == 101
+    assert _session_cookie_participant_id(request, "code-extra") == 999
+
+
 def test_vote_after_finish_redirects_303(client, post, db_session):
     """HOTFIX2: a stale vote tap on a finished session redirects the voter to
     the session page (the completion screen) instead of a JSON error."""
@@ -1648,7 +1835,7 @@ def test_vote_after_finish_redirects_303(client, post, db_session):
     db_session.expire_all()
     assert session.status == "complete"
 
-    _stamp_participant(client, sam_id)  # stale cookie, rows deleted by finish
+    _stamp_participant(client, sam_id, session.code)  # stale cookie, rows deleted by finish
     resp = post(
         f"/s/{session.code}/vote",
         data={"batch_item_id": str(items[0].id), "choice": "yes"},
@@ -1683,7 +1870,7 @@ def test_vote_stale_item_after_next_batch_redirects_303(client, post, db_session
     batch2 = _open_batch(db_session, session.id)
     assert batch2 is not None and batch2.id != salad.batch_id
 
-    _stamp_participant(client, sam.id)
+    _stamp_participant(client, sam.id, session.code)
     resp = post(
         f"/s/{session.code}/vote",
         data={"batch_item_id": str(salad.id), "choice": "yes"},
@@ -1758,7 +1945,7 @@ def test_voting_done_and_finished_counts(client, post, db_session):
     # Lee votes on everything → the last vote auto-closes the batch, so the
     # poll now answers HX-Refresh (the done view reloads to the results
     # screen) instead of a full-progress counts partial.
-    _stamp_participant(client, lee.id)
+    _stamp_participant(client, lee.id, session.code)
     for bi in batch_items:
         resp = post(
             f"/s/{session.code}/vote",
@@ -1918,7 +2105,7 @@ def _cast(
 ) -> None:
     """Vote as ``participant`` (switching the signed session cookie), asserting
     the 303 redirect."""
-    _stamp_participant(client, participant.id)
+    _stamp_participant(client, participant.id, session.code)
     resp = post(
         f"/s/{session.code}/vote",
         data={"batch_item_id": str(batch_item_id), "choice": choice},
@@ -2140,7 +2327,7 @@ def test_auto_close_on_final_vote_without_manual_close(client, post, db_session)
     assert _open_batch(db_session, session.id) is None
     assert _response_count(db_session, batch.id) == 0
 
-    _stamp_participant(client, lee.id)
+    _stamp_participant(client, lee.id, session.code)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Results" in page.text
@@ -2236,7 +2423,7 @@ def test_results_page_is_aggregate_only(client, post, db_session):
     assert "Mina Park" not in page.text
 
     # Voter view: same aggregates, no names, no keep/pass controls.
-    _stamp_participant(client, rosa.id)
+    _stamp_participant(client, rosa.id, session.code)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "1 yes · 1 no" in page.text
@@ -2325,7 +2512,7 @@ def test_results_pending_shows_host_controls_only_for_host(client, post, db_sess
     assert "2 yes · 1 no" in page.text
     assert "Meal Planner · Batch 1 · Host view" in page.text
 
-    _stamp_participant(client, sam.id)
+    _stamp_participant(client, sam.id, session.code)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Batch 1 results" in page.text
@@ -2397,7 +2584,7 @@ def test_non_host_sees_kept_by_host_with_aggregates(client, post, db_session):
     db_session.expire_all()
     assert items[0].outcome == "kept_host"
 
-    _stamp_participant(client, sam.id)
+    _stamp_participant(client, sam.id, session.code)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Kept by the host" in page.text
@@ -2492,7 +2679,7 @@ def test_end_session_early_host_only(client, post, db_session):
     assert "End session early" in page.text
     assert "Finish session" not in page.text
 
-    _stamp_participant(client, sam.id)
+    _stamp_participant(client, sam.id, session.code)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "End session early" not in page.text
@@ -3124,7 +3311,7 @@ def test_expired_session_refuses_mutations(client, post, db_session):
     db_session.add_all([bi, sam])
     db_session.commit()
     _backdate(db_session, voting2, hours=25)
-    _stamp_participant(client, sam.id)
+    _stamp_participant(client, sam.id, voting2.code)
     resp = post(
         f"/s/{voting2.code}/vote",
         data={"batch_item_id": str(bi.id), "choice": "yes"},

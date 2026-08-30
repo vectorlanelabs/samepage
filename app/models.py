@@ -12,6 +12,7 @@ Notes:
 from __future__ import annotations
 
 from datetime import datetime
+from typing import ClassVar
 
 from sqlalchemy import (
     CheckConstraint,
@@ -241,11 +242,17 @@ class SessionTarget(Base):
 class SessionParticipant(Base):
     """Someone who joined a specific session — ephemeral, deleted at finish
     (§5.5). ``account_id`` is set only if logged in at join time (pre-fill
-    only, confers no permission)."""
+    only, confers no permission).
+
+    HOTFIX4: the PK is AUTOINCREMENT. §5.5 deletes these rows at session
+    finish, and a plain SQLite INTEGER PRIMARY KEY (rowid alias) would reuse
+    the freed ids — a stale session cookie from the finished session would
+    then silently become whoever got the recycled id in a NEW session."""
 
     __tablename__ = "session_participant"
+    __table_args__: ClassVar[dict] = {"sqlite_autoincrement": True}
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("session.id"), nullable=False)
     account_id: Mapped[int | None] = mapped_column(ForeignKey("account.id"), nullable=True)
     display_name: Mapped[str] = mapped_column(String, nullable=False)
