@@ -1000,3 +1000,18 @@ the `claude` CLI is not authed in this environment — noted for future cycles).
   boundary tests real, source_domain move clean both directions, breakpoint spans
   a11y-verified.
 - Tests 389 → 391, ruff clean. All 11 review findings-slices (S1–S11) now landed. Not pushed.
+
+## 2026-08-29 — M7 wrap-up: whole-run audit + final fixes — cf54184
+
+- Whole-run audit (sonnet, dcdff35..HEAD): verdict "safe to merge and push". Two residuals,
+  both fixed in cf54184: /s/{code}/share had missed the Slice B membership carve-out (host could
+  self-429; regression-tested), and _results_context carried a dead group query since Slice
+  D. Dead pre-S9 library-card CSS removed. Audit verified clean across the run: vote
+  privacy (zero per-person leaks in any template), 404-not-403 on all new routes, zero new
+  POSTs (CSRF middleware moot), chrome modes on all 23 session TemplateResponses, htmx poll
+  targets vs inline scripts (no stale-node hazards), test-suite honesty (no vacuous tests;
+  the real-limiter interleaving test runs in the suite). Recorded for later: the app has no
+  CSP header (pre-existing; M7 added inline handlers in kind, not in class).
+- M7 COMPLETE: 9 feature commits, tests 327 → 392, every slice independently verified and
+  adversarially reviewed; one implementer process breach (cycle 6) caught and recorded.
+  Branch quiet-kitchen-fidelity is NOT pushed — Charlie pushes (push = prod deploy).
