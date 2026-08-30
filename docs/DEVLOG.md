@@ -1097,3 +1097,10 @@ loud-moments branch is also pushed for reference.
   long collection lists pushed the pinned actions off-screen — fixed (nav region is now
   the overflow-y:auto area; many-collections regression test added).
 - Tests 413 → 415, ruff clean. Not pushed.
+
+## 2026-08-30 — M8 R4+R5 shipped to production
+
+Charlie approved; main fast-forwarded to 1b84875 and pushed. CI green (run 33313890981),
+new build live (asset hash 5f260a4d43). Validated on prod: /login is the centered
+session-chrome auth screen (no topbar, brand links home), landing serves exactly one hero
+CTA with topbar-inner header alignment, sidebar-join present in the served bundle.
