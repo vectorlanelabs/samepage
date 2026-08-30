@@ -41,11 +41,14 @@
       Same Page
     </a>
     <nav class="nav">
-      <a class="nav-link{% if request.url.path == '/' %} is-active{% endif %}" href="/">Home</a>
       <a class="nav-link{% if request.url.path.startswith('/collections') %} is-active{% endif %}" href="/collections">Collections</a>
       <a class="nav-link{% if request.url.path.startswith('/groups') %} is-active{% endif %}" href="/groups">Groups</a>
     </nav>
+    {# Library pages (and any page that has collection context) fill this with
+       a "Collections" section listing the account's collections. #}
+    {% block sidebar_extra %}{% endblock %}
     <div class="sidebar-spacer"></div>
+    <a class="btn btn-primary sidebar-host-btn" href="/sessions/new">Host a session</a>
     <span class="nav-account">{{ current_account.display_name }}</span>
     <form method="post" action="/logout"><button type="submit" class="nav-link">Sign out</button></form>
   </aside>

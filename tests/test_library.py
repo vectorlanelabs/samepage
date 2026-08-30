@@ -8,6 +8,8 @@ found in the 2026-08-29 review, where an account in two groups could never
 reach the second group's library, is what this URL scheme closes.
 """
 
+from datetime import UTC, datetime
+
 from conftest import stamp_session
 from sqlalchemy import func, select
 
@@ -15,6 +17,7 @@ from app.models import (
     Account,
     Collection,
     Group,
+    GroupAdmin,
     Ingredient,
     Item,
     ItemTag,
@@ -526,6 +529,222 @@ def test_library_kept_label_and_row_link(client, post, db_session):
     # The row is the only action surface; archive/recipe live on the edit screen.
     assert "Recipe →" not in resp.text
     assert "Archive" not in resp.text
+
+
+# ---------- Sort (M7 S10): Name / Most kept / Recently kept ----------
+
+
+def test_library_sort_kept_orders_by_times_kept_then_name(client, post, db_session):
+    """?sort=kept orders by times_kept desc; equal counts fall back to
+    normalized name (case-insensitive), same as the default order."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Ziti", type="dinner")
+    _make_item(db_session, collection.id, group.id, "Chili", type="dinner")
+    _make_item(db_session, collection.id, group.id, "Pasta", type="dinner")
+    _make_item(db_session, collection.id, group.id, "Brisket", type="dinner")
+    chili = db_session.scalar(select(Item).where(Item.normalized_name == "chili"))
+    pasta = db_session.scalar(select(Item).where(Item.normalized_name == "pasta"))
+    brisket = db_session.scalar(select(Item).where(Item.normalized_name == "brisket"))
+    chili.times_kept = 5
+    pasta.times_kept = 5
+    brisket.times_kept = 3
+    db_session.commit()
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}", params={"sort": "kept"})
+    assert resp.status_code == 200
+    # Chili and Pasta tie at 5; the tie breaks by name (Chili before Pasta).
+    order = [resp.text.index(n) for n in ("Chili", "Pasta", "Brisket", "Ziti")]
+    assert order == sorted(order)
+
+
+def test_library_sort_recent_orders_by_last_kept_nulls_last(client, post, db_session):
+    """?sort=recent orders by last_kept_at desc (newest first); never-kept
+    items (last_kept_at NULL) sink to the bottom. Equal dates break by name."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Soup", type="dinner")
+    _make_item(db_session, collection.id, group.id, "Tacos", type="dinner")
+    _make_item(db_session, collection.id, group.id, "Burgers", type="dinner")
+    _make_item(db_session, collection.id, group.id, "Pizza", type="dinner")
+    tacos = db_session.scalar(select(Item).where(Item.normalized_name == "tacos"))
+    burgers = db_session.scalar(select(Item).where(Item.normalized_name == "burgers"))
+    pizza = db_session.scalar(select(Item).where(Item.normalized_name == "pizza"))
+    tacos.last_kept_at = datetime(2026, 8, 20, 19, 0, tzinfo=UTC)
+    burgers.last_kept_at = datetime(2026, 8, 20, 19, 0, tzinfo=UTC)  # same stamp: name breaks the tie
+    pizza.last_kept_at = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+    # Soup.last_kept_at stays None (never kept).
+    db_session.commit()
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}", params={"sort": "recent"})
+    assert resp.status_code == 200
+    order = [resp.text.index(n) for n in ("Burgers", "Tacos", "Pizza", "Soup")]
+    assert order == sorted(order)
+    # The kept date renders as the short label in the Last kept column.
+    assert ">Aug 20</span>" in resp.text
+    assert ">Aug 1</span>" in resp.text
+    # The never-kept item shows the empty-cell dash, not a date.
+    assert 'class="lib-cell lib-cell-last lib-cell-empty">—</span>' in resp.text
+
+
+def test_library_sort_invalid_value_falls_back_to_name(client, post, db_session):
+    """An unknown sort value must not 500 — the route falls back to the default
+    name order, as if sort were absent."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Ziti", type="dinner")
+    _make_item(db_session, collection.id, group.id, "bacon and eggs", type="both")
+    _make_item(db_session, collection.id, group.id, "Apple pie", type="both")
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}", params={"sort": "bogus"})
+    assert resp.status_code == 200
+    assert resp.text.index("Apple pie") < resp.text.index("bacon and eggs") < resp.text.index("Ziti")
+
+
+def test_library_sort_dropdown_round_trips_with_filters(client, post, db_session):
+    """The sort dropdown always renders (Name / Most kept / Recently kept), the
+    active sort is marked selected, and it lives in the same GET form as the
+    search box — so changing sort keeps the current query."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Taco soup", type="both")
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}", params={"q": "taco", "sort": "kept"})
+    assert resp.status_code == 200
+    # Sort sits inside the one toolbar form, after the search input.
+    sort_pos = resp.text.index('name="sort"')
+    assert resp.text.index('class="lib-toolbar"') < sort_pos
+    assert sort_pos < resp.text.index("</form>", sort_pos)
+    assert 'value="kept" selected' in resp.text
+    assert 'value="name">Name</option>' in resp.text
+    assert 'value="recent">Recently kept</option>' in resp.text
+    # The search term survives in the same form.
+    assert 'value="taco"' in resp.text
+
+
+def test_library_desktop_table_columns_render(client, post, db_session):
+    """Desktop (>=900px) renders a table-style grid: a header row
+    (Name/Type/Tags/Kept/Last kept) and per-item cells. Empty cells show an em
+    dash; the phone kept chip still renders for items that were kept."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    kept = _make_item(
+        db_session,
+        collection.id,
+        group.id,
+        "Sheet pan chicken",
+        type="both",
+        tags=["weeknight", "40 min"],
+    )
+    kept.times_kept = 3
+    kept.last_kept_at = datetime(2026, 8, 20, 19, 0, tzinfo=UTC)
+    db_session.commit()
+    _make_item(db_session, collection.id, group.id, "Bare meal", type="dinner")
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}")
+    assert resp.status_code == 200
+    # Header row.
+    assert "lib-table-head" in resp.text
+    for head in (">Name</span>", ">Type</span>", ">Tags</span>", ">Kept</span>", ">Last kept</span>"):
+        assert head in resp.text
+    # Kept item: type label, sorted tag label, kept count, short kept date.
+    assert ">Lunch · Dinner</span>" in resp.text
+    assert ">40 min · weeknight</span>" in resp.text
+    assert ">3×</span>" in resp.text
+    assert ">Aug 20</span>" in resp.text
+    # Phone chip still renders for the kept item.
+    assert ">kept 3×</span>" in resp.text
+    # Bare item: its own type, and em dashes in the tag/last-kept cells.
+    assert ">Dinner</span>" in resp.text
+    assert 'class="lib-cell lib-cell-tags lib-cell-empty">—</span>' in resp.text
+    assert 'class="lib-cell lib-cell-last lib-cell-empty">—</span>' in resp.text
+    assert ">0×</span>" in resp.text
+
+
+# ---------- Sidebar collections nav (M7 S10) ----------
+
+
+def test_library_sidebar_lists_own_collections_and_hides_foreign(client, post, db_session):
+    """Collection pages render a sidebar 'Collections' section with every
+    collection the account owns or admins — the current one flagged is-active —
+    and never another group's collections (cross-tenant isolation on the nav)."""
+    group_a = _make_group(db_session, group_name="House A")
+    collection_a = _make_collection(db_session, group_a.id, name="Meal Planner A")
+    collection_b = _make_collection(db_session, group_a.id, name="Zucchini Nights")
+    _make_item(db_session, collection_a.id, group_a.id, "A Tacos")
+
+    other_group = _make_group(
+        db_session, owner_email="other-owner@example.com", group_name="Other Household"
+    )
+    other_collection = _make_collection(db_session, other_group.id, name="Their Secret Eats")
+    _make_item(db_session, other_collection.id, other_group.id, "Secret Casserole")
+
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection_a.id}")
+    assert resp.status_code == 200
+    assert 'class="sidebar-section-title">Collections</span>' in resp.text
+    # The current collection is flagged active; the other own one is a plain link.
+    assert f'class="nav-link is-active" href="/collections/{collection_a.id}"' in resp.text
+    assert f'class="nav-link" href="/collections/{collection_b.id}"' in resp.text
+    # Another tenant's collection never shows up in the nav.
+    assert "Their Secret Eats" not in resp.text
+    assert f"/collections/{other_collection.id}" not in resp.text
+
+
+def test_library_sidebar_includes_admined_groups_collections(client, post, db_session):
+    """A collection in a group the account only admins (not owns) also lists
+    in the sidebar — same owns-or-admins scoping as the hub."""
+    group = _make_group(db_session, group_name="Shared", owner_email="owner@example.com")
+    collection = _make_collection(db_session, group.id, name="Shared Meals")
+    _make_item(db_session, collection.id, group.id, "Shared Tacos")
+    admin = _make_account(db_session, email="admin@example.com", display_name="Admin")
+    db_session.add(GroupAdmin(group_id=group.id, account_id=admin.id))
+    db_session.commit()
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}")
+    assert resp.status_code == 200
+    assert f'class="nav-link is-active" href="/collections/{collection.id}"' in resp.text
+
+
+def test_library_sidebar_keeps_same_named_collections_separate(client, post, db_session):
+    """Two collections with the same name render as TWO sidebar rows — the nav
+    keys on collection id (ordered by name then id), so same-named collections
+    never merge into a single link."""
+    group = _make_group(db_session)
+    first = _make_collection(db_session, group.id, name="Dinners")
+    second = _make_collection(db_session, group.id, name="Dinners")
+    _make_item(db_session, first.id, group.id, "Pasta Night")
+    _login(client, db_session)
+    resp = client.get(f"/collections/{first.id}")
+    assert resp.status_code == 200
+    assert f'class="nav-link is-active" href="/collections/{first.id}"' in resp.text
+    assert f'class="nav-link" href="/collections/{second.id}"' in resp.text
+
+
+def test_library_area_pages_share_sidebar_collections(client, post, db_session):
+    """Every library-area page — browse, add/edit meal, recipe view, report —
+    renders the same sidebar 'Collections' section (current collection flagged
+    is-active), not just the browse page. The section markup is one shared
+    include, so each page's HTML contains it."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id, name="Dinners")
+    other = _make_collection(db_session, group.id, name="Zucchini Nights")
+    item = _make_item(db_session, collection.id, group.id, "Pasta Night")
+    _login(client, db_session)
+
+    pages = [
+        f"/collections/{collection.id}",  # browse
+        f"/collections/{collection.id}/items/new",  # add meal (blank edit form)
+        f"/collections/{collection.id}/items/{item.id}/edit",  # edit meal
+        f"/collections/{collection.id}/items/{item.id}",  # recipe view
+        f"/collections/{collection.id}/report",  # report
+    ]
+    for path in pages:
+        resp = client.get(path)
+        assert resp.status_code == 200
+        assert 'class="sidebar-section-title">Collections</span>' in resp.text
+        assert f'class="nav-link is-active" href="/collections/{collection.id}"' in resp.text
+        assert f'class="nav-link" href="/collections/{other.id}"' in resp.text
 
 
 def test_library_page_renders_item_with_no_meal_detail(client, post, db_session):

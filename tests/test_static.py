@@ -4,6 +4,16 @@ def test_app_css_served(client):
     assert "--sp-accent" in resp.text
 
 
+def test_lib_cell_metadata_color_is_chip_ink_not_link_accent(client):
+    """Desktop library metadata cells (type/tags/kept/last) explicitly set
+    chip-ink — the row is an <a>, so without an explicit color they'd inherit
+    the accent-blue link color."""
+    resp = client.get("/static/app.css")
+    assert resp.status_code == 200
+    block = resp.text[resp.text.index(".lib-cell-type,") :]
+    assert "color: var(--sp-chip-ink);" in block
+
+
 def test_htmx_vendored_and_served(client):
     resp = client.get("/static/htmx.min.js")
     assert resp.status_code == 200

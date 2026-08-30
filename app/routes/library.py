@@ -39,7 +39,7 @@ from app.models import (
     MealType,
     Tag,
 )
-from app.templating import templates
+from app.templating import short_date_label, templates
 
 router = APIRouter()
 
@@ -241,9 +241,33 @@ def _all_tags(db: Session, group_id: int) -> list[Tag]:
     return list(db.scalars(select(Tag).where(Tag.group_id == group_id).order_by(Tag.name)).all())
 
 
+def _nav_collections(db: Session, account: Account, current_id: int) -> list[dict]:
+    """Every collection of groups the account owns or admins, as sidebar rows
+    (id + name + current flag) — the same owner/admin scoping as the hub, so
+    the sidebar never lists another tenant's collections. Ordered by name then
+    id so same-named collections stay distinct."""
+    rows = db.execute(
+        select(Collection.id, Collection.name)
+        .join(Group, Group.id == Collection.group_id)
+        .outerjoin(
+            GroupAdmin,
+            (GroupAdmin.group_id == Group.id) & (GroupAdmin.account_id == account.id),
+        )
+        .where(
+            (Group.owner_account_id == account.id) | (GroupAdmin.account_id == account.id)
+        )
+        .order_by(Collection.name, Collection.id)
+    ).all()
+    return [
+        {"id": collection_id, "name": collection_name, "current": collection_id == current_id}
+        for collection_id, collection_name in rows
+    ]
+
+
 def _render_edit(
     request: Request,
     db: Session,
+    account: Account,
     collection: Collection,
     item: Item | None,
     detail: MealDetail | None,
@@ -289,6 +313,7 @@ def _render_edit(
             ],
             "error": error,
             "flash": flash,
+            "nav_collections": _nav_collections(db, account, collection.id),
         },
         status_code=status_code,
     )
@@ -399,17 +424,21 @@ def library_page(
     tags: str = "",
     time: str = "",
     status: str = "active",
+    sort: str = "name",
     added: int = 0,
 ):
     """Collection browse (signed-in accounts only): search (q), type / tag (OR)
     / time (AND) / status filters, scoped to the collection in the URL.
     ``?added=1`` (set by the create redirect) shows a "meal added" confirmation
-    banner."""
+    banner. ``sort`` is one of name (normalized_name asc, the default), kept
+    (times_kept desc), or recent (last_kept_at desc, nulls last); an unknown
+    value falls back to name — no 500."""
     account = require_account(request, db)
     collection = _get_owned_collection_or_404(db, account, collection_id)
 
     type = type if type in VALID_MEAL_TYPES else ""
     status = status if status in ("active", "archived", "all") else "active"
+    sort = sort if sort in ("name", "kept", "recent") else "name"
     tag_names = [t.strip() for t in tags.split(",") if t.strip()]
     # The Time dropdown is one more tag filter — AND-ed with the Tags select.
     # Only values shaped like a duration (^\d+\s?min$, the same regex that
@@ -449,7 +478,13 @@ def library_page(
         stmt = stmt.where(Item.archived_at.is_(None))
     elif status == "archived":
         stmt = stmt.where(Item.archived_at.is_not(None))
-    items = db.scalars(stmt.order_by(Item.normalized_name)).all()
+    if sort == "kept":
+        stmt = stmt.order_by(Item.times_kept.desc(), Item.normalized_name)
+    elif sort == "recent":
+        stmt = stmt.order_by(Item.last_kept_at.desc().nulls_last(), Item.normalized_name)
+    else:
+        stmt = stmt.order_by(Item.normalized_name)
+    items = db.scalars(stmt).all()
     item_ids = [item.id for item in items]
 
     # Fetch tags for this collection's items in one query (not one query per
@@ -479,7 +514,12 @@ def library_page(
             "name": item.name,
             "type_label": _types_label(_types_of(item)),
             "tags": sorted(tags_by_item.get(item.id, [])),
+            "tags_label": " · ".join(sorted(tags_by_item.get(item.id, []))),
             "kept_label": f"kept {item.times_kept}×" if item.times_kept > 0 else None,
+            "kept_count": item.times_kept,
+            "last_kept_label": (
+                short_date_label(item.last_kept_at) if item.last_kept_at else None
+            ),
             "archived": item.archived_at is not None,
         }
         for item in items
@@ -542,6 +582,14 @@ def library_page(
 
     any_filter_active = bool(q or type or tag_names or time_names or status != "active")
 
+    # Sort stays independent of the filters (the dropdown always renders):
+    # name is the default, kept = times_kept desc, recent = last_kept_at desc.
+    sort_options = [
+        {"label": "Name", "value": "name", "selected": sort == "name"},
+        {"label": "Most kept", "value": "kept", "selected": sort == "kept"},
+        {"label": "Recently kept", "value": "recent", "selected": sort == "recent"},
+    ]
+
     return templates.TemplateResponse(
         request,
         "library.html",
@@ -556,14 +604,17 @@ def library_page(
             "tags": tags,
             "time": time,
             "status": status,
+            "sort": sort,
             "viewing_archived": status == "archived",
             "type_options": type_options,
             "tag_options": tag_options,
             "time_options": time_options,
+            "sort_options": sort_options,
             "has_tags": len(tag_options) > 1,
             "has_times": len(time_options) > 1,
             "any_filter_active": any_filter_active,
             "clear_url": f"/collections/{collection.id}",
+            "nav_collections": _nav_collections(db, account, collection.id),
             "flash": "Meal added." if added else None,
         },
     )
@@ -582,7 +633,7 @@ def new_meal_page(
     account = require_account(request, db)
     collection = _get_owned_collection_or_404(db, account, collection_id)
     return _render_edit(
-        request, db, collection, None, None, _empty_form(type), [], error=None
+        request, db, account, collection, None, None, _empty_form(type), [], error=None
     )
 
 
@@ -613,6 +664,7 @@ def recipe_view(
             "type_labels": [MEAL_TYPE_LABELS[t] for t in _item_meal_types(db, item.id)],
             "ingredients": ingredients,
             "safe_source_url": _safe_source_url(detail.source_url if detail else None),
+            "nav_collections": _nav_collections(db, account, collection.id),
         },
     )
 
@@ -634,6 +686,7 @@ def edit_meal_page(
     return _render_edit(
         request,
         db,
+        account,
         collection,
         item,
         detail,
@@ -668,7 +721,16 @@ def create_meal(
     error = _validate_form(form, db, collection.id)
     if error is not None:
         return _render_edit(
-            request, db, collection, None, None, form, _tag_names(tags), error, status_code=400
+            request,
+            db,
+            account,
+            collection,
+            None,
+            None,
+            form,
+            _tag_names(tags),
+            error,
+            status_code=400,
         )
     item = Item(
         collection_id=collection.id,
@@ -726,6 +788,7 @@ def update_meal(
         return _render_edit(
             request,
             db,
+            account,
             collection,
             item,
             detail,

@@ -165,6 +165,32 @@ button { font-family: var(--sp-font-sans); }
 
 .sidebar-spacer { flex: 1; }
 
+/* Sidebar "Collections" section (M7 S10): pages with collection context list
+   the account's collections under a small section heading. */
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--sp-hairline);
+}
+
+.sidebar-section-title {
+  padding: 0 12px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sp-faint);
+}
+
+/* "Host a session" is pinned at the sidebar's bottom, above the account row. */
+.sidebar-host-btn {
+  min-height: 46px;
+  font-size: 14px;
+  flex: none;
+  margin-bottom: 10px;
+}
+
 /* ---------- Top bar (mobile only) ---------- */
 
 .topbar { display: none; }
@@ -741,20 +767,34 @@ button { font-family: var(--sp-font-sans); }
   text-decoration: none;
 }
 
-/* Two fixed filter rows: search on its own row, then the dropdown row that
-   never wraps at 390px. */
+/* The toolbar form carries the whole library chrome (header row, search,
+   filters, sort) so a search never drops an active filter. The header is its
+   first child; .lib-filter-row below keeps the old spacing. */
 .lib-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 16px;
+  gap: 0;
+  margin-top: 0;
 }
 
-.lib-search-row {
+/* Phone: the header's right-side tools (.lib-header-tools, search + desktop
+   add button) wrap to their own full-width row under the title — the search
+   input stretches, the add button hides (the floating pill takes over).
+   Desktop (>=900px) puts them back in the header row, content-sized. */
+.lib-header-tools {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex: 1 1 100%;
 }
+
+.lib-header-tools .lib-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Desktop-only "Add a meal" button; hidden on phone. */
+.lib-add-btn { display: none; }
 
 .lib-search-input {
   flex: 1 1 auto;
@@ -776,6 +816,7 @@ button { font-family: var(--sp-font-sans); }
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap;
+  margin-top: 10px;
 }
 
 .lib-clear { flex: 0 0 auto; padding: 0 6px; }
@@ -831,6 +872,12 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .lib-row--archived .lib-row-name { color: var(--sp-faint); }
+
+/* Table-style cells (M7 S10): the stacked phone row shows only the name cell;
+   the other cells and the table header render on desktop (>=900px) only. */
+.lib-cell { display: none; }
+.lib-cell-name { display: block; }
+.lib-table-head { display: none; }
 
 .meal-card {
   display: flex;
@@ -902,6 +949,99 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .floating-add:hover { filter: brightness(1.06); }
+
+/* ---------- Library desktop (>=900px) ---------- */
+
+@media (min-width: 900px) {
+  /* The floating "+ Add a meal" pill is phone-only; the header row carries a
+     normal primary button on desktop. */
+  .floating-add { display: none; }
+
+  /* Search (280px) + add button sit in the header row's right side,
+     content-sized instead of the phone's full-width wrap. */
+  .lib-header-tools {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+  }
+
+  .lib-header-tools .lib-search-input {
+    width: 280px;
+    flex: none;
+  }
+
+  .lib-add-btn {
+    display: inline-flex;
+    min-height: 44px;
+    font-size: 14px;
+    padding: 0 18px;
+    flex: none;
+    white-space: nowrap;
+  }
+
+  /* The list renders as a table-style grid: one header row + one grid row
+     per meal. Columns: Name | Type | Tags | Kept | Last kept. */
+  .lib-table {
+    display: grid;
+    grid-template-columns: 1fr 140px 220px 90px 110px;
+  }
+
+  .lib-table-head { display: contents; }
+
+  /* Sentence-case data-table header — the one sanctioned uppercase-free
+     zone honors the no-uppercase type rule by staying lowercase anyway. */
+  .lib-table-head > span {
+    padding: 10px 0 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--sp-faint);
+  }
+
+  .lib-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: inherit;
+    padding: 0;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .lib-cell {
+    display: block;
+    padding: 14px 0;
+    min-width: 0;
+  }
+
+  /* The phone stacked variant (kept chip + subtitle) yields to the dedicated
+     columns on desktop. */
+  .lib-row-kept,
+  .lib-row-sub { display: none; }
+
+  .lib-cell-name .lib-row-name {
+    display: block;
+    font-size: 14.5px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .lib-cell-type,
+  .lib-cell-tags,
+  .lib-cell-kept,
+  .lib-cell-last {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* These cells sit inside the row <a>, which paints its text accent-blue;
+       the metadata cells are chip-colored ink, not link color. */
+    color: var(--sp-chip-ink);
+  }
+
+  /* "—" placeholders for cells with no content (never kept / no tags). */
+  .lib-cell-empty { color: var(--sp-faint); }
+}
 
 /* ---------- Meal edit ---------- */
 

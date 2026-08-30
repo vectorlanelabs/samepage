@@ -1,0 +1,12 @@
+{# Sidebar "Collections" section (M7 S10): every library-area page (browse,
+   add/edit meal, recipe view, report) fills sidebar_extra with this, so the
+   account's collections list in the same place on all of them. The current
+   page's collection is flagged is-active by its nav_collections row. #}
+{% if nav_collections %}
+<section class="sidebar-section">
+  <span class="sidebar-section-title">Collections</span>
+  {% for c in nav_collections %}
+  <a class="nav-link{% if c.current %} is-active{% endif %}" href="/collections/{{ c.id }}">{{ c.name }}</a>
+  {% endfor %}
+</section>
+{% endif %}

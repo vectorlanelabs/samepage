@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{% if meal is none %}Add a meal{% else %}Edit {{ meal.name }}{% endif %} · Same Page{% endblock %}
+{% block sidebar_extra %}{% include "_sidebar_collections.html" %}{% endblock %}
 {% block content %}
 <div class="page page--narrow">
   <div class="page-head">

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ meal.name }} · Same Page{% endblock %}
+{% block sidebar_extra %}{% include "_sidebar_collections.html" %}{% endblock %}
 {% block content %}
 <div class="page page--narrow">
   <a class="back-link" href="/collections/{{ collection.id }}">← Back to library</a>

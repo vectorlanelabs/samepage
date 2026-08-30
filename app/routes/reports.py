@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.auth import require_account
 from app.db import get_db
 from app.models import Item, ItemTag, Tag
-from app.routes.library import _get_owned_collection_or_404
+from app.routes.library import _get_owned_collection_or_404, _nav_collections
 from app.templating import templates
 
 router = APIRouter()
@@ -126,5 +126,6 @@ def collection_report(
             "item_rows": item_rows,
             "tag_rows": tag_rows,
             "not_offered_rows": not_offered_rows,
+            "nav_collections": _nav_collections(db, account, collection.id),
         },
     )

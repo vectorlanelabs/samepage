@@ -1,32 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Meal Library · Same Page{% endblock %}
+{% block sidebar_extra %}{% include "_sidebar_collections.html" %}{% endblock %}
 {% block content %}
 <div class="page">
-  <div class="lib-header">
-    <div>
-      <a class="back-link" href="/collections">← Collections</a>
-      <h1 class="page-title">{{ collection.name }}</h1>
-      <div class="lib-meta-row">
-        <div class="page-meta">
-          {% if viewing_archived %}
-          {{ archived_count }} archived · <a class="meta-link" href="{{ clear_url }}">Show active</a>
-          {% else %}
-          {{ active_count }} meals{% if archived_count > 0 %} · <a class="meta-link" href="?status=archived">{{ archived_count }} archived</a>{% endif %}
-          {% endif %}
+  {# One form carries the whole toolbar (search + filters + sort) so a search
+     never drops an active filter. The header row is part of it: on desktop the
+     search field and "+ Add a meal" sit in the header's right side
+     (.lib-header-tools); on phone .lib-header-tools wraps to its own full-width
+     row under the title (the search input stretches) and the add button hides
+     in favor of the floating pill. One q input, repositioned by CSS. #}
+  <form method="get" action="/collections/{{ collection.id }}" class="lib-toolbar">
+    <div class="lib-header">
+      <div>
+        <a class="back-link" href="/collections">← Collections</a>
+        <h1 class="page-title">{{ collection.name }}</h1>
+        <div class="lib-meta-row">
+          <div class="page-meta">
+            {% if viewing_archived %}
+            {{ archived_count }} archived · <a class="meta-link" href="{{ clear_url }}">Show active</a>
+            {% else %}
+            {{ active_count }} meals{% if archived_count > 0 %} · <a class="meta-link" href="?status=archived">{{ archived_count }} archived</a>{% endif %}
+            {% endif %}
+          </div>
+          <a class="text-link" href="/collections/{{ collection.id }}/report">Report</a>
         </div>
-        <a class="text-link" href="/collections/{{ collection.id }}/report">Report</a>
+      </div>
+      <div class="lib-header-tools">
+        <input type="text" name="q" value="{{ q }}" placeholder="Search…" class="input lib-search-input">
+        <button type="submit" class="visually-hidden">Search</button>
+        <a class="btn btn-primary lib-add-btn" href="/collections/{{ collection.id }}/items/new">+ Add a meal</a>
       </div>
     </div>
+
     <a class="floating-add" href="/collections/{{ collection.id }}/items/new">+ Add a meal</a>
-  </div>
 
-  {% if flash %}<p class="flash">{{ flash }}</p>{% endif %}
+    {% if flash %}<p class="flash">{{ flash }}</p>{% endif %}
 
-  <form method="get" action="/collections/{{ collection.id }}" class="lib-toolbar">
-    <div class="lib-search-row">
-      <input type="text" name="q" value="{{ q }}" placeholder="Search…" class="input lib-search-input">
-      <button type="submit" class="visually-hidden">Search</button>
-    </div>
     <div class="lib-filter-row">
       <select name="type" class="input lib-filter" onchange="this.form.submit()" aria-label="Type">
         {% for opt in type_options %}
@@ -47,6 +56,11 @@
         {% endfor %}
       </select>
       {% endif %}
+      <select name="sort" class="input lib-filter" onchange="this.form.submit()" aria-label="Sort">
+        {% for opt in sort_options %}
+        <option value="{{ opt.value }}"{% if opt.selected %} selected{% endif %}>{{ opt.label }}</option>
+        {% endfor %}
+      </select>
       {% if any_filter_active %}
       <a href="{{ clear_url }}" class="text-link lib-clear">Clear</a>
       {% endif %}
@@ -54,21 +68,38 @@
   </form>
 
   <div class="lib-card">
-  {% for m in meals %}
-    <a class="lib-row{% if m.archived %} lib-row--archived{% endif %}" href="/collections/{{ collection.id }}/items/{{ m.id }}/edit">
-      <span class="lib-row-line1">
-        <span class="lib-row-name">{{ m.name }}</span>
-        {% if m.kept_label %}<span class="lib-row-kept">{{ m.kept_label }}</span>{% endif %}
-      </span>
-      {% if m.subtitle %}<span class="lib-row-sub">{{ m.subtitle }}</span>{% endif %}
-    </a>
+  {% if meals %}
+    <div class="lib-table">
+      <div class="lib-table-head">
+        <span>Name</span>
+        <span>Type</span>
+        <span>Tags</span>
+        <span>Kept</span>
+        <span>Last kept</span>
+      </div>
+    {% for m in meals %}
+      <a class="lib-row{% if m.archived %} lib-row--archived{% endif %}" href="/collections/{{ collection.id }}/items/{{ m.id }}/edit">
+        <span class="lib-cell lib-cell-name">
+          <span class="lib-row-line1">
+            <span class="lib-row-name">{{ m.name }}</span>
+            {% if m.kept_label %}<span class="lib-row-kept">{{ m.kept_label }}</span>{% endif %}
+          </span>
+          {% if m.subtitle %}<span class="lib-row-sub">{{ m.subtitle }}</span>{% endif %}
+        </span>
+        <span class="lib-cell lib-cell-type{% if not m.type_label %} lib-cell-empty{% endif %}">{{ m.type_label or "—" }}</span>
+        <span class="lib-cell lib-cell-tags{% if not m.tags_label %} lib-cell-empty{% endif %}">{{ m.tags_label or "—" }}</span>
+        <span class="lib-cell lib-cell-kept">{{ m.kept_count }}×</span>
+        <span class="lib-cell lib-cell-last{% if not m.last_kept_label %} lib-cell-empty{% endif %}">{{ m.last_kept_label or "—" }}</span>
+      </a>
+    {% endfor %}
+    </div>
   {% else %}
     {% if collection_empty %}
     <p class="empty-state lib-empty">This collection has no items yet.</p>
     {% else %}
     <p class="empty-state lib-empty">No items match these filters.</p>
     {% endif %}
-  {% endfor %}
+  {% endif %}
   </div>
 </div>
 {% endblock %}
