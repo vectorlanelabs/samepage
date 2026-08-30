@@ -1073,3 +1073,18 @@ Coolify redeployed (~30s roll). Production validated: new asset hash b5c448a827,
 Grotesk + acid tokens served, theme-color #101114, zero Quiet Kitchen blue / zero 999px
 pills in the served CSS, key pages 200, phone landing visually confirmed live. The
 loud-moments branch is also pushed for reference.
+
+## 2026-08-30 — M8 cycle 4 (R4: guest shell cohesion, Charlie feedback) — 2caac7f
+
+- Charlie's desktop critique: guest pages read as scattered controls. Root causes found and
+  fixed: the guest Sign-in link inherited .nav-link width:100% (reskin dropped M7's
+  override) so it swallowed the header row; the topbar-inner restructure then left the
+  guest topbar display:none entirely (caught by in-browser verification — template tests
+  can't see CSS visibility; a string-level CSS regression test now guards it). Header now
+  aligns to the min(1080px) content column; /login//signup are centered session-chrome auth
+  screens; landing has one hero CTA; session-brand wordmarks link home (review finding).
+- Review (sonnet): approve with caveats — verified both root-cause claims through the
+  cascade + live renders, confirmed the 401 next= flow, single-CTA landing, and that the
+  new CSS test genuinely fails on the regression shape.
+- Tests 409 → 411, ruff clean. Not pushed. (docs/PLAN-collection-templates.md modified +
+  SPEC file untracked in the tree — Charlie's, untouched.)
