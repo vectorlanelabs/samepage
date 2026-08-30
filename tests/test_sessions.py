@@ -1624,6 +1624,72 @@ def test_vote_batch_item_not_in_open_batch_404(client, post, db_session):
     assert resp.status_code == 404
 
 
+def test_vote_after_finish_redirects_303(client, post, db_session):
+    """HOTFIX2: a stale vote tap on a finished session redirects the voter to
+    the session page (the completion screen) instead of a JSON error."""
+    session, _batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    for bi in items:
+        _cast(client, post, db_session, session, sam, bi.id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[1].id, "no")  # auto-closes
+    sam_id = sam.id  # finish deletes the row; keep the id for the stale tap
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/finish", follow_redirects=False)
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert session.status == "complete"
+
+    _stamp_participant(client, sam_id)  # stale cookie, rows deleted by finish
+    resp = post(
+        f"/s/{session.code}/vote",
+        data={"batch_item_id": str(items[0].id), "choice": "yes"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
+
+
+def test_vote_stale_item_after_next_batch_redirects_303(client, post, db_session):
+    """HOTFIX2: a stale tap carrying an option from the PREVIOUS (closed)
+    batch — the host closed it and started the next — redirects to the session
+    page instead of a JSON 404. The foreign/bogus-id 404s stay intact."""
+    session, _batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner"), ("Salad", "lunch")],
+        roster_names=["Sam", "Lee"],
+        targets=[("dinner", 1), ("lunch", 1)],
+    )
+    # Canonical track order is breakfast, lunch, dinner → batch 1 is the LUNCH
+    # track (Salad only); the dinner options arrive in the advanced batch.
+    (salad,) = items
+    _cast(client, post, db_session, session, sam, salad.id, "yes")
+    _cast(client, post, db_session, session, lee, salad.id, "yes")  # auto-closes
+    db_session.expire_all()
+    assert _open_batch(db_session, session.id) is None
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/next-batch", follow_redirects=False)
+    assert resp.status_code == 303
+    batch2 = _open_batch(db_session, session.id)
+    assert batch2 is not None and batch2.id != salad.batch_id
+
+    _stamp_participant(client, sam.id)
+    resp = post(
+        f"/s/{session.code}/vote",
+        data={"batch_item_id": str(salad.id), "choice": "yes"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
+
+
 def test_vote_bad_choice_400(client, post, db_session):
     session, _, _ = _make_voting_setup(
         db_session,
@@ -1758,6 +1824,31 @@ def test_host_overview_when_not_joined(client, post, db_session):
     assert f'hx-get="/s/{session.code}/voting-status"' in page.text
     assert "Option 1 of" not in page.text
     assert "All your votes are in." not in page.text
+
+
+def test_voting_card_has_results_state_poll(client, post, db_session):
+    """HOTFIX2: the voting card carries the same staleness poll as the results
+    screen — htmx reloads the page when the card's batch is no longer the open
+    batch (closed and superseded), or the session is complete/ended."""
+    session, _collection, _group = _make_voting_setup(
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        targets=[("dinner", 1)],
+    )
+    _login(client, db_session, "host@example.com")
+    post(f"/s/{session.code}/join", data={"display_name": "Sam"}, follow_redirects=False)
+    post(f"/s/{session.code}/start", follow_redirects=False)
+    batch = _open_batch(db_session, session.id)
+    assert batch is not None
+
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert 'class="vote-name"' in page.text  # a voting card is showing
+    assert "Apple" in page.text
+    poll = f'hx-get="/s/{session.code}/results-state/{batch.id}"'
+    assert poll in page.text
+    assert 'hx-trigger="every 2s"' in page.text
+    assert 'hx-swap="none"' in page.text
 
 
 def test_ad_hoc_start_shows_coming_soon_placeholder(client, post, db_session):
@@ -2990,8 +3081,9 @@ def test_complete_session_never_expires(client, db_session):
 
 
 def test_expired_session_refuses_mutations(client, post, db_session):
-    """Expiry blocks mutations: /start, /next-batch, and /vote on a stale
-    session each refuse (400) after the lazy transition to 'expired'."""
+    """Expiry blocks mutations: /start and /next-batch refuse (400) and a
+    stale /vote tap redirects (303) after the lazy transition to 'expired' —
+    the voter lands on the ended screen instead of a JSON error."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
     _login(client, db_session, host.email)
@@ -3033,9 +3125,10 @@ def test_expired_session_refuses_mutations(client, post, db_session):
     resp = post(
         f"/s/{voting2.code}/vote",
         data={"batch_item_id": str(bi.id), "choice": "yes"},
+        follow_redirects=False,
     )
-    assert resp.status_code == 400
-    assert "no more votes" in resp.text.lower()
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{voting2.code}"
     db_session.expire_all()
     assert voting2.status == "expired"
     assert _participant_count(db_session) == 0

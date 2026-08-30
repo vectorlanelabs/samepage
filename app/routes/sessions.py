@@ -713,6 +713,7 @@ def _option_data(db: Session, session: VotingSession, batch_item: BatchItem) -> 
     if item is None:
         return {
             "batch_item_id": batch_item.id,
+            "batch_id": batch_item.batch_id,
             "name": batch_item.ad_hoc_label or "",
             "type_label": None,
             "tags": [],
@@ -735,6 +736,7 @@ def _option_data(db: Session, session: VotingSession, batch_item: BatchItem) -> 
     type_label = _types_label(_item_meal_types(db, item.id)) or None
     return {
         "batch_item_id": batch_item.id,
+        "batch_id": batch_item.batch_id,
         "name": item.name,
         "type_label": type_label,
         "tags": tags,
@@ -1527,21 +1529,42 @@ def vote(
     session) is 403. The option must belong to the session's OPEN batch — a
     foreign/closed/nonexistent option is 404. Idempotent: the first recorded
     vote stands; a re-submit or double-tap leaves it unchanged and adds no row.
-    Only the aggregate ever surfaces — individual votes are never exposed."""
+    Only the aggregate ever surfaces — individual votes are never exposed.
+
+    Stale-tap resilience (HOTFIX2): a browser whose voting card is out of date
+    never gets a JSON error — when the session has ended, when no batch is
+    open (auto/manual close → results screen), or when the posted option
+    belongs to a PREVIOUS batch of this session (the host started the next
+    batch), the POST redirects 303 to the session page, which routes to the
+    current screen. Genuine validation errors stay errors: a nonexistent id or
+    an option from ANOTHER session's batch is still 404, a bad choice 400."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
     _expire_if_stale(db, session)  # lazy §5.5 expiry before any mutation
     if session.status in ENDED_STATUSES:
-        raise HTTPException(400, "This session is over — no more votes.")
+        # Stale tap on a finished/expired session → the current screen (the
+        # completion/ended page) beats a JSON error.
+        return RedirectResponse(f"/s/{session.code}", status_code=303)
     participant = _viewer_participant(request, db, session)
     if participant is None:
         raise HTTPException(403, "Join the session to vote")
     open_batch = _open_batch(db, session)
     if open_batch is None:
-        raise HTTPException(404, "This session has no open batch")
+        # The batch closed (auto or manual) and the host hasn't started the
+        # next one → the results screen is current.
+        return RedirectResponse(f"/s/{session.code}", status_code=303)
     batch_item = db.get(BatchItem, batch_item_id)
-    if batch_item is None or batch_item.batch_id != open_batch.id:
+    if batch_item is None:
+        raise HTTPException(404, "That option isn't in the open batch")
+    if batch_item.batch_id != open_batch.id:
+        # A different batch's option. If it's a PREVIOUS batch of THIS session
+        # the voter's card is stale (the host moved on) → redirect to the
+        # current screen. A foreign session's option is a genuine 404 (no
+        # existence oracle, CLAUDE.md #6).
+        item_batch = db.get(Batch, batch_item.batch_id)
+        if item_batch is not None and item_batch.session_id == session.id:
+            return RedirectResponse(f"/s/{session.code}", status_code=303)
         raise HTTPException(404, "That option isn't in the open batch")
     if choice not in ("yes", "no"):
         raise HTTPException(400, "Choice must be 'yes' or 'no'")
