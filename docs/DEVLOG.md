@@ -1088,3 +1088,12 @@ loud-moments branch is also pushed for reference.
   new CSS test genuinely fails on the regression shape.
 - Tests 409 → 411, ruff clean. Not pushed. (docs/PLAN-collection-templates.md modified +
   SPEC file untracked in the tree — Charlie's, untouched.)
+
+## 2026-08-30 — M8 cycle 5 (R5: sidebar Join + hub CTA dedupe, Charlie feedback) — see log
+
+- Sidebar gains the secondary "Join with a code" under Host; the hub's CTA stack hides at
+  >=900px (phone unchanged per artboard). Review (sonnet) approved and caught a
+  pre-existing degradation this made marginally worse: the sidebar was unscrollable, so
+  long collection lists pushed the pinned actions off-screen — fixed (nav region is now
+  the overflow-y:auto area; many-collections regression test added).
+- Tests 413 → 415, ruff clean. Not pushed.
