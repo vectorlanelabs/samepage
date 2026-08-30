@@ -1,4 +1,18 @@
-# Changelog — Quiet Kitchen handoff
+# Changelog — design handoff
+
+## v5 — "Loud Moments" replaces Quiet Kitchen (2026-08-29)
+- Full direction change, chosen by Charlie from a two-accent candidate set: cool near-white
+  ground, hard ink #101114, crisp 1px borders, 12/10px radii, flat buttons, acid green
+  #CCF53F as the single accent (surfaces only, always ink text; #4E6200 as its text-safe
+  form). Schibsted Grotesk replaces Hanken Grotesk; IBM Plex Mono promoted to the brand
+  voice (codes, counts, tags, dates, outcome pills, all lowercase). Links become ink with a
+  2px accent underline. The completion screen flips to an ink ground in both themes.
+- Compositions, chrome model, violet host semantics, outcome grouping, vote-privacy display
+  rules, and the v3 lean-copy rules all carry over from Quiet Kitchen/M7 unchanged.
+- Bundle contents: README.md (tokens light+dark, rules, per-screen deltas) + screens.html
+  (static six-screen reference). The Quiet Kitchen canvas files are removed (git history
+  keeps v1–v4); the editable canvas lives at the "Loud Moments" Claude artifact.
+
 
 ## v4 — filter controls (2026-08-29)
 - Replaced pill/chip filter rows in the library (phone + desktop) with compact dropdown
