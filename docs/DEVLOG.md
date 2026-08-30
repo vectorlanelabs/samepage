@@ -989,3 +989,14 @@ the `claude` CLI is not authed in this environment — noted for future cycles).
   edit/recipe/report (lead scope decision). Verified clean: sort injection shape,
   zero-group Host path, session chrome untouched, cross-tenant sidebar negatives.
 - Tests 379 → 389, ruff clean. Not pushed.
+
+## 2026-08-29 — M7 cycle 8 (S11: copy sweep + small fixes) — b81c441
+
+- Shipped: v3 lean-copy sweep (zero "no account" captions or em-dash asides left in
+  user-visible copy; the API/MCP panel's technical docs accepted as-is — it matches no
+  artboard and is flagged for a future design pass), recipe view per artboard, report
+  "never kept" boundary fixed + unit-tested, groups meta, phone landing subtitle.
+- Review (sonnet): APPROVE, zero findings — copy assertions all retargeted (never deleted),
+  boundary tests real, source_domain move clean both directions, breakpoint spans
+  a11y-verified.
+- Tests 389 → 391, ruff clean. All 11 review findings-slices (S1–S11) now landed. Not pushed.
