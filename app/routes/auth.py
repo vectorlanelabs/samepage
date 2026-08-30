@@ -40,7 +40,7 @@ def _login_page(request: Request, error: str | None, status_code: int = 200, nex
     return templates.TemplateResponse(
         request,
         "login.html",
-        {"error": error, "next": next, "sso_configured": PROVIDERS["google"].configured},
+        {"error": error, "next": next, "sso_configured": PROVIDERS["google"].configured, "chrome": "session"},
         status_code=status_code,
     )
 

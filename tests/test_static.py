@@ -82,6 +82,22 @@ def test_app_css_has_no_full_pill_radius():
     assert "border-radius:999px" not in css
 
 
+def test_guest_topbar_has_visible_display_rule():
+    """M8 R4 fix: the base .topbar rule is display: none (signed-in desktop
+    uses the sidebar instead). After layout moved into .topbar-inner, the
+    .shell--guest .topbar override lost its display declaration and the guest
+    header went invisible at every width. The override must declare a
+    non-none display. String-level is enough — this class of bug is invisible
+    to template tests."""
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.css").read_text()
+    block = css[css.index(".shell--guest .topbar") :]
+    block = block[: block.index("}")]
+    assert "display:" in block
+    assert "display: none" not in block
+
+
 def test_hub_card_meta_uses_mono_voice(client):
     """M8 R3: the collections-hub card meta line (items count · last session
     date) renders in the mono voice — faint 12px IBM Plex Mono."""

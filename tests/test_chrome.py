@@ -333,3 +333,6 @@ def test_guest_landing_keeps_site_footer_and_no_session_brand(client):
     assert 'href="/terms"' in body
     assert 'class="session-brand"' not in body
     assert "class=\"sidebar\"" not in body
+    # M8 R4: the guest header is the topbar-inner column (brand + Sign in
+    # aligned with .content's min(1080px) column).
+    assert 'class="topbar-inner"' in body

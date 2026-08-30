@@ -225,14 +225,33 @@ button { font-family: var(--sp-font-sans); }
 
 .topbar { display: none; }
 
+/* M8 R4: the header's children live in a centered max-width column so the
+   guest header aligns with .content's min(1080px) column at every width —
+   same left edge as the landing headline. The flex layout lives here, not on
+   .topbar (which keeps the background/padding/sticky rules). */
+.topbar-inner {
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* The .brand base rule reserves sidebar space (margin-bottom: 22px); inside
+   the header that offset would tilt the row off-center — zero it. */
+.topbar .brand { margin-bottom: 0; }
+
 /* Signed-out: no 250px app-shell sidebar. A slim top bar (brand + Sign in)
    carries the chrome at every width, and the page owns the rest. */
 .shell--guest { flex-direction: column; }
-/* A marketing header, not app chrome: transparent, brand left, sign-in top-right. */
+/* A marketing header, not app chrome: transparent, brand left, sign-in top-right.
+   Must re-show the bar: the base .topbar rule sets display: none (the signed-in
+   desktop shell uses the sidebar instead), and the R4 restructure moved layout
+   into .topbar-inner — without an explicit display here the guest header would
+   be invisible at every width. */
 .shell--guest .topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: block;
   background: transparent;
   border-bottom: none;
   padding: 18px 24px;
@@ -244,6 +263,11 @@ button { font-family: var(--sp-font-sans); }
   display: inline-flex;
   align-items: center;
   min-height: 44px;
+  /* The base .nav-link rule sets width: 100%; inside the flex .topbar-inner
+     that would stretch the link across the whole header. Restore intrinsic
+     sizing so "Sign in" sits top-right at its natural width. */
+  flex: 0 0 auto;
+  width: auto;
 }
 
 /* Signed-in mobile identity: brand left, avatar circle right — no nav row.
@@ -281,7 +305,9 @@ button { font-family: var(--sp-font-sans); }
   padding: 24px 26px 28px;
 }
 
-/* The join screen carries the wordmark above its content. */
+/* The join screen carries the wordmark above its content; it's an anchor to
+   "/" (R4) but keeps the exact wordmark look — no link underline, the color
+   inherits (resolves to --sp-ink), pointer cursor. */
 .session-brand {
   display: flex;
   align-items: center;
@@ -289,7 +315,9 @@ button { font-family: var(--sp-font-sans); }
   gap: 8px;
   font-weight: 700;
   font-size: 18px;
-  color: var(--sp-ink);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
   margin: 26px 0 10px;
 }
 
@@ -1803,21 +1831,30 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .auth-note {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--sp-faint);
   text-align: center;
-  margin: 18px 0 0;
+  margin: 14px 0 0;
 }
 
 /* ---------- Auth ---------- */
 
-.auth-wrap {
-  max-width: 420px;
+/* M8 R4: the login card is a focused, vertically-centered screen (like the
+   session-brand join flow), not a padded wrapper. The flex column centers
+   the card in the remaining viewport height. */
+.auth-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 400px;
   margin: 0 auto;
-  padding: 24px 0;
 }
 
-.auth-card { padding: 28px 24px; }
+.auth-card { padding: 32px 28px; width: 100%; }
+
+.auth-card .btn-block { margin-top: 22px; }
 
 .auth-sub {
   font-size: 14px;
@@ -1848,10 +1885,7 @@ button { font-family: var(--sp-font-sans); }
   .sidebar { display: none; }
 
   .topbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: nowrap;
+    display: block;
     position: sticky;
     top: 0;
     z-index: 20;

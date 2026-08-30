@@ -53,6 +53,10 @@ def test_login_page_shows_google_button_when_configured(client, monkeypatch):
     # No email/password form anywhere.
     assert 'type="password"' not in resp.text
     assert 'name="email"' not in resp.text
+    # M8 R4: login is a session-screen — session-brand wordmark, no site topbar.
+    # R4: the wordmark is an anchor home (no underline — handled in CSS).
+    assert '<a class="session-brand" href="/">' in resp.text
+    assert 'class="topbar"' not in resp.text
 
 
 def test_login_page_while_already_signed_in_redirects(client, db_session):

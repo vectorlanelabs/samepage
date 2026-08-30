@@ -32,6 +32,17 @@ def test_home_signed_out_shows_no_data(client):
     assert "stat-count" not in resp.text  # no count data rendered at all
 
 
+def test_home_hero_has_single_host_cta(client):
+    """M8 R4: the hero has exactly one CTA — Host a session → /sessions/new.
+    The old secondary hero "Sign in" button is gone (signed-out visitors keep
+    the topbar Sign in; /sessions/new 401s to /login?next=… for them)."""
+    body = client.get("/").text
+    assert body.count('href="/sessions/new"') == 1
+    hero = body.split('class="hero-cta"')[1].split("</div>")[0]
+    assert 'href="/sessions/new"' in hero
+    assert "Sign in" not in hero
+
+
 def test_home_signed_in_redirects_to_hub(client, db_session):
     """The collections hub is the post-login home: a signed-in visitor to "/"
     is 303'd to /collections — the landing page never renders app data to

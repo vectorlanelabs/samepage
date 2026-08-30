@@ -56,15 +56,17 @@
 
   {% if chrome != "session" %}
   <div class="topbar">
-    <a class="brand" href="/">
-      <span class="brand-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
-      Same Page
-    </a>
-    {% if current_account %}
-    <a class="topbar-avatar" href="/collections">{{ current_account.display_name[:1]|upper }}</a>
-    {% else %}
-    <a class="nav-link" href="/login">Sign in</a>
-    {% endif %}
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
+        Same Page
+      </a>
+      {% if current_account %}
+      <a class="topbar-avatar" href="/collections">{{ current_account.display_name[:1]|upper }}</a>
+      {% else %}
+      <a class="nav-link" href="/login">Sign in</a>
+      {% endif %}
+    </div>
   </div>
   {% endif %}
 

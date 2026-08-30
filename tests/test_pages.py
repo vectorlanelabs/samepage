@@ -17,6 +17,8 @@ def test_terms_public(client):
 
 
 def test_footer_links_on_a_page(client):
-    body = client.get("/login").text
+    # The login page is now a session-screen (no site footer); the guest
+    # landing keeps the footer, so assert it there instead.
+    body = client.get("/").text
     assert 'href="/privacy"' in body
     assert 'href="/terms"' in body
