@@ -1065,3 +1065,11 @@ account exists in prod by design).
   slice reviewed. Branch loud-moments NOT pushed — Charlie's call (push = prod deploy).
 - Untracked docs/SPEC-collection-templates-execution.md (not authored by this loop) left
   in place for Charlie.
+
+## 2026-08-30 — M8 shipped to production
+
+Charlie approved; main fast-forwarded to 06c1453 and pushed. CI green (run 33311846958),
+Coolify redeployed (~30s roll). Production validated: new asset hash b5c448a827, Schibsted
+Grotesk + acid tokens served, theme-color #101114, zero Quiet Kitchen blue / zero 999px
+pills in the served CSS, key pages 200, phone landing visually confirmed live. The
+loud-moments branch is also pushed for reference.
