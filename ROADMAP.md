@@ -52,7 +52,7 @@ Budget: 14 cycles. Standing decision: breakfast/lunch/dinner multi-select tracks
 | S6 | Voting screen: progress bar, context line (collection · group), centered card + bottom-pinned Yes/No (F6) | [x] 6181fff |
 | S7 | Results + complete: outcome color labels (accent/host/faint), persistent kept-by-host group, white majority card w/ violet label, quiet counts, End session early (danger), target-met copy, completion screen per artboard (F7, F11-complete) | [x] d1b1f03 |
 | S8 | Join/lobby/waiting compositions: invite landing w/ session+group+chips, voter lobby centered + avatar chips, host lobby "N at the table" + lock caption + code pill, waiting ✓ + progress card (F11, F12-lobby) | [x] c94fbc5 |
-| S9 | Library phone: compact rows-in-card, actions off browse (archive stays in edit), one-line Type/Tags/Time filter row, edit-screen tags = applied-only + "+ tag" adder (F8-phone, F9) | [ ] |
+| S9 | Library phone: compact rows-in-card, actions off browse (archive stays in edit), one-line Type/Tags/Time filter row, edit-screen tags = applied-only + "+ tag" adder (F8-phone, F9) | [x] 59f047e |
 | S10 | Library desktop: sidebar w/ collections + pinned Host, table layout (name/type/tags/kept/last kept) + Sort + Clear (F8-desktop) | [ ] |
 | S11 | Copy sweep to handoff v3 + small fixes: captions, em-dash asides, recipe back-link/source-domain/footer, groups page composition, report "never kept" conditional, phone landing composition, API-panel copy (F10, F12) | [ ] |
 

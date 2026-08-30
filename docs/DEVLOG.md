@@ -957,3 +957,24 @@ the `claude` CLI is not authed in this environment — noted for future cycles).
   '~5 minutes' chip. Verified clean: htmx poll isolation (per-request auth, no cross-viewer
   'you' leakage), host/voter markup split, vote privacy.
 - Tests 369 → 372, ruff clean. Not pushed.
+
+## 2026-08-30 — M7 cycle 6 (S9: library phone composition) — 59f047e
+
+- Shipped: library rows condensed into one card (~7 rows/screen) — each row is a full-width
+  link to the item's edit screen, kept count in lowercase ("kept 3×") sits right of the name,
+  "{type} · tags · archived" is the second line; actions (Edit/Recipe/Archive) are off the
+  browse list, archive stays in the edit screen. Meta line now reads "{n} meals" with an
+  "{n} archived" link (only when archived items exist) and a "Show active" link in the
+  archived view; Report is a quiet text-link beside the meta.
+- Filters: two fixed rows — search on its own full-width row with a visually hidden submit,
+  then a never-wrapping Type/Tags/Time row. Time tags (names matching ^\d+\s?min$, e.g.
+  "40 min") are split route-side into their own Time dropdown; the time filter ANDs with the
+  Tags select. Status dropdown removed (archived is reached via the meta link; ?status=all
+  still works for tests).
+- Edit screen: applied tags render as checked chips (the ✕ is pure-CSS via :has, no JS), the
+  remaining group tags sit unchecked behind a dashed "+ tag" details pill; the old JS toggle
+  script is gone.
+- Verified clean: time/tags dropdown split + AND semantics, dropdown hidden when no time tags,
+  lowercase kept label + edit-screen row link (no Recipe/Archive on browse), uncheck-a-tag
+  removal on update POST, 404 semantics, sessions tests untouched.
+- Tests 372 → 376, ruff clean. Not pushed.
