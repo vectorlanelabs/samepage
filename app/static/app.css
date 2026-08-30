@@ -150,9 +150,10 @@ button { font-family: var(--sp-font-sans); }
   border-radius: 2px;
 }
 
+/* M8 R3: brand bars are accent / host / border-strong (handoff delta 4). */
 .brand-glyph i:nth-child(1) { background: var(--sp-accent); }
 .brand-glyph i:nth-child(2) { background: var(--sp-host); }
-.brand-glyph i:nth-child(3) { background: var(--sp-border); }
+.brand-glyph i:nth-child(3) { background: var(--sp-border-strong); }
 
 .nav {
   display: flex;
@@ -236,11 +237,13 @@ button { font-family: var(--sp-font-sans); }
   border-bottom: none;
   padding: 18px 24px;
 }
-/* The sidebar nav-link is a full-width block; in the guest header it must be
-   content-width so space-between actually parks Sign in at the right edge. */
-.shell--guest .topbar .nav-link {
-  flex: 0 0 auto;
-  width: auto;
+/* The guest header's Sign in is a plain text link (global link treatment —
+   ink text + 2px accent underline) with a 44px touch target in the slim
+   header. */
+.shell--guest .topbar a:not(.brand) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 /* Signed-in mobile identity: brand left, avatar circle right — no nav row.
@@ -249,9 +252,11 @@ button { font-family: var(--sp-font-sans); }
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--sp-avatar);
-  color: var(--sp-chip-ink);
-  font-weight: 600;
+  /* M8 R3: the hub avatar is the ink circle + reversed initial (handoff
+     per-screen delta 4: "avatar becomes ink circle + white initial"). */
+  background: var(--sp-ink);
+  color: var(--sp-bg);
+  font-weight: 700;
   font-size: 13.5px;
   display: flex;
   align-items: center;
@@ -433,6 +438,10 @@ button { font-family: var(--sp-font-sans); }
 
 /* ---------- Chips / pills ---------- */
 
+/* M8 R3: the pill sweep — no 999px pills anywhere. Chips are mono pills at
+   6px radius (handoff shape rules: "mono pills 6px"); the recipe-page chip
+   rows are retired to mono text lines, so the remaining .chip uses are the
+   join-session options line and the roster badges. */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -441,11 +450,11 @@ button { font-family: var(--sp-font-sans); }
   min-height: 38px;
   padding: 7px 14px;
   border: none;
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--sp-chip-bg);
   color: var(--sp-chip-ink);
-  font-family: var(--sp-font-sans);
-  font-weight: 600;
+  font-family: var(--sp-font-mono);
+  font-weight: 500;
   font-size: 12.5px;
   line-height: 1;
   cursor: pointer;
@@ -572,8 +581,10 @@ button { font-family: var(--sp-font-sans); }
 
 .landing .hero-cta { margin-top: 22px; }
 
-/* Join-by-code is the secondary audience (guests with a code) — present, but it
-   must not outshout the primary Host/sign-up action, so its button is secondary. */
+/* Join-by-code is the secondary audience (guests with a code), and its
+   in-card "Join session" is the solid-ink structural lead among the accent
+   CTAs (handoff shape rules: hub's "Host a session" + landing's in-card
+   "Join session" are solid ink). */
 .join-card { padding: 24px 22px; }
 
 /* How-it-works band: fills the fold and gives the page a second beat. */
@@ -589,14 +600,18 @@ button { font-family: var(--sp-font-sans); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: var(--sp-accent-tint);
-  color: var(--sp-accent-deep);
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  /* M8 R3: the 999px accent-tint circles are retired — the step number is a
+     mono 13px chip on --sp-chip-bg at 6px radius. */
+  border-radius: 6px;
+  background: var(--sp-chip-bg);
+  color: var(--sp-chip-ink);
   font-family: var(--sp-font-mono);
   font-weight: 500;
-  font-size: 15px;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .landing-step-title {
@@ -667,9 +682,10 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .hub-group-name {
-  font-size: 24px;
+  /* M8 R3: 27/800 with the display tracking scale (−0.022em at 27px). */
+  font-size: 27px;
   font-weight: 800;
-  letter-spacing: -0.018em;
+  letter-spacing: -0.022em;
   color: var(--sp-ink);
 }
 
@@ -708,6 +724,8 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .hub-last-session span:last-child {
+  /* M8 R3: the strip's date label is mono (lowercased in the template). */
+  font-family: var(--sp-font-mono);
   font-size: 12px;
   color: var(--sp-faint);
   flex: none;
@@ -750,8 +768,11 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .hub-card-meta {
-  font-size: 12.5px;
-  color: var(--sp-sub);
+  /* M8 R3: collection meta in the mono voice — "{n} items · last session
+     {date|lower}" in faint 12px (handoff per-screen delta 4). */
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  color: var(--sp-faint);
   margin-top: 3px;
 }
 
@@ -798,6 +819,14 @@ button { font-family: var(--sp-font-sans); }
   flex-wrap: wrap;
 }
 
+/* M8 R3: the library's count line ("14 meals · 2 archived") is mono voice;
+   the generic .page-meta stays sans for names (report collection name). */
+.lib-meta-row .page-meta {
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 /* Quiet inline link inside the meta line (archived toggle / show active). */
 .meta-link {
   color: var(--sp-ink);
@@ -842,11 +871,15 @@ button { font-family: var(--sp-font-sans); }
   min-width: 0;
 }
 
-/* Compact dropdown filters (v4): sized to content, not stretched full width;
-   they shrink (with ellipsis) before the row wraps on narrow phones. */
+/* Compact dropdown filters (v4): sized to content, not stretched full width.
+   M8 R3 fix: an 84px min-width floor keeps every select readable — selects
+   refuse to shrink below it, so a label is never crushed to a sliver (the
+   old min-width: 0 let the row squeeze the four into one 358px phone line).
+   Below 560px the row wraps to two per line instead (media query below);
+   >=560px keeps the single nowrap row. */
 .lib-filter {
   width: auto;
-  min-width: 0;
+  min-width: 84px;
   flex: 0 1 auto;
   padding-right: 34px;
   text-overflow: ellipsis;
@@ -861,6 +894,17 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .lib-clear { flex: 0 0 auto; padding: 0 6px; }
+
+/* Phone (<560px): the filter row can't hold four selects + the Clear link in
+   one line, so it wraps — each select is flex: 1 1 40% (40% basis + 8px gap
+   means two fit per line; a third would need 120% + gaps). The Clear link
+   takes flex-basis: 100% so it always flows onto its own line under the
+   selects. The 84px floor from .lib-filter still applies per select. */
+@media (max-width: 559px) {
+  .lib-filter-row { flex-wrap: wrap; }
+  .lib-filter { flex: 1 1 40%; }
+  .lib-clear { flex-basis: 100%; }
+}
 
 /* One card holding a row per meal. */
 .lib-card {
@@ -901,6 +945,8 @@ button { font-family: var(--sp-font-sans); }
 
 .lib-row-kept {
   flex: none;
+  /* M8 R3: "kept 4×" in the mono voice. */
+  font-family: var(--sp-font-mono);
   font-size: 12px;
   color: var(--sp-faint);
 }
@@ -908,8 +954,12 @@ button { font-family: var(--sp-font-sans); }
 .lib-row-sub {
   display: block;
   margin-top: 3px;
-  font-size: 12.5px;
+  /* M8 R3: the "dinner · tacos" subtitle is mono lowercase. */
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
   color: var(--sp-sub);
+  text-transform: lowercase;
 }
 
 .lib-row--archived .lib-row-name { color: var(--sp-faint); }
@@ -947,10 +997,27 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .kept-count {
-  font-size: 12.5px;
-  font-weight: 600;
+  /* M8 R3: mono voice — counts are mono throughout. */
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
   color: var(--sp-faint);
   margin-left: auto;
+}
+
+/* Report reject-rate + kept/offered lines are mono voice too. */
+.report-pct {
+  font-family: var(--sp-font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--sp-sub);
+}
+
+.report-meta {
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--sp-faint);
 }
 
 /* Floating "+ Add a meal" pill — phone; static button on desktop. */
@@ -1055,6 +1122,10 @@ button { font-family: var(--sp-font-sans); }
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    /* M8 R3: the desktop table cells are mono voice (kept dates lowercase). */
+    font-family: var(--sp-font-mono);
+    font-size: 12px;
+    font-weight: 400;
     /* These cells sit inside the row <a>, which paints its text accent-blue;
        the metadata cells are chip-colored ink, not link color. */
     color: var(--sp-chip-ink);
@@ -1134,10 +1205,12 @@ button { font-family: var(--sp-font-sans); }
   min-height: 40px;
   padding: 9px 14px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  /* M8 R3: removable tag chips join the 6px mono pill family. */
+  border-radius: 6px;
   background: var(--sp-chip-bg);
   color: var(--sp-chip-ink);
-  font-weight: 600;
+  font-family: var(--sp-font-mono);
+  font-weight: 500;
   font-size: 12.5px;
   cursor: pointer;
 }
@@ -1177,12 +1250,12 @@ button { font-family: var(--sp-font-sans); }
   min-height: 40px;
   padding: 0 16px;
   border: 1.5px dashed var(--sp-border-strong);
-  border-radius: 999px;
+  border-radius: 6px;
   background: none;
   color: var(--sp-accent-deep);
-  font-family: var(--sp-font-sans);
+  font-family: var(--sp-font-mono);
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   list-style: none;
 }
@@ -1202,6 +1275,16 @@ button { font-family: var(--sp-font-sans); }
 
 .recipe-title { margin-top: 18px; }
 .recipe-kept { margin-top: 12px; }
+
+/* M8 R3: recipe-page chip rows are retired — type + tags collapse into one
+   lowercase mono line (same voice as the voting card's .vote-tags). */
+.recipe-tags {
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--sp-faint);
+  margin: 0;
+}
 
 .recipe-section { padding: 18px 20px; margin-top: 16px; }
 
@@ -1233,7 +1316,7 @@ button { font-family: var(--sp-font-sans); }
   top: 0.62em;
   width: 5px;
   height: 5px;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--sp-accent);
 }
 
@@ -1254,7 +1337,10 @@ button { font-family: var(--sp-font-sans); }
   border-top: 1px solid var(--sp-border);
   padding-top: 14px;
   margin-top: 28px;
-  font-size: 12.5px;
+  /* M8 R3: the offered/kept + last-kept line is part of the mono voice. */
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
   color: var(--sp-faint);
 }
 
@@ -1442,7 +1528,7 @@ button { font-family: var(--sp-font-sans); }
   width: 20px;
   height: 20px;
   flex: none;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--sp-accent);
   color: var(--sp-accent-ink);
   font-size: 12px;
@@ -1596,7 +1682,7 @@ button { font-family: var(--sp-font-sans); }
   width: 8px;
   height: 8px;
   flex: none;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--sp-accent);
 }
 
@@ -1640,7 +1726,10 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .group-card-meta {
-  font-size: 12.5px;
+  /* M8 R3: "Owner · 2 collections" is mono voice. */
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
   color: var(--sp-sub);
   margin-top: 3px;
 }
@@ -1691,11 +1780,13 @@ button { font-family: var(--sp-font-sans); }
   display: inline-block;
   margin-left: 8px;
   padding: 3px 10px;
-  border-radius: 999px;
+  /* M8 R3: mono 6px badge — the "★ owner" label joins the pill family. */
+  border-radius: 6px;
   background: var(--sp-chip-bg);
   color: var(--sp-chip-ink);
+  font-family: var(--sp-font-mono);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   vertical-align: 1px;
 }
 
@@ -1847,7 +1938,6 @@ button { font-family: var(--sp-font-sans); }
 .btn-primary:focus-visible,
 .pill:focus-visible {
   outline-offset: 1px;
-  border-radius: 999px;
 }
 
 /* ---------- Site footer + prose pages ---------- */
@@ -2419,7 +2509,8 @@ body.complete-ground {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  border-radius: 999px;
+  /* M8 R3: lobby "here" chips are 6px mono pills. */
+  border-radius: 6px;
   background: var(--sp-chip-bg);
   padding: 6px 13px 6px 7px;
 }

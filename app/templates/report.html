@@ -24,7 +24,7 @@
           <div style="height:100%;width:{{ row.reject_rate_pct }}%;background:var(--sp-accent);border-radius:4px;"></div>
         </div>
         <div class="report-meta">
-          Kept {{ row.kept }} of {{ row.offered }} offered{% if row.last_kept %} · last kept {{ row.last_kept }}{% elif row.kept == 0 %} · never kept{% endif %}
+          kept {{ row.kept }} of {{ row.offered }} offered{% if row.last_kept %} · last kept {{ row.last_kept|lower }}{% elif row.kept == 0 %} · never kept{% endif %}
         </div>
       </div>
       {% endfor %}
@@ -45,7 +45,7 @@
         <div style="height:8px;border-radius:4px;background:var(--sp-border);overflow:hidden;">
           <div style="height:100%;width:{{ row.reject_rate_pct }}%;background:var(--sp-accent);border-radius:4px;"></div>
         </div>
-        <div class="report-meta">Kept {{ row.kept }} of {{ row.offered }} offered</div>
+        <div class="report-meta">kept {{ row.kept }} of {{ row.offered }} offered</div>
       </div>
       {% endfor %}
     {% else %}

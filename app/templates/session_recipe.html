@@ -4,14 +4,9 @@
 <div class="page page--narrow">
   <a class="back-link" href="/s/{{ session.code }}">← Back to voting</a>
   <h1 class="page-title recipe-title">{{ item.name }}</h1>
-  <div class="chip-row" style="margin-top:12px;">
-    {% if type_label %}
-    <span class="chip chip--static">{{ type_label }}</span>
-    {% endif %}
-    {% for t in tags %}
-    <span class="chip chip--static">{{ t }}</span>
-    {% endfor %}
-  </div>
+  {% if type_label or tags %}
+  <p class="recipe-tags" style="margin-top:12px;">{% if type_label %}{{ type_label|lower }}{% endif %}{% if type_label and tags %} · {% endif %}{{ tags|join(" · ")|lower }}</p>
+  {% endif %}
 
   {% if ingredients %}
   <section class="card recipe-section">
@@ -36,9 +31,9 @@
   {% endif %}
 
   <div class="recipe-footer">
-    <span>Offered {{ item.times_offered }}× · kept {{ item.times_kept }}×</span>
+    <span>offered {{ item.times_offered }}× · kept {{ item.times_kept }}×</span>
     {% if last_kept_label %}
-    <span>Last kept {{ last_kept_label }}</span>
+    <span>last kept {{ last_kept_label|lower }}</span>
     {% endif %}
   </div>
 </div>

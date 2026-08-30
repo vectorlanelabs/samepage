@@ -16,7 +16,7 @@
         <a class="hub-card" href="/collections/{{ c.id }}">
           <div>
             <div class="hub-card-name">{{ c.name }}</div>
-            <div class="hub-card-meta">{{ c.active_count }} active item{{ "s" if c.active_count != 1 else "" }}{% if c.last_session_label %} · last session {{ c.last_session_label }}{% endif %}</div>
+            <div class="hub-card-meta">{{ c.active_count }} active item{{ "s" if c.active_count != 1 else "" }}{% if c.last_session_label %} · last session {{ c.last_session_label|lower }}{% endif %}</div>
           </div>
           <span class="hub-card-arrow" aria-hidden="true">›</span>
         </a>
@@ -33,7 +33,7 @@
   {% if last_kept %}
   <div class="hub-last-session">
     <span>Last session kept {{ last_kept.count }} pick{{ "s" if last_kept.count != 1 else "" }}</span>
-    <span>{{ last_kept.label }}</span>
+    <span>{{ last_kept.label|lower }}</span>
   </div>
   {% endif %}
 

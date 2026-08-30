@@ -84,12 +84,12 @@
             <span class="lib-row-name">{{ m.name }}</span>
             {% if m.kept_label %}<span class="lib-row-kept">{{ m.kept_label }}</span>{% endif %}
           </span>
-          {% if m.subtitle %}<span class="lib-row-sub">{{ m.subtitle }}</span>{% endif %}
+          {% if m.subtitle %}<span class="lib-row-sub">{{ m.subtitle|lower }}</span>{% endif %}
         </span>
         <span class="lib-cell lib-cell-type{% if not m.type_label %} lib-cell-empty{% endif %}">{{ m.type_label or "—" }}</span>
         <span class="lib-cell lib-cell-tags{% if not m.tags_label %} lib-cell-empty{% endif %}">{{ m.tags_label or "—" }}</span>
         <span class="lib-cell lib-cell-kept">{{ m.kept_count }}×</span>
-        <span class="lib-cell lib-cell-last{% if not m.last_kept_label %} lib-cell-empty{% endif %}">{{ m.last_kept_label or "—" }}</span>
+        <span class="lib-cell lib-cell-last{% if not m.last_kept_label %} lib-cell-empty{% endif %}">{{ (m.last_kept_label or "")|lower or "—" }}</span>
       </a>
     {% endfor %}
     </div>

@@ -581,8 +581,8 @@ def test_library_sort_recent_orders_by_last_kept_nulls_last(client, post, db_ses
     order = [resp.text.index(n) for n in ("Burgers", "Tacos", "Pizza", "Soup")]
     assert order == sorted(order)
     # The kept date renders as the short label in the Last kept column.
-    assert ">Aug 20</span>" in resp.text
-    assert ">Aug 1</span>" in resp.text
+    assert ">aug 20</span>" in resp.text
+    assert ">aug 1</span>" in resp.text
     # The never-kept item shows the empty-cell dash, not a date.
     assert 'class="lib-cell lib-cell-last lib-cell-empty">—</span>' in resp.text
 
@@ -651,7 +651,7 @@ def test_library_desktop_table_columns_render(client, post, db_session):
     assert ">Lunch · Dinner</span>" in resp.text
     assert ">40 min · weeknight</span>" in resp.text
     assert ">3×</span>" in resp.text
-    assert ">Aug 20</span>" in resp.text
+    assert ">aug 20</span>" in resp.text
     # Phone chip still renders for the kept item.
     assert ">kept 3×</span>" in resp.text
     # Bare item: its own type, and em dashes in the tag/last-kept cells.
@@ -787,6 +787,9 @@ def test_recipe_view_renders(client, post, db_session):
     resp = client.get(f"/collections/{collection.id}/items/{item.id}")
     assert resp.status_code == 200
     assert "Chili" in resp.text
+    # Type labels + tags render as one lowercase mono chip line.
+    assert 'class="recipe-tags"' in resp.text
+    assert "lunch · dinner · spicy" in resp.text
     assert "1 lb beef" in resp.text
     assert "2 cans beans" in resp.text
     assert "1 onion" in resp.text

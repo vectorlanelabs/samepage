@@ -69,3 +69,24 @@ def test_pwa_icons_served(client):
         resp = client.get(f"/static/{icon}")
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/png"
+
+
+def test_app_css_has_no_full_pill_radius():
+    """M8 R3: the 999px 'full pill' radius is retired — every chip/badge/brand
+    bar now uses a 6px radius (mono) or 50% (true circles only). Read the file
+    directly so a serving/config regression can't hide a stray declaration."""
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.css").read_text()
+    assert "border-radius: 999px" not in css
+    assert "border-radius:999px" not in css
+
+
+def test_hub_card_meta_uses_mono_voice(client):
+    """M8 R3: the collections-hub card meta line (items count · last session
+    date) renders in the mono voice — faint 12px IBM Plex Mono."""
+    resp = client.get("/static/app.css")
+    assert resp.status_code == 200
+    block = resp.text[resp.text.index(".hub-card-meta") :]
+    assert "font-family: var(--sp-font-mono);" in block
+    assert "font-size: 12px;" in block

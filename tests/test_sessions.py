@@ -1409,7 +1409,8 @@ def test_session_recipe_guest_participant_200(client, db_session):
     assert "Apple" in page.text
     assert "Method" in page.text
     assert "Boil water." in page.text
-    assert "Offered 0× · kept 0×" in page.text
+    assert "offered 0× · kept 0×" in page.text
+    assert 'class="recipe-tags"' in page.text  # type/tag mono line renders
     assert 'class="sidebar"' not in page.text
     assert f'href="/s/{session.code}"' in page.text  # back to voting
 

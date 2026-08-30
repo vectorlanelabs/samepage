@@ -87,11 +87,11 @@ def test_report_renders_by_item_and_by_tag(client, post, db_session):
     # By item: Tuna rejected 7/10 → 70%; Pizza rejected 0/2 → 0%.
     assert "Tuna Night" in resp.text
     assert "70% rejected" in resp.text
-    assert "Kept 3 of 10 offered" in resp.text
-    assert "last kept Aug 01, 2026" in resp.text
+    assert "kept 3 of 10 offered" in resp.text
+    assert "last kept aug 01, 2026" in resp.text
     assert "Pizza" in resp.text
     assert "0% rejected" in resp.text
-    assert "Kept 2 of 2 offered" in resp.text
+    assert "kept 2 of 2 offered" in resp.text
     # Kept > 0 without a last_kept date is NOT "never kept" — the clause is
     # gated on kept == 0 (regression: the old template said never kept for any
     # row lacking a last_kept date).
@@ -100,7 +100,7 @@ def test_report_renders_by_item_and_by_tag(client, post, db_session):
     assert resp.text.index("Tuna Night") < resp.text.index("Pizza")
 
     # By tag: fish = Tuna only → 7/10 → 70%; quick = Tuna + Pizza → 7/12 → 58%.
-    assert "Kept 5 of 12 offered" in resp.text
+    assert "kept 5 of 12 offered" in resp.text
     assert resp.text.index(">fish<") < resp.text.index(">quick<")
 
 
@@ -122,8 +122,8 @@ def test_report_never_kept_only_when_kept_is_zero(client, post, db_session):
     _login(client, db_session, "owner@example.com")
     resp = client.get(f"/collections/{collection.id}/report")
     assert resp.status_code == 200
-    assert "Kept 1 of 4 offered" in resp.text
-    assert "Kept 0 of 6 offered" in resp.text
+    assert "kept 1 of 4 offered" in resp.text
+    assert "kept 0 of 6 offered" in resp.text
     assert "never kept" in resp.text
     # The never-kept clause must appear only once — on the truly unkept item,
     # whose card (sorted first at 100% rejected) precedes the other item.
@@ -172,9 +172,9 @@ def test_report_another_groups_collection_404_and_no_leak(client, post, db_sessi
     resp = client.get(f"/collections/{collection_b.id}/report")
     assert resp.status_code == 200
     assert "B Burgers" in resp.text
-    assert "Kept 2 of 4 offered" in resp.text
+    assert "kept 2 of 4 offered" in resp.text
     assert "A Secret Tacos" not in resp.text
-    assert "Kept 1 of 8 offered" not in resp.text
+    assert "kept 1 of 8 offered" not in resp.text
 
     # A's account requesting B's report → 404; A's report never has B's data.
     _login(client, db_session, "a@example.com")
@@ -182,9 +182,9 @@ def test_report_another_groups_collection_404_and_no_leak(client, post, db_sessi
     resp = client.get(f"/collections/{collection_a.id}/report")
     assert resp.status_code == 200
     assert "A Secret Tacos" in resp.text
-    assert "Kept 1 of 8 offered" in resp.text
+    assert "kept 1 of 8 offered" in resp.text
     assert "B Burgers" not in resp.text
-    assert "Kept 2 of 4 offered" not in resp.text
+    assert "kept 2 of 4 offered" not in resp.text
 
     # A nonexistent collection id → 404.
     assert client.get("/collections/999999/report").status_code == 404
@@ -219,14 +219,14 @@ def test_report_by_tag_aggregates_only_this_collection(client, post, db_session)
     # come from the by-tag section.
     resp = client.get(f"/collections/{collection_a.id}/report")
     assert resp.status_code == 200
-    assert "Kept 9 of 15 offered" in resp.text
-    assert "Kept 0 of 2 offered" not in resp.text
+    assert "kept 9 of 15 offered" in resp.text
+    assert "kept 0 of 2 offered" not in resp.text
 
     # B's report: the same tag row, but only B's item (2 offered, 0 kept).
     resp = client.get(f"/collections/{collection_b.id}/report")
     assert resp.status_code == 200
-    assert "Kept 0 of 2 offered" in resp.text
-    assert "Kept 9 of 15 offered" not in resp.text
+    assert "kept 0 of 2 offered" in resp.text
+    assert "kept 9 of 15 offered" not in resp.text
 
 
 # ---------- Not offered lately ----------

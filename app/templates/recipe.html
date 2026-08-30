@@ -5,14 +5,9 @@
 <div class="page page--narrow">
   <a class="back-link" href="/collections/{{ collection.id }}">← {{ collection.name }}</a>
   <h1 class="page-title recipe-title">{{ meal.name }}</h1>
-  <div class="chip-row" style="margin-top:12px;">
-    {% for tl in type_labels %}
-    <span class="chip">{{ tl }}</span>
-    {% endfor %}
-    {% for t in tags %}
-    <span class="chip">{{ t }}</span>
-    {% endfor %}
-  </div>
+  {% if type_labels or tags %}
+  <p class="recipe-tags" style="margin-top:12px;">{{ type_labels|join(" · ")|lower }}{% if type_labels and tags %} · {% endif %}{{ tags|join(" · ")|lower }}</p>
+  {% endif %}
 
   {% if ingredients %}
   <section class="card recipe-section">
@@ -41,9 +36,9 @@
   {% endif %}
 
   <div class="recipe-footer">
-    <span>Offered {{ meal.times_offered }}× · kept {{ meal.times_kept }}×</span>
+    <span>offered {{ meal.times_offered }}× · kept {{ meal.times_kept }}×</span>
     {% if last_kept_label %}
-    <span>Last kept {{ last_kept_label }}</span>
+    <span>last kept {{ last_kept_label|lower }}</span>
     {% endif %}
   </div>
 </div>

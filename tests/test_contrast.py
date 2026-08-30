@@ -122,6 +122,24 @@ def test_ink_on_host_aa_dark_theme():
     _assert_ratio(ACCENT_INK, DARK["sp-host"], "#101114 on dark --sp-host")
 
 
+def test_host_on_bg_aa_both_themes():
+    # --sp-host also renders as TEXT on the plain app background (host-only
+    # labels like .results-group-label--host, host pills on bg surfaces), so
+    # the violet itself must clear AA on --sp-bg in both themes — separate
+    # from the white/#101114-on-host pairings audited above.
+    _assert_ratio(LIGHT["sp-host"], LIGHT["sp-bg"], "light --sp-host on --sp-bg")
+    _assert_ratio(DARK["sp-host"], DARK["sp-bg"], "dark --sp-host on --sp-bg")
+
+
+def test_chip_ink_on_bg_and_card_aa_both_themes():
+    # --sp-chip-ink paints table cells, chips, and meta text on BOTH the app
+    # background and the card surface; every pair must clear AA in both themes.
+    _assert_ratio(LIGHT["sp-chip-ink"], LIGHT["sp-bg"], "light --sp-chip-ink on --sp-bg")
+    _assert_ratio(LIGHT["sp-chip-ink"], LIGHT["sp-card"], "light --sp-chip-ink on --sp-card")
+    _assert_ratio(DARK["sp-chip-ink"], DARK["sp-bg"], "dark --sp-chip-ink on --sp-bg")
+    _assert_ratio(DARK["sp-chip-ink"], DARK["sp-card"], "dark --sp-chip-ink on --sp-card")
+
+
 def test_accent_deep_on_bg_aa_both_themes():
     _assert_ratio(LIGHT["sp-accent-deep"], LIGHT["sp-bg"], "light --sp-accent-deep on --sp-bg")
     _assert_ratio(DARK["sp-accent-deep"], DARK["sp-bg"], "dark --sp-accent-deep on --sp-bg")
