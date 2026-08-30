@@ -1651,3 +1651,239 @@ button { font-family: var(--sp-font-sans); }
   line-height: 1.5;
   overflow-x: auto;
 }
+
+/* ---------- Results + completion screens (M7 S7) ---------- */
+
+.results-context {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 0 0 4px;
+}
+
+.results-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  line-height: 1.2;
+  color: var(--sp-ink);
+  margin: 0;
+}
+
+.results-subtitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 6px 0 0;
+}
+
+/* Host-only "Majority said yes — your call" card (outcome-NULL pending
+   items). Its border is the host tint so it reads as the host's surface. */
+.results-call-card {
+  margin-top: 20px;
+  padding: 6px 20px 8px;
+  border: 1px solid var(--sp-host-tint);
+  background: var(--sp-card);
+}
+
+/* Decided outcomes (kept_unanimous / kept_host / not_kept) share ONE white
+   card; hairline separators run between the groups. */
+.results-card {
+  margin-top: 20px;
+  padding: 6px 20px 8px;
+}
+
+/* Non-host viewers: one line noting the host still has pending items to
+   review — count only, no item names or aggregates. */
+.results-pending-note {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  text-align: center;
+  margin: 20px 0 0;
+}
+
+.results-group + .results-group {
+  border-top: 1px solid var(--sp-hairline);
+  margin-top: 4px;
+}
+
+.results-group-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sp-accent);
+  margin: 10px 0 0;
+}
+
+.results-group-label--host { color: var(--sp-host); }
+.results-group-label--faint { color: var(--sp-faint); }
+
+.results-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--sp-hairline);
+}
+
+.results-row:last-child { border-bottom: none; }
+
+/* Pending rows: name + counts stacked on the left, Keep/Pass on the right. */
+.results-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.results-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.results-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.results-meta {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  white-space: nowrap;
+}
+
+.results-row--faint .results-name {
+  font-weight: 400;
+  color: var(--sp-faint);
+}
+
+.results-row--faint .results-meta { color: var(--sp-faint); }
+
+.results-keep {
+  background: var(--sp-host);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 16px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--sp-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.results-pass {
+  background: var(--sp-card);
+  color: var(--sp-ink);
+  border: 1.5px solid var(--sp-border-strong);
+  border-radius: 10px;
+  padding: 9px 16px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--sp-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.results-pass:hover { border-color: var(--sp-ink); }
+
+/* Dark mode: the host color is a light lavender, so the solid Keep button
+   takes dark ink text (same pattern as .btn-primary). */
+@media (prefers-color-scheme: dark) {
+  .results-keep { color: #14151B; }
+}
+
+.results-finish-center {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.results-waiting {
+  margin-top: 24px;
+  text-align: center;
+}
+
+/* Completion plan (session_complete.html). */
+.complete-context {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 0 0 4px;
+}
+
+.complete-title {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  line-height: 1.2;
+  color: var(--sp-ink);
+  margin: 0;
+}
+
+.complete-meta {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 6px 0 0;
+}
+
+.complete-card {
+  margin-top: 20px;
+  padding: 4px 20px 8px;
+}
+
+.complete-group + .complete-group {
+  border-top: 1px solid var(--sp-hairline);
+  margin-top: 4px;
+}
+
+.complete-track-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sp-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 14px 0 2px;
+}
+
+.complete-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--sp-hairline);
+}
+
+.complete-row:last-child { border-bottom: none; }
+
+.complete-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.complete-pill {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sp-accent);
+  background: var(--sp-accent-tint);
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.complete-pill--host {
+  color: var(--sp-host);
+  background: var(--sp-host-tint);
+}

@@ -551,8 +551,24 @@ def _completion_context(db: Session, session: VotingSession) -> dict:
     """Render data for the completion view: every KEPT item across all of the
     session's batches (outcome in ('kept_unanimous', 'kept_host')), joined to
     Item for the name and grouped by track. Aggregate/outcome only — no
-    participant data exists anymore (§5.5)."""
+    participant data exists anymore (§5.5). M7 S7 adds the summary meta
+    (picks/batches/options seen) and the design pills ('everyone' /
+    "host's call")."""
     collection = db.get(Collection, session.collection_id) if session.collection_id else None
+    group = db.get(Group, session.group_id)
+    batch_count = (
+        db.scalar(select(func.count()).select_from(Batch).where(Batch.session_id == session.id))
+        or 0
+    )
+    options_seen = (
+        db.scalar(
+            select(func.count())
+            .select_from(BatchItem)
+            .join(Batch, Batch.id == BatchItem.batch_id)
+            .where(Batch.session_id == session.id)
+        )
+        or 0
+    )
     rows = db.execute(
         select(BatchItem.outcome, Item.name, Batch.track_label)
         .join(Batch, Batch.id == BatchItem.batch_id)
@@ -568,10 +584,11 @@ def _completion_context(db: Session, session: VotingSession) -> dict:
         by_track.setdefault(track, []).append(
             {
                 "name": name,
-                "label": (
-                    "everyone agreed"
+                "outcome": outcome,
+                "pill": (
+                    "everyone"
                     if outcome == Outcome.KEPT_UNANIMOUS.value
-                    else "host pick"
+                    else "host's call"
                 ),
             }
         )
@@ -586,6 +603,11 @@ def _completion_context(db: Session, session: VotingSession) -> dict:
     return {
         "session": session,
         "collection_name": collection.name if collection else None,
+        "group_name": group.name if group else "",
+        "collection_kind": collection.kind if collection else None,
+        "batch_count": batch_count,
+        "options_seen": options_seen,
+        "kept_total": sum(len(g["kept_items"]) for g in kept_groups),
         "kept_groups": kept_groups,
         "chrome": "session",
     }
@@ -703,7 +725,12 @@ def _results_context(
     """Render data for the results screen: the closed batch's items grouped by
     outcome with AGGREGATE counts only (yes_count/no_count) — never who voted
     which way (vote privacy is the strong invariant, CLAUDE.md #4) — plus the
-    session's target progress and what the host can do next (M3e)."""
+    session's target progress and what the host can do next (M3e/M7 S7).
+
+    Four outcome groups, each rendered when non-empty: pending majority items
+    (host view only), kept_unanimous, kept_host, not_kept. ``kept_host`` has
+    existed since M3d's keep/pass but was dropped from the host results view —
+    M7 S7 restores it ('Kept by the host')."""
     collection = db.get(Collection, session.collection_id) if session.collection_id else None
     is_host = account is not None and account.id == session.host_account_id
     rows = []
@@ -713,8 +740,6 @@ def _results_context(
             {
                 "batch_item_id": batch_item.id,
                 "name": data["name"],
-                "type_label": data["type_label"],
-                "tags": data["tags"],
                 "yes_count": batch_item.yes_count,
                 "no_count": batch_item.no_count,
                 "outcome": batch_item.outcome,
@@ -723,15 +748,18 @@ def _results_context(
     track_progress = _track_progress(db, session)
     all_targets_met = all(row["met"] for row in track_progress)
     next_track, _ = _next_batch_assembly(db, session)
+    remaining_total = sum(max(0, row["target_count"] - row["kept"]) for row in track_progress)
     return {
         "session": session,
         "collection_name": collection.name if collection else "Ad hoc session",
         "is_host": is_host,
         "batch": batch,
         "kept_unanimous": [r for r in rows if r["outcome"] == Outcome.KEPT_UNANIMOUS.value],
+        "kept_host": [r for r in rows if r["outcome"] == Outcome.KEPT_HOST.value],
         "pending": [r for r in rows if r["outcome"] is None],
         "not_kept": [r for r in rows if r["outcome"] == Outcome.NOT_KEPT.value],
         "track_progress": track_progress,
+        "remaining_total": remaining_total,
         "all_targets_met": all_targets_met,
         "next_batch_available": next_track is not None,
         "chrome": "session",

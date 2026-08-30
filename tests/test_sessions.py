@@ -742,7 +742,8 @@ def test_ended_session_shows_ended_page_and_refuses_join(client, post, db_sessio
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     if status == "complete":
-        assert "Your plan" in page.text
+        # An ad hoc (no-collection) completed session gets the generic title.
+        assert "All set." in page.text
         assert "No meals were kept this session." in page.text
     else:
         assert "This session has ended." in page.text
@@ -1882,8 +1883,8 @@ def test_auto_close_on_final_vote_without_manual_close(client, post, db_session)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Results" in page.text
-    assert "Kept — everyone agreed" in page.text
-    assert "Not kept" in page.text
+    assert "Everyone said yes" in page.text
+    assert "Didn't make it" in page.text
 
 
 def test_manual_close_missing_votes_count_as_no(client, post, db_session):
@@ -1969,8 +1970,7 @@ def test_results_page_is_aggregate_only(client, post, db_session):
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Results" in page.text
-    assert "Yes 1" in page.text
-    assert "No 1" in page.text
+    assert "1 yes · 1 no" in page.text
     assert "Rosa Delgado" not in page.text
     assert "Mina Park" not in page.text
 
@@ -1978,8 +1978,7 @@ def test_results_page_is_aggregate_only(client, post, db_session):
     _stamp_participant(client, rosa.id)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Yes 1" in page.text
-    assert "No 1" in page.text
+    assert "1 yes · 1 no" in page.text
     assert "Rosa Delgado" not in page.text
     assert "Mina Park" not in page.text
     assert "/keep" not in page.text
@@ -1988,8 +1987,9 @@ def test_results_page_is_aggregate_only(client, post, db_session):
 
 
 def test_results_pending_shows_host_controls_only_for_host(client, post, db_session):
-    """Pending majority items render Keep/Pass for the host; non-host viewers
-    see 'The host is reviewing N options' with aggregate counts only."""
+    """Pending majority items render the host's call card (Keep/Pass) for the
+    host only; non-host viewers see just a count-only 'host is reviewing' note
+    — no pending card, no host controls, no pending aggregates."""
     session, batch, items, (sam, lee, rae) = _started_roster(
         client,
         post,
@@ -2004,20 +2004,258 @@ def test_results_pending_shows_host_controls_only_for_host(client, post, db_sess
     _login(client, db_session, "host@example.com")
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Needs your call" in page.text
+    assert "Your call on 1" in page.text
+    assert "Majority said yes — your call" in page.text
     assert f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/keep" in page.text
     assert f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/pass" in page.text
-    assert "Yes 2" in page.text
-    assert "No 1" in page.text
+    assert "2 yes · 1 no" in page.text
+    assert "Meal Planner · Batch 1 · Host view" in page.text
 
     _stamp_participant(client, sam.id)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "The host is reviewing 1 option" in page.text
+    assert "Batch 1 results" in page.text
+    assert "The host is reviewing 1 option." in page.text  # count only — no names/aggregates
+    assert "Majority said yes — your call" not in page.text
+    assert "2 yes" not in page.text  # pending aggregates are host-view-only
     assert "/keep" not in page.text
     assert "/pass" not in page.text
-    assert "Yes 2" in page.text
     assert "Waiting for the host." in page.text
+
+
+def test_host_kept_item_stays_visible_in_results(client, post, db_session):
+    """M7 S7 regression: after the host keeps a pending majority item, the
+    results screen STILL lists it under 'Kept by the host' — the host view
+    must not drop decided items (it did before this slice)."""
+    session, batch, items, (sam, lee, rae) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee", "Rae"],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    _cast(client, post, db_session, session, rae, items[0].id, "no")  # auto-close → pending
+    db_session.expire_all()
+    assert items[0].outcome is None
+
+    _login(client, db_session, "host@example.com")
+    resp = post(
+        f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/keep",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert items[0].outcome == "kept_host"
+
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Kept by the host" in page.text
+    assert "Apple" in page.text
+    assert "2 yes · 1 no" in page.text
+    assert "Majority said yes — your call" not in page.text  # nothing pending left
+
+
+def test_non_host_sees_kept_by_host_with_aggregates(client, post, db_session):
+    """Slice D: after the host keeps a majority item, a NON-host participant's
+    results view shows it under 'Kept by the host' with the aggregate counts —
+    the group is not host-only (the artboard shows it to voters too)."""
+    session, batch, items, (sam, lee, rae) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee", "Rae"],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    _cast(client, post, db_session, session, rae, items[0].id, "no")  # auto-close → pending
+    db_session.expire_all()
+    assert items[0].outcome is None
+
+    _login(client, db_session, "host@example.com")
+    resp = post(
+        f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/keep",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert items[0].outcome == "kept_host"
+
+    _stamp_participant(client, sam.id)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Kept by the host" in page.text
+    assert "Apple" in page.text
+    assert "2 yes · 1 no" in page.text
+    assert "The host is reviewing" not in page.text  # nothing pending left
+    assert "Majority said yes — your call" not in page.text
+    assert "/keep" not in page.text  # voters never get host controls
+    assert "/pass" not in page.text
+
+
+def test_results_subtitle_target_met_never_over_target(client, post, db_session):
+    """M7 S7: when kept >= target the subtitle reads '{label}: target met' —
+    never '{kept} of {target}' (no '3 of 2' style over-target math)."""
+    session, _, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner"), ("Cherry", "dinner")],
+        roster_names=["Sam", "Lee"],
+        targets=[("dinner", 1)],
+    )
+    for bi in items:
+        _cast(client, post, db_session, session, sam, bi.id, "yes")
+    for bi in items:
+        _cast(client, post, db_session, session, lee, bi.id, "yes")  # auto-closes
+    db_session.expire_all()
+    assert all(bi.outcome == "kept_unanimous" for bi in items)  # 3 kept vs target 1
+
+    _login(client, db_session, "host@example.com")
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Dinners: target met" in page.text
+    assert "3 of 1" not in page.text
+    # Targets met → primary Finish, no danger line, no next-batch button.
+    assert "Finish session" in page.text
+    assert "End session early" not in page.text
+    assert "to go" not in page.text
+
+
+def test_next_batch_button_shows_remaining_to_go(client, post, db_session):
+    """M7 S7: with targets unmet and a live pool, the host's next-batch
+    primary carries '· N to go' (remaining across tracks)."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Household", host.email)
+    collection = _make_collection(db_session, group.id)
+    for i in range(20):
+        _make_item(db_session, collection.id, f"Meal {i:02d}", type="dinner")
+    session = _make_session(db_session, group.id, host.id, collection_id=collection.id)
+    db_session.add(SessionTarget(session_id=session.id, track_label="dinner", target_count=15))
+    sam = SessionParticipant(session_id=session.id, account_id=None, display_name="Sam")
+    lee = SessionParticipant(session_id=session.id, account_id=None, display_name="Lee")
+    db_session.add_all([sam, lee])
+    db_session.commit()
+    _login(client, db_session, host.email)
+    resp = post(f"/s/{session.code}/start", follow_redirects=False)
+    assert resp.status_code == 303
+    batch = _open_batch(db_session, session.id)
+    items = _batch_items(db_session, batch.id)
+    assert len(items) == BATCH_SIZE == 15
+    for bi in items:
+        _cast(client, post, db_session, session, sam, bi.id, "yes")
+    for bi in items[:14]:
+        _cast(client, post, db_session, session, lee, bi.id, "yes")
+    _cast(client, post, db_session, session, lee, items[14].id, "no")  # auto-closes
+
+    db_session.expire_all()
+    _login(client, db_session, host.email)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Start next batch · 1 to go" in page.text
+    assert "14 of 15 dinners picked so far" in page.text
+    assert "End session early" in page.text
+
+
+def test_end_session_early_host_only(client, post, db_session):
+    """M7 S7: 'End session early' (danger) shows for the host when targets are
+    unmet; voters never see it."""
+    session, _, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee"],
+        targets=[("dinner", 2)],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")  # auto-closes; 1 of 2
+    _login(client, db_session, "host@example.com")
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "End session early" in page.text
+    assert "Finish session" not in page.text
+
+    _stamp_participant(client, sam.id)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "End session early" not in page.text
+    assert "Waiting for the host." in page.text
+
+
+def test_completion_meal_title_and_pills(client, post, db_session):
+    """M7 S7: a completed meal session's plan shows 'Dinner's sorted.', the
+    summary meta, and the design pills — 'everyone' for unanimous keeps and
+    "host's call" for host keeps — on one card."""
+    session, batch, items, (sam, lee, rae) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
+        roster_names=["Sam", "Lee", "Rae"],
+        targets=[("dinner", 2)],
+    )
+    apple, banana = items
+    for bi in items:
+        _cast(client, post, db_session, session, sam, bi.id, "yes")
+    for bi in items:
+        _cast(client, post, db_session, session, lee, bi.id, "yes")
+    _cast(client, post, db_session, session, rae, apple.id, "yes")
+    _cast(client, post, db_session, session, rae, banana.id, "no")  # auto-closes
+    db_session.expire_all()
+    assert apple.outcome == "kept_unanimous"
+    assert banana.outcome is None  # 2-1 majority → pending
+
+    _login(client, db_session, "host@example.com")
+    resp = post(
+        f"/s/{session.code}/batch/{batch.id}/items/{banana.id}/keep",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert banana.outcome == "kept_host"
+    resp = post(f"/s/{session.code}/finish", follow_redirects=False)
+    assert resp.status_code == 303
+
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Dinner's sorted." in page.text
+    assert "Meal Planner · Household" in page.text
+    assert "2 picks in 1 batch · 2 options seen" in page.text
+    assert "Apple" in page.text
+    assert "Banana" in page.text
+    assert "everyone" in page.text
+    # Jinja autoescape renders the apostrophe as the &#39; entity — the browser
+    # shows "host's call"; the raw HTML carries the escaped form.
+    assert "host&#39;s call" in page.text
+    assert 'class="complete-pill complete-pill--host"' in page.text
+
+
+def test_completion_meta_singular(client, post, db_session):
+    """Slice D: the completion meta line pluralizes — one kept pick, one batch,
+    one option seen reads '1 pick in 1 batch · 1 option seen' (batch count was
+    already handled)."""
+    session, _, items, (sam,) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam"],
+        targets=[("dinner", 1)],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")  # auto-close → kept_unanimous
+    db_session.expire_all()
+    assert items[0].outcome == "kept_unanimous"
+
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/finish", follow_redirects=False)
+    assert resp.status_code == 303
+
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "1 pick in 1 batch · 1 option seen" in page.text
 
 
 def test_keep_foreign_batch_404(client, post, db_session):
@@ -2126,8 +2364,11 @@ def test_target_progress_counts_kept_per_track(client, post, db_session):
     _login(client, db_session, "host@example.com")
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Dinners: 1 of 2" in page.text
-    assert "Finish session" in page.text
+    assert "1 of 2 dinners picked so far" in page.text
+    # Targets unmet and the pool exhausted → the only host action is ending
+    # early (danger), never a primary Finish.
+    assert "End session early" in page.text
+    assert "Finish session" not in page.text
 
 
 def test_next_batch_same_track_excludes_offered_items(client, post, db_session):
@@ -2349,12 +2590,12 @@ def test_finish_completes_deletes_participants_and_is_idempotent(client, post, d
     assert session.finished_at is not None
     assert _participant_count(db_session) == 0
 
-    # Completion page: kept items by name + outcome label, no participant names.
+    # Completion page: kept items by name + outcome pill, no participant names.
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Your plan" in page.text
+    assert "Dinner's sorted." in page.text
     assert "Apple" in page.text
-    assert "everyone agreed" in page.text
+    assert "everyone" in page.text
     assert "Banana" not in page.text  # tie → not kept
     assert "Rosa Delgado" not in page.text
     assert "Mina Park" not in page.text
@@ -2414,7 +2655,7 @@ def test_completion_view_nothing_kept_shows_empty_summary(client, post, db_sessi
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Your plan" in page.text
+    assert "Dinner's sorted." in page.text
     assert "No meals were kept this session." in page.text
     assert "Apple" not in page.text
 
@@ -2518,7 +2759,7 @@ def test_complete_session_never_expires(client, db_session):
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Your plan" in page.text
+    assert "Dinner's sorted." in page.text
     assert "Apple" in page.text
     assert "This session has ended." not in page.text
     db_session.expire_all()

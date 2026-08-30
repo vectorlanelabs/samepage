@@ -2,111 +2,98 @@
 {% block title %}Results · {{ session.code }} · Same Page{% endblock %}
 {% block content %}
 <div class="page page--narrow">
-  <h1 class="page-title">Results</h1>
-  <p class="page-meta">Session {{ session.code }}{% if collection_name %} · {{ collection_name }}{% endif %}</p>
+  <p class="page-meta results-context">{{ collection_name }} · Batch {{ batch.seq }}{% if is_host %} · Host view{% endif %}</p>
+  <h1 class="results-title">{% if is_host and pending %}Your call on {{ pending|length }}{% else %}Batch {{ batch.seq }} results{% endif %}</h1>
+  <p class="results-subtitle">
+    {%- for row in track_progress -%}
+    {%- if row.met -%}{{ row.label }}: target met{%- else -%}{{ row.kept }} of {{ row.target_count }} {{ row.label.lower() }} picked so far{%- endif -%}
+    {%- if not loop.last %} · {% endif -%}
+    {%- endfor -%}
+  </p>
 
-  {% if pending %}
+  {% if is_host and pending %}
+  <section class="card results-call-card">
+    <h2 class="results-group-label results-group-label--host">Majority said yes — your call</h2>
+    {% for item in pending %}
+    <div class="results-row">
+      <div class="results-row-main">
+        <div class="results-name">{{ item.name }}</div>
+        <div class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</div>
+      </div>
+      <div class="results-row-actions">
+        <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/keep">
+          <button type="submit" class="results-keep">Keep</button>
+        </form>
+        <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/pass">
+          <button type="submit" class="results-pass">Pass</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if not is_host and pending %}
+  <p class="results-pending-note">The host is reviewing {{ pending|length }} option{{ "s" if pending|length != 1 }}.</p>
+  {% endif %}
+
+  {% if kept_unanimous or kept_host or not_kept %}
+  <section class="card results-card">
+    {% if kept_unanimous %}
+    <div class="results-group">
+      <h2 class="results-group-label">{% if is_host %}Kept automatically — everyone said yes{% else %}Everyone said yes{% endif %}</h2>
+      {% for item in kept_unanimous %}
+      <div class="results-row">
+        <div class="results-name">{{ item.name }}</div>
+        <div class="results-meta">{{ item.yes_count }} yes</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if kept_host %}
+    <div class="results-group">
+      <h2 class="results-group-label results-group-label--host">Kept by the host</h2>
+      {% for item in kept_host %}
+      <div class="results-row">
+        <div class="results-name">{{ item.name }}</div>
+        <div class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if not_kept %}
+    <div class="results-group">
+      <h2 class="results-group-label results-group-label--faint">Didn't make it</h2>
+      {% for item in not_kept %}
+      <div class="results-row results-row--faint">
+        <div class="results-name">{{ item.name }}</div>
+        <div class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {% if is_host %}
-  <section class="card" style="padding:20px;margin-top:20px;background:var(--sp-host-tint);">
-    <h2 class="section-title">Needs your call</h2>
-    <p class="page-meta">A majority said yes to these. Keep or pass each one — aggregate counts only, individual votes stay private.</p>
-    {% for item in pending %}
-    <div style="padding:14px 0;border-bottom:1px solid var(--sp-hairline);">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-        <div>
-          <div style="font-weight:600;">{{ item.name }}</div>
-          <div class="chip-row" style="margin-top:6px;">
-            <span class="chip">Yes {{ item.yes_count }}</span>
-            <span class="chip">No {{ item.no_count }}</span>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/keep">
-            <button type="submit" class="btn" style="background:var(--sp-host);color:#fff;min-height:44px;padding:0 18px;">Keep</button>
-          </form>
-          <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/pass">
-            <button type="submit" class="btn btn-secondary" style="min-height:44px;padding:0 18px;">Pass</button>
-          </form>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </section>
-  {% else %}
-  <section class="card" style="padding:20px;margin-top:20px;">
-    <h2 class="section-title">The host is reviewing {{ pending|length }} option{% if pending|length != 1 %}s{% endif %}</h2>
-    {% for item in pending %}
-    <div style="padding:14px 0;border-bottom:1px solid var(--sp-hairline);">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-        <div style="font-weight:600;">{{ item.name }}</div>
-        <div class="chip-row">
-          <span class="chip">Yes {{ item.yes_count }}</span>
-          <span class="chip">No {{ item.no_count }}</span>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </section>
-  {% endif %}
-  {% endif %}
-
-  {% if kept_unanimous %}
-  <section class="card" style="padding:20px;margin-top:20px;">
-    <h2 class="section-title">Kept — everyone agreed</h2>
-    {% for item in kept_unanimous %}
-    <div style="padding:14px 0;border-bottom:1px solid var(--sp-hairline);">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-        <div>
-          <div style="font-weight:600;">{{ item.name }}</div>
-          {% if item.type_label %}<span class="chip">{{ item.type_label }}</span>{% endif %}
-        </div>
-        <div class="chip-row">
-          <span class="chip" style="background:var(--sp-accent-tint);color:var(--sp-accent);">Yes {{ item.yes_count }}</span>
-          <span class="chip">No {{ item.no_count }}</span>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </section>
-  {% endif %}
-
-  {% if not_kept %}
-  <section class="card" style="padding:20px;margin-top:20px;">
-    <h2 class="section-title">Not kept</h2>
-    {% for item in not_kept %}
-    <div style="padding:14px 0;border-bottom:1px solid var(--sp-hairline);opacity:0.6;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-        <div style="font-weight:600;">{{ item.name }}</div>
-        <div class="chip-row">
-          <span class="chip">Yes {{ item.yes_count }}</span>
-          <span class="chip">No {{ item.no_count }}</span>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </section>
-  {% endif %}
-
-  <section class="card" style="padding:20px;margin-top:20px;">
-    <h2 class="section-title">Progress</h2>
-    <p class="page-meta">
-      {% for row in track_progress %}{{ row.label }}: {{ row.kept }} of {{ row.target_count }}{% if not loop.last %} · {% endif %}{% endfor %}
-    </p>
+    {% if not all_targets_met and next_batch_available %}
+    <form method="post" action="/s/{{ session.code }}/next-batch" style="margin-top:20px;">
+      <button type="submit" class="btn btn-primary btn-block">Start next batch{% if remaining_total > 0 %} · {{ remaining_total }} to go{% endif %}</button>
+    </form>
+    {% endif %}
     {% if all_targets_met %}
-    <p class="page-meta" style="font-weight:600;">All targets met — finish when ready.</p>
-    {% endif %}
-    {% if is_host %}
-      {% if not all_targets_met and next_batch_available %}
-      <form method="post" action="/s/{{ session.code }}/next-batch" style="margin-top:16px;">
-        <button type="submit" class="btn btn-primary btn-block">Start next batch</button>
-      </form>
-      {% endif %}
-      <form method="post" action="/s/{{ session.code }}/finish" style="margin-top:12px;">
-        <button type="submit" class="btn btn-secondary btn-block">Finish session</button>
-      </form>
+    <form method="post" action="/s/{{ session.code }}/finish" style="margin-top:20px;">
+      <button type="submit" class="btn btn-primary btn-block">Finish session</button>
+    </form>
     {% else %}
-      <p class="page-meta" style="text-align:center;">Waiting for the host.</p>
+    <div class="results-finish-center">
+      <form method="post" action="/s/{{ session.code }}/finish">
+        <button type="submit" class="danger-text">End session early</button>
+      </form>
+    </div>
     {% endif %}
-  </section>
+  {% else %}
+    <p class="page-meta results-waiting">Waiting for the host.</p>
+  {% endif %}
 </div>
 {% endblock %}
