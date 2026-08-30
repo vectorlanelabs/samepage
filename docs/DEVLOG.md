@@ -1104,3 +1104,20 @@ Charlie approved; main fast-forwarded to 1b84875 and pushed. CI green (run 33313
 new build live (asset hash 5f260a4d43). Validated on prod: /login is the centered
 session-chrome auth screen (no topbar, brand links home), landing serves exactly one hero
 CTA with topbar-inner header alignment, sidebar-join present in the served bundle.
+
+## 2026-08-30 — PROD INCIDENT: sessions never advanced past the lobby — fixed + validated live
+
+Charlie's family session died: host started voting, every participant stayed on "Waiting
+for the host to start" forever. Root cause (present since M3, never a reskin regression):
+the lobby's roster poll had no state-transition mechanism — no test, harness, or review
+ever *sat on a polling page* through a transition; all of them fetched pages fresh.
+Reproduced live on prod (Charlie's browser as host, a second browser as participant),
+then fixed: the roster / voting-status polls and a new results-state poll answer
+HX-Refresh whenever the page's state is stale, so every screen advances itself
+(lobby→voting, waiting→results, results→next batch/complete). Follow-up in the same
+class, also seen live: the voting card itself now polls, and stale vote taps 303 to the
+session's current screen instead of a raw JSON error. Validated end-to-end on production
+with real sessions (poppy-0553, mango-3318 — both created for testing and ended; one
+"3 Cheese Bacon Grilled Cheese Bake" pick was kept to Meals in mango-3318's plan).
+Tests 415 → 421. Lesson recorded: polling pages need transition tests that HOLD the page
+across state changes — added for all three polls.
