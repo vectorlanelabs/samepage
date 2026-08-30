@@ -944,3 +944,16 @@ the `claude` CLI is not authed in this environment — noted for future cycles).
   Verified clean: form contracts byte-identical, remaining_total arithmetic, ad-hoc
   fallbacks, session-scoped completion aggregates, apostrophe escaping.
 - Tests 362 → 369, ruff clean. Not pushed.
+
+## 2026-08-29 — M7 cycle 5 (S8: join/lobby/waiting) — c94fbc5
+
+- Shipped: invite-landing composition, voter lobby (centered + pill roster, violet host
+  avatar, accent 'you'), host lobby ('N at the table' in the polled partial, lock caption,
+  share-screen link), waiting state (check circle + polled progress bar).
+- Review (sonnet) majors: progress bar and share-screen link were specced but dropped by the
+  implementer — both restored. Minors fixed: blank-name error re-render kept the prefill,
+  sign-in link lost its next= param, options chip rendered on the mid-vote state. Also
+  killed two letterspaced-uppercase labels (handoff type rule) and the fabricated
+  '~5 minutes' chip. Verified clean: htmx poll isolation (per-request auth, no cross-viewer
+  'you' leakage), host/voter markup split, vote privacy.
+- Tests 369 → 372, ruff clean. Not pushed.
