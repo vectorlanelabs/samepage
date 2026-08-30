@@ -439,6 +439,10 @@ button { font-family: var(--sp-font-sans); }
   box-shadow: var(--sp-shadow);
 }
 
+/* ---------- Utilities ---------- */
+
+.hidden { display: none; }
+
 /* ---------- Inputs ---------- */
 
 .input {
@@ -1067,6 +1071,236 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .vote-actions .btn { min-height: 60px; }
+
+/* ---------- Create-session screen (M7 S3) ---------- */
+
+/* Collection/ad-hoc radio cards. The radio stays a real, keyboard-focusable
+   input (position:absolute + opacity:0 — NOT display:none); the card is the
+   label, and the accent ring appears via :has(). The checked state swaps the
+   border color and adds a 1px inset ring instead of changing padding, so the
+   card never shifts size. */
+.pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pick-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--sp-card);
+  border: 1px solid var(--sp-border);
+  border-radius: 14px;
+  box-shadow: var(--sp-shadow);
+  padding: 15px 17px;
+  cursor: pointer;
+  position: relative;
+}
+
+.pick-card input {
+  position: absolute;
+  opacity: 0;
+}
+
+.pick-card:has(input:checked) {
+  border-color: var(--sp-accent);
+  box-shadow: var(--sp-shadow), 0 0 0 1px var(--sp-accent) inset;
+}
+
+.pick-card:has(input:focus-visible) {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: 2px;
+}
+
+/* The ad hoc card is the dashed "other" choice. */
+.pick-card--adhoc {
+  border: 1.5px dashed var(--sp-border-strong);
+  box-shadow: none;
+}
+
+.pick-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pick-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.pick-meta {
+  font-size: 12.5px;
+  color: var(--sp-sub);
+}
+
+.pick-check {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--sp-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pick-card:has(input:checked) .pick-check { display: flex; }
+
+/* Per-track steppers: one card with a row per meal track, a second card for
+   the ad-hoc Picks row (the inline script toggles which one shows). */
+.stepper-card {
+  background: var(--sp-card);
+  border: 1px solid var(--sp-border);
+  border-radius: 14px;
+  box-shadow: var(--sp-shadow);
+  padding: 4px 17px;
+}
+
+.stepper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+}
+
+.stepper-row + .stepper-row {
+  border-top: 1px solid var(--sp-hairline);
+}
+
+.stepper-label {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.stepper-cluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepper-btn {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1.5px solid var(--sp-border-strong);
+  border-radius: 10px;
+  background: var(--sp-card);
+  color: var(--sp-ink);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stepper-btn:hover { border-color: var(--sp-ink); }
+
+/* The value is a real number input (the no-JS fallback) styled to read as a
+   plain value; spin buttons hidden. */
+.stepper-value {
+  width: 2.5em;
+  text-align: center;
+  border: none;
+  background: transparent;
+  color: var(--sp-ink);
+  font-family: var(--sp-font-sans);
+  font-size: 17px;
+  font-weight: 700;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.stepper-value::-webkit-inner-spin-button,
+.stepper-value::-webkit-outer-spin-button {
+  display: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.session-new-submit { margin-top: 24px; }
+
+/* ---------- Share screen (M7 S4) ---------- */
+
+.share-context {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sp-sub);
+  margin: 4px 0 0;
+}
+
+.share-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  color: var(--sp-ink);
+  margin: 4px 0 0;
+}
+
+.share-card {
+  text-align: center;
+  padding: 30px 26px;
+  margin-top: 26px;
+}
+
+.share-code-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--sp-sub);
+}
+
+.share-code {
+  font-family: var(--sp-font-mono);
+  font-weight: 500;
+  font-size: clamp(22px, 8.5vw, 40px);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sp-ink);
+  margin-top: 10px;
+  white-space: nowrap;
+}
+
+.share-copy { margin-top: 22px; }
+
+.share-native { margin-top: 10px; }
+
+.share-joined {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 22px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sp-ink);
+}
+
+.share-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--sp-accent);
+}
+
+/* Pushes "Go to the lobby" to the bottom of the session-flow column (the
+   mobile .content--session is a full-height flex column). */
+.share-spacer { flex: 1; }
+
+.share-go-lobby { margin-top: 22px; }
 
 /* ---------- Groups ---------- */
 

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Invite the table · Same Page{% endblock %}
+{% block content %}
+<p class="share-context">{{ collection_name }} · {{ group_name }}</p>
+<h1 class="share-title">Invite the table</h1>
+
+<section class="card share-card">
+  <div class="share-code-label">Join code</div>
+  <div class="share-code">{{ session.code }}</div>
+  <button type="button" class="btn btn-primary btn-block share-copy" id="copy-link" data-url="{{ invite_url }}">Copy invite link</button>
+  <button type="button" class="btn btn-secondary btn-block share-native hidden" id="native-share" data-url="{{ invite_url }}">Share…</button>
+</section>
+
+<div class="share-joined">
+  <span class="share-dot" aria-hidden="true"></span>
+  <span id="joined-count" hx-get="/s/{{ session.code }}/joined-count" hx-trigger="every 3s" hx-swap="innerHTML">{{ joined_label }}</span>
+</div>
+
+<div class="share-spacer"></div>
+
+<a class="btn btn-ink btn-block share-go-lobby" href="/s/{{ session.code }}">Go to the lobby</a>
+
+<script>
+  // Copy invite link + optional native share (M7 S4). No globals.
+  (function () {
+    var copyBtn = document.getElementById("copy-link");
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      // Fallback for non-secure contexts: a temporary input + execCommand.
+      return new Promise(function (resolve, reject) {
+        var input = document.createElement("input");
+        input.value = text;
+        input.setAttribute("readonly", "");
+        input.style.position = "absolute";
+        input.style.left = "-9999px";
+        document.body.appendChild(input);
+        input.select();
+        try {
+          document.execCommand("copy");
+          resolve();
+        } catch (err) {
+          reject(err);
+        } finally {
+          document.body.removeChild(input);
+        }
+      });
+    }
+    if (copyBtn) {
+      copyBtn.addEventListener("click", function () {
+        var url = copyBtn.getAttribute("data-url") || "";
+        copyText(url).then(function () {
+          var original = copyBtn.textContent;
+          copyBtn.textContent = "Copied ✓";
+          setTimeout(function () { copyBtn.textContent = original; }, 2000);
+        }).catch(function () {});
+      });
+    }
+    if (navigator.share) {
+      var native = document.getElementById("native-share");
+      if (native) {
+        native.classList.remove("hidden");
+        native.addEventListener("click", function () {
+          navigator.share({ url: native.getAttribute("data-url") || "" }).catch(function () {});
+        });
+      }
+    }
+  })();
+</script>
+{% endblock %}

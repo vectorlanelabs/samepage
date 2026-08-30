@@ -35,7 +35,7 @@ from typing import Annotated
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -80,6 +80,7 @@ from app.session_logic import (
     make_code,
     next_seq,
 )
+from app.settings import settings
 from app.templating import short_date_label, templates
 
 router = APIRouter()
@@ -108,7 +109,12 @@ def _enforce_join_rate_limit(request: Request) -> None:
 def _owned_groups(db: Session, account: Account) -> list[dict]:
     """Groups the account owns or admins, as picker rows with their meal
     collections (same owner-or-admin outerjoin query as the collections hub —
-    this form can only ever create a session into a group the account manages)."""
+    this form can only ever create a session into a group the account manages).
+    Each collection carries its active-item count (archived items don't count),
+    so the create screen can show "N items" under a collection's name. The
+    count query is scoped to the account's own groups (joined through
+    Collection), so another tenant's item rows can never leak into this
+    screen's counts."""
     rows = db.execute(
         select(Group.id, Group.name)
         .outerjoin(
@@ -120,6 +126,17 @@ def _owned_groups(db: Session, account: Account) -> list[dict]:
         )
         .order_by(Group.name, Group.id)
     ).all()
+    group_ids = {group_id for group_id, _ in rows}
+    active_counts = dict(
+        db.execute(
+            select(Item.collection_id, func.count(Item.id))
+            .join(Collection, Collection.id == Item.collection_id)
+            .where(
+                (Item.archived_at.is_(None)) & Collection.group_id.in_(group_ids)
+            )
+            .group_by(Item.collection_id)
+        ).all()
+    )
     groups: list[dict] = []
     for group_id, group_name in rows:
         collections = db.scalars(
@@ -131,7 +148,14 @@ def _owned_groups(db: Session, account: Account) -> list[dict]:
             {
                 "id": group_id,
                 "name": group_name,
-                "collections": [{"id": c.id, "name": c.name} for c in collections],
+                "collections": [
+                    {
+                        "id": c.id,
+                        "name": c.name,
+                        "active_count": active_counts.get(c.id, 0),
+                    }
+                    for c in collections
+                ],
             }
         )
     return groups
@@ -144,6 +168,70 @@ def _parse_int(value: str, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+# Sentinel: "caller didn't say" vs. an explicit ad-hoc (None) selection.
+_UNSET = object()
+
+
+def _session_new_context(
+    db: Session,
+    account: Account,
+    *,
+    selected_group_id: int | None = None,
+    selected_collection_id: int | None | object = _UNSET,
+    breakfasts: int = 0,
+    lunches: int = 0,
+    dinners: int = 3,
+    picks: int = 3,
+    error: str | None = None,
+) -> dict:
+    """Render context for session_new.html — GET and the POST error re-render
+    share this so every choice survives a failed submit (CLAUDE.md: the error
+    path must preserve the selected group/collection and typed targets).
+
+    ``selected_group_id``: an unknown/foreign value (a stale or guessed
+    ?group_id=) is ignored and falls back to the account's first group — 404-
+    free, no existence oracle. ``selected_collection_id``: defaults to the
+    selected group's first collection, or None (ad hoc) when the group has
+    none; an explicit None (the ad-hoc radio) is preserved as-is.
+    """
+    groups = _owned_groups(db, account)
+    if not groups:
+        return {
+            "groups": [],
+            "selected_group_id": None,
+            "collections": [],
+            "selected_collection_id": None,
+            "breakfasts": breakfasts,
+            "lunches": lunches,
+            "dinners": dinners,
+            "picks": picks,
+            "error": error,
+        }
+    group_ids = {g["id"] for g in groups}
+    if selected_group_id not in group_ids:
+        selected_group_id = groups[0]["id"]
+    group = next(g for g in groups if g["id"] == selected_group_id)
+    collection_ids = {c["id"] for c in group["collections"]}
+    if selected_collection_id is _UNSET:
+        # Default: the first collection; ad hoc only when the group has none.
+        selected_collection_id = group["collections"][0]["id"] if group["collections"] else None
+    elif selected_collection_id is not None and selected_collection_id not in collection_ids:
+        # Defensive (validation 404s foreign ids before a re-render can
+        # happen): fall back to the first collection of the selected group.
+        selected_collection_id = group["collections"][0]["id"] if group["collections"] else None
+    return {
+        "groups": groups,
+        "selected_group_id": selected_group_id,
+        "collections": group["collections"],
+        "selected_collection_id": selected_collection_id,
+        "breakfasts": breakfasts,
+        "lunches": lunches,
+        "dinners": dinners,
+        "picks": picks,
+        "error": error,
+    }
 
 
 def _get_session_by_code(db: Session, code: str) -> VotingSession | None:
@@ -654,27 +742,29 @@ def _results_context(
 
 
 @router.get("/sessions/new")
-def new_session_page(request: Request, db: Annotated[Session, Depends(get_db)]):
-    """New-session page: group picker + per-group collection picker (with an
-    "Ad hoc (no collection)" option) + target inputs. An account with no
-    groups gets the 'Create a group first.' landing, same as collection_new."""
+def new_session_page(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    group_id: str | None = None,
+):
+    """New-session page (M7 S3): a group picker, per-group collection radio
+    cards plus an "Ad hoc" card, and per-track steppers. An account with no
+    groups gets the 'Create a group first.' landing, same as collection_new.
+
+    ``?group_id=`` pre-selects a group — but only if it's one of the account's
+    own; an unknown/foreign value is ignored (404-free, no existence oracle)
+    and the account's first group renders instead. The default target counts
+    are 3 dinners / 3 picks (the meal tracks and the ad hoc picks track never
+    both apply — the steppers toggle on the selected radio card)."""
     account = require_account(request, db)
-    groups = _owned_groups(db, account)
-    if not groups:
-        return templates.TemplateResponse(request, "session_new.html", {"groups": []})
+    try:
+        selected_group_id = int(group_id) if group_id else None
+    except (TypeError, ValueError):
+        selected_group_id = None
     return templates.TemplateResponse(
         request,
         "session_new.html",
-        {
-            "groups": groups,
-            "selected_group_id": None,
-            "selected_collection_id": None,
-            "breakfasts": 0,
-            "dinners": 3,
-            "lunches": 0,
-            "picks": 3,
-            "error": None,
-        },
+        _session_new_context(db, account, selected_group_id=selected_group_id),
     )
 
 
@@ -694,9 +784,10 @@ def create_session(
 
     Validation is enforced, not assumed: the group must be owned/admined by
     the account (404 otherwise — no existence oracle), a given collection must
-    belong to that exact group (404), and at least one target must be set
-    (400). Meal collections take dinner/lunch targets (only tracks with count
-    > 0 create rows); ad hoc sessions take a single picks target.
+    belong to that exact group (404), any target above 20 is rejected (400,
+    form re-rendered — the steppers cap there), and at least one target must
+    be set (400). Meal collections take dinner/lunch targets (only tracks with
+    count > 0 create rows); ad hoc sessions take a single picks target.
     """
     account = require_account(request, db)
     breakfasts_i, dinners_i, lunches_i, picks_i = (
@@ -708,30 +799,28 @@ def create_session(
     collection_id = collection_id.strip()
 
     def _re_render(error: str, status_code: int):
-        groups = _owned_groups(db, account)
         try:
             selected_group = int(group_id)
         except (TypeError, ValueError):
             selected_group = None
-        selected_collection = None
-        if collection_id:
-            try:
-                selected_collection = int(collection_id)
-            except (TypeError, ValueError):
-                selected_collection = None
+        try:
+            selected_collection = int(collection_id) if collection_id else None
+        except (TypeError, ValueError):
+            selected_collection = None
         return templates.TemplateResponse(
             request,
             "session_new.html",
-            {
-                "groups": groups,
-                "selected_group_id": selected_group,
-                "selected_collection_id": selected_collection,
-                "breakfasts": breakfasts_i,
-                "dinners": dinners_i,
-                "lunches": lunches_i,
-                "picks": picks_i,
-                "error": error,
-            },
+            _session_new_context(
+                db,
+                account,
+                selected_group_id=selected_group,
+                selected_collection_id=selected_collection,
+                breakfasts=breakfasts_i,
+                lunches=lunches_i,
+                dinners=dinners_i,
+                picks=picks_i,
+                error=error,
+            ),
             status_code=status_code,
         )
 
@@ -752,6 +841,12 @@ def create_session(
             raise HTTPException(404, "Collection not found")
     else:
         collection_id_int = None
+
+    # Targets are capped at 20 — the stepper max. A hand-typed/forged value
+    # above it re-renders the form (same pattern as the target checks below);
+    # negatives fall through to those checks and keep today's behavior.
+    if max(breakfasts_i, dinners_i, lunches_i, picks_i) > 20:
+        return _re_render("Targets are capped at 20.", 400)
 
     if collection_id_int is not None:
         targets = []
@@ -789,7 +884,9 @@ def create_session(
             )
         )
     db.commit()
-    return RedirectResponse(f"/s/{session.code}", status_code=303)
+    # M7 S4: the host lands on the share screen — the invite surface — right
+    # after creating the session, then walks to the lobby.
+    return RedirectResponse(f"/s/{session.code}/share", status_code=303)
 
 
 # --- Join flow (no account required) -----------------------------------------
@@ -1031,6 +1128,103 @@ def session_recipe_page(
             "chrome": "session",
         },
     )
+
+
+# --- Share screen (M7 S4) ----------------------------------------------------
+
+
+def _joined_label(count: int) -> str:
+    """Pluralized joined line for the share screen and its every-3s poll."""
+    if count == 0:
+        return "Nobody has joined yet"
+    if count == 1:
+        return "1 person has joined"
+    return f"{count} people have joined"
+
+
+@router.get("/s/{code}/share")
+def session_share_page(
+    request: Request,
+    code: str,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Host-only share screen (M7 S4): the invite surface right after
+    creation — the join code, copy / native-share buttons, and a live joined
+    count. Sharing is a lobby-time surface: once voting starts the host is
+    redirected to the session itself.
+
+    Guards mirror the other session routes: the code in the URL is a guessing
+    surface, so the join-rate limiter is enforced FIRST (before the lookup —
+    a guesser pays for the 404); ended sessions render the ended page; only
+    the HOST account sees it — anyone else is 404, never 403 (no existence
+    oracle, CLAUDE.md #6); a non-lobby session bounces to itself."""
+    _enforce_join_rate_limit(request)
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry on load
+    if session.status in ENDED_STATUSES:
+        return templates.TemplateResponse(
+            request, "session_ended.html", {"session": session, "chrome": "session"}
+        )
+    account = get_current_account(request, db)
+    if account is None or account.id != session.host_account_id:
+        raise HTTPException(404, "Only the host can share this session")
+    if session.status != "lobby":
+        # Sharing is lobby-time: a voting/complete session sends the host to
+        # the session itself.
+        return RedirectResponse(f"/s/{session.code}", status_code=303)
+    collection = db.get(Collection, session.collection_id) if session.collection_id else None
+    group = db.get(Group, session.group_id)
+    joined = (
+        db.scalar(
+            select(func.count())
+            .select_from(SessionParticipant)
+            .where(SessionParticipant.session_id == session.id)
+        )
+        or 0
+    )
+    return templates.TemplateResponse(
+        request,
+        "session_share.html",
+        {
+            "session": session,
+            "collection_name": collection.name if collection else "Ad hoc session",
+            "group_name": group.name if group else "",
+            "joined_label": _joined_label(joined),
+            "invite_url": f"{settings.base_url}/s/{session.code}",
+            "chrome": "session",
+        },
+    )
+
+
+@router.get("/s/{code}/joined-count")
+def joined_count_partial(
+    request: Request,
+    code: str,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """htmx poll target for the share screen's joined line: a plain-text/HTML
+    fragment ("N people have joined"). Poll-exempt from the join rate limiter,
+    exactly like the roster poll — a visitor's every-3s poll must never 429.
+    Host-only is NOT required (the code holder can already see the lobby
+    roster), but unknown sessions stay 404 and ended sessions swap in an
+    ended note."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry on load
+    if session.status in ENDED_STATUSES:
+        return HTMLResponse("This session has ended.")
+    joined = (
+        db.scalar(
+            select(func.count())
+            .select_from(SessionParticipant)
+            .where(SessionParticipant.session_id == session.id)
+        )
+        or 0
+    )
+    return HTMLResponse(_joined_label(joined))
 
 
 @router.post("/s/{code}/join")

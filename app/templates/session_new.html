@@ -9,49 +9,121 @@
   {% if not groups %}
   <p class="empty-state"><a href="/groups">Create a group first.</a></p>
   {% else %}
-  {% if error %}
-  <p class="form-error">{{ error }}</p>
-  {% endif %}
+  <form method="post" action="/sessions" style="margin-top:20px;">
+    {% if groups|length > 1 %}
+    <div class="field-label">Group</div>
+    <select name="group_id" class="input" onchange="location.href='/sessions/new?group_id='+this.value">
+      {% for g in groups %}
+      <option value="{{ g.id }}"{% if selected_group_id == g.id %} selected{% endif %}>{{ g.name }}</option>
+      {% endfor %}
+    </select>
+    {% else %}
+    <div class="field-label">Group</div>
+    <p class="page-meta">{{ groups[0].name }}</p>
+    <input type="hidden" name="group_id" value="{{ groups[0].id }}">
+    {% endif %}
 
-  <section class="card" style="padding:20px;margin-top:20px;">
-    <form method="post" action="/sessions">
-      <div class="field-label">Group</div>
-      <select name="group_id" required class="input">
-        {% for g in groups %}
-        <option value="{{ g.id }}"{% if selected_group_id == g.id %} selected{% endif %}>{{ g.name }}</option>
-        {% endfor %}
-      </select>
+    <div class="field-label">What are you deciding?</div>
+    <div class="pick-list">
+      {% for c in collections %}
+      <label class="pick-card">
+        <input type="radio" name="collection_id" value="{{ c.id }}"{% if selected_collection_id == c.id %} checked{% endif %}>
+        <span class="pick-body">
+          <span class="pick-name">{{ c.name }}</span>
+          <span class="pick-meta">{{ c.active_count }} item{{ "s" if c.active_count != 1 else "" }}</span>
+        </span>
+        <span class="pick-check" aria-hidden="true">✓</span>
+      </label>
+      {% endfor %}
+      <label class="pick-card pick-card--adhoc">
+        <input type="radio" name="collection_id" value=""{% if selected_collection_id is none %} checked{% endif %}>
+        <span class="pick-body">
+          <span class="pick-name">Ad hoc — type options on the spot</span>
+          <span class="pick-meta">Nothing saved to a collection</span>
+        </span>
+        <span class="pick-check" aria-hidden="true">✓</span>
+      </label>
+    </div>
 
-      <div class="field-label">What are you voting on?</div>
-      <select name="collection_id" class="input">
-        <option value="">Ad hoc (no collection)</option>
-        {% for g in groups %}
-        <optgroup label="{{ g.name }}">
-          {% for c in g.collections %}
-          <option value="{{ c.id }}"{% if selected_collection_id == c.id %} selected{% endif %}>{{ c.name }}</option>
-          {% endfor %}
-        </optgroup>
-        {% endfor %}
-      </select>
-      <p class="page-meta">Ad hoc sessions use free-typed options instead of a collection.</p>
+    <div class="field-label">How many do you need?</div>
+    <div class="stepper-card" id="stepper-tracks">
+      <div class="stepper-row">
+        <span class="stepper-label">Breakfasts</span>
+        <span class="stepper-cluster">
+          <button type="button" class="stepper-btn" data-step="-1" aria-label="Fewer Breakfasts">−</button>
+          <input type="number" class="stepper-value" name="breakfasts" value="{{ breakfasts }}" min="0" max="20">
+          <button type="button" class="stepper-btn" data-step="1" aria-label="More Breakfasts">+</button>
+        </span>
+      </div>
+      <div class="stepper-row">
+        <span class="stepper-label">Lunches</span>
+        <span class="stepper-cluster">
+          <button type="button" class="stepper-btn" data-step="-1" aria-label="Fewer Lunches">−</button>
+          <input type="number" class="stepper-value" name="lunches" value="{{ lunches }}" min="0" max="20">
+          <button type="button" class="stepper-btn" data-step="1" aria-label="More Lunches">+</button>
+        </span>
+      </div>
+      <div class="stepper-row">
+        <span class="stepper-label">Dinners</span>
+        <span class="stepper-cluster">
+          <button type="button" class="stepper-btn" data-step="-1" aria-label="Fewer Dinners">−</button>
+          <input type="number" class="stepper-value" name="dinners" value="{{ dinners }}" min="0" max="20">
+          <button type="button" class="stepper-btn" data-step="1" aria-label="More Dinners">+</button>
+        </span>
+      </div>
+    </div>
+    <div class="stepper-card" id="stepper-picks">
+      <div class="stepper-row">
+        <span class="stepper-label">Picks</span>
+        <span class="stepper-cluster">
+          <button type="button" class="stepper-btn" data-step="-1" aria-label="Fewer Picks">−</button>
+          <input type="number" class="stepper-value" name="picks" value="{{ picks }}" min="0" max="20">
+          <button type="button" class="stepper-btn" data-step="1" aria-label="More Picks">+</button>
+        </span>
+      </div>
+    </div>
 
-      <div class="field-label">Breakfasts</div>
-      <input type="number" name="breakfasts" value="{{ breakfasts }}" min="0" class="input">
+    {% if error %}
+    <p class="form-error">{{ error }}</p>
+    {% endif %}
 
-      <div class="field-label">Lunches</div>
-      <input type="number" name="lunches" value="{{ lunches }}" min="0" class="input">
+    <button type="submit" class="btn btn-primary btn-block session-new-submit">Create session</button>
+  </form>
 
-      <div class="field-label">Dinners</div>
-      <input type="number" name="dinners" value="{{ dinners }}" min="0" class="input">
-      <p class="page-meta">How many of each should the group keep this session? Set at least one.</p>
-
-      <div class="field-label">Picks (ad hoc)</div>
-      <input type="number" name="picks" value="{{ picks }}" min="0" class="input">
-      <p class="page-meta">For ad hoc sessions: how many options should the group pick?</p>
-
-      <button type="submit" class="btn btn-primary" style="margin-top:22px;">Host session</button>
-    </form>
-  </section>
+  <script>
+    // Steppers + stepper-card toggle (M7 S3). No globals; the number inputs
+    // themselves are the no-JS fallback (both cards stay visible, and the
+    // POST handler ignores whichever track set doesn't apply).
+    (function () {
+      var radios = document.querySelectorAll('input[name="collection_id"]');
+      var tracks = document.getElementById("stepper-tracks");
+      var picks = document.getElementById("stepper-picks");
+      function sync() {
+        var checked = document.querySelector('input[name="collection_id"]:checked');
+        var adhoc = checked !== null && checked.value === "";
+        tracks.classList.toggle("hidden", adhoc);
+        picks.classList.toggle("hidden", !adhoc);
+      }
+      for (var i = 0; i < radios.length; i++) {
+        radios[i].addEventListener("change", sync);
+      }
+      sync();
+      var buttons = document.querySelectorAll(".stepper-btn");
+      for (var j = 0; j < buttons.length; j++) {
+        buttons[j].addEventListener("click", function () {
+          var input = this.parentElement.querySelector(".stepper-value");
+          if (!input) return;
+          var step = parseInt(this.getAttribute("data-step"), 10) || 0;
+          var min = input.min === "" ? 0 : parseInt(input.min, 10);
+          var max = input.max === "" ? 20 : parseInt(input.max, 10);
+          var next = (parseInt(input.value, 10) || 0) + step;
+          if (next < min) next = min;
+          if (next > max) next = max;
+          input.value = next;
+        });
+      }
+    })();
+  </script>
   {% endif %}
 </div>
 {% endblock %}

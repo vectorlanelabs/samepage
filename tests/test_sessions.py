@@ -39,6 +39,7 @@ from app.models import (
 )
 from app.routes.sessions import _track_progress
 from app.session_logic import BATCH_SIZE, WORDLIST, make_code
+from app.settings import settings
 
 _seq = 0
 
@@ -233,7 +234,7 @@ def test_new_session_page_lists_groups_and_collections(client, db_session):
     assert resp.status_code == 200
     assert "Host a session" in resp.text
     assert "Household" in resp.text
-    assert "Ad hoc (no collection)" in resp.text
+    assert "Ad hoc — type options on the spot" in resp.text
     assert "Weeknight dinners" in resp.text
     assert 'name="group_id"' in resp.text
     assert 'name="collection_id"' in resp.text
@@ -241,6 +242,124 @@ def test_new_session_page_lists_groups_and_collections(client, db_session):
     assert 'name="lunches"' in resp.text
     assert 'name="picks"' in resp.text
     assert 'href="/collections"' in resp.text  # back link
+    # The single group is a hidden input, not a picker.
+    assert 'class="input" onchange' not in resp.text
+
+
+def test_new_session_page_radio_cards_and_default_checked(client, db_session):
+    """M7 S3: every collection renders as a radio card plus the ad hoc card;
+    the default checked radio is the FIRST collection, never ad hoc. The
+    cards show the collection's active item count and the steppers default to
+    dinners=3 / picks=3."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Household", host.email)
+    # "Sunday brunches" sorts first, so creation order == render order and the
+    # default-checked card is the first-created collection.
+    first = _make_collection(db_session, group.id, "Sunday brunches")
+    second = _make_collection(db_session, group.id, "Weeknight dinners")
+    _make_item(db_session, first.id, "Apple", type="dinner")
+    _make_item(db_session, first.id, "Banana", type="dinner")
+    _login(client, db_session, host.email)
+
+    resp = client.get("/sessions/new")
+    assert resp.status_code == 200
+    # One radio card per collection + the ad hoc card (whose class carries
+    # the extra --adhoc modifier, so count by the label element).
+    assert resp.text.count('<label class="pick-card') == 3
+    assert f'value="{first.id}"' in resp.text
+    assert f'value="{second.id}"' in resp.text
+    # First collection checked by default; ad hoc unchecked.
+    checked = resp.text.count('type="radio" name="collection_id"')
+    assert checked == 3
+    assert f'name="collection_id" value="{first.id}" checked' in resp.text
+    assert 'value=""' in resp.text  # the ad hoc card
+    # Active item count meta + default stepper values.
+    assert "2 items" in resp.text
+    assert "0 items" in resp.text
+    assert 'name="dinners" value="3"' in resp.text
+    assert 'name="picks" value="3"' in resp.text
+    # The stepper buttons exist for every track, with accessible labels.
+    assert 'aria-label="Fewer Dinners"' in resp.text
+    assert 'aria-label="More Picks"' in resp.text
+
+
+def test_new_session_page_group_query_switches_collections(client, db_session):
+    """M7 S3: ?group_id= selects which group's collections render as cards —
+    but only for groups the account owns/admins."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group_a = _make_group(db_session, "Alpha", host.email)
+    group_b = _make_group(db_session, "Beta", host.email)
+    _make_collection(db_session, group_a.id, "A meals")
+    _make_collection(db_session, group_b.id, "B meals")
+    _login(client, db_session, host.email)
+
+    resp = client.get("/sessions/new")
+    assert "A meals" in resp.text
+    assert "B meals" not in resp.text
+
+    resp = client.get(f"/sessions/new?group_id={group_b.id}")
+    assert resp.status_code == 200
+    assert "B meals" in resp.text
+    assert "A meals" not in resp.text
+
+
+def test_new_session_page_unknown_group_id_falls_back(client, db_session):
+    """M7 S3: an unknown/foreign ?group_id= is ignored — no 404, no existence
+    oracle — and the account's first group renders instead."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Alpha", host.email)
+    _make_collection(db_session, group.id, "A meals")
+    other = _get_or_make_account(db_session, "other@example.com", "Other")
+    foreign_group = _make_group(db_session, "Foreign", other.email)
+    _make_collection(db_session, foreign_group.id, "Their meals")
+    _login(client, db_session, host.email)
+
+    for query in (f"?group_id={foreign_group.id}", "?group_id=99999", "?group_id=abc"):
+        resp = client.get(f"/sessions/new{query}")
+        assert resp.status_code == 200
+        assert "A meals" in resp.text
+        assert "Their meals" not in resp.text
+
+
+def test_new_session_page_error_rerender_preserves_choices(client, post, db_session):
+    """M7 S3: a 400 re-render keeps the selected group, the selected
+    collection (including ad hoc), and the typed target values."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Household", host.email)
+    collection = _make_collection(db_session, group.id, "Weeknight dinners")
+    _login(client, db_session, host.email)
+
+    resp = post(
+        "/sessions",
+        data={
+            "group_id": str(group.id),
+            "collection_id": str(collection.id),
+            "dinners": "0",
+            "lunches": "0",
+            "picks": "3",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Set at least one target." in resp.text
+    assert f'name="collection_id" value="{collection.id}" checked' in resp.text
+    assert 'name="dinners" value="0"' in resp.text
+    assert 'name="lunches" value="0"' in resp.text
+
+    # Ad hoc selection survives too.
+    resp = post(
+        "/sessions",
+        data={
+            "group_id": str(group.id),
+            "collection_id": "",
+            "dinners": "3",
+            "lunches": "0",
+            "picks": "0",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Picks must be at least 1." in resp.text
+    assert 'name="collection_id" value="" checked' in resp.text
+    assert 'name="picks" value="0"' in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +400,8 @@ def test_create_session_happy_path_meal_collection(client, post, db_session):
     assert session.host_account_id == host.id
     assert session.group_id == group.id
     assert session.collection_id == collection.id
-    assert resp.headers["location"] == f"/s/{session.code}"
+    # M7 S4: creation lands on the host-only share screen.
+    assert resp.headers["location"] == f"/s/{session.code}/share"
 
     targets = db_session.scalars(
         select(SessionTarget)
@@ -390,6 +510,62 @@ def test_create_session_negative_targets_400(client, post, db_session):
     assert _session_count(db_session) == 0
 
 
+def test_create_session_target_cap_400(client, post, db_session):
+    """Targets are capped at 20 — a hand-typed/forged value above the stepper
+    max is rejected with the form re-rendered (typed value preserved), and the
+    boundary value (20) still creates the session. Applies to every track,
+    meal and ad hoc alike."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Household", host.email)
+    collection = _make_collection(db_session, group.id, "Weeknight dinners")
+    _login(client, db_session, host.email)
+
+    resp = post(
+        "/sessions",
+        data={
+            "group_id": str(group.id),
+            "collection_id": str(collection.id),
+            "dinners": "999",
+            "lunches": "0",
+            "picks": "3",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Targets are capped at 20." in resp.text
+    assert 'name="dinners" value="999"' in resp.text  # choices preserved
+    assert _session_count(db_session) == 0
+
+    # The cap is the stepper max itself — 20 still creates the session.
+    resp = post(
+        "/sessions",
+        data={
+            "group_id": str(group.id),
+            "collection_id": str(collection.id),
+            "dinners": "20",
+            "lunches": "0",
+            "picks": "3",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert _session_count(db_session) == 1
+
+    # Ad hoc picks are capped too.
+    resp = post(
+        "/sessions",
+        data={
+            "group_id": str(group.id),
+            "collection_id": "",
+            "dinners": "0",
+            "lunches": "0",
+            "picks": "999",
+        },
+    )
+    assert resp.status_code == 400
+    assert "Targets are capped at 20." in resp.text
+    assert _session_count(db_session) == 1  # the 20-dinner session still stands
+
+
 def test_create_session_ad_hoc(client, post, db_session):
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
@@ -414,7 +590,7 @@ def test_create_session_ad_hoc(client, post, db_session):
         select(SessionTarget).where(SessionTarget.session_id == session.id)
     ).all()
     assert [(t.track_label, t.target_count) for t in targets] == [("picks", 4)]
-    assert resp.headers["location"] == f"/s/{session.code}"
+    assert resp.headers["location"] == f"/s/{session.code}/share"
 
     lobby = client.get(f"/s/{session.code}")
     assert lobby.status_code == 200
@@ -470,6 +646,7 @@ def test_signed_out_join_flow(client, post, db_session):
     assert resp.status_code == 303
     session = db_session.scalar(select(VotingSession).order_by(VotingSession.id.desc()))
     assert session is not None
+    assert resp.headers["location"] == f"/s/{session.code}/share"
     client.cookies.clear()  # signed out now
 
     # Stranger hits the code → join page, no account required.
@@ -580,6 +757,124 @@ def test_ended_session_shows_ended_page_and_refuses_join(client, post, db_sessio
 def test_unknown_code_404(client):
     assert client.get("/s/ghost-0000").status_code == 404
     assert client.get("/s/ghost-0000/roster").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Share screen (M7 S4)
+# ---------------------------------------------------------------------------
+
+
+def _share_session(db_session, host_email="host@example.com"):
+    """A lobby session owned by ``host_email`` plus its group/collection."""
+    host = _get_or_make_account(db_session, host_email, "Host")
+    group = _make_group(db_session, "Household", host.email)
+    collection = _make_collection(db_session, group.id, "Weeknight dinners")
+    session = _make_session(db_session, group.id, host.id, collection_id=collection.id)
+    return session, host, group, collection
+
+
+def test_share_page_host_renders_invite(client, db_session):
+    """M7 S4: the host sees the invite screen — the code, copy button, live
+    joined-count poll — with the collection/group context and the invite URL."""
+    session, host, _group, _collection = _share_session(db_session)
+    _login(client, db_session, host.email)
+    resp = client.get(f"/s/{session.code}/share")
+    assert resp.status_code == 200
+    assert "Invite the table" in resp.text
+    assert session.code in resp.text
+    assert "Copy invite link" in resp.text
+    assert f'hx-get="/s/{session.code}/joined-count"' in resp.text
+    assert 'hx-trigger="every 3s"' in resp.text
+    assert "Weeknight dinners · Household" in resp.text
+    assert "Nobody has joined yet" in resp.text
+    assert f'href="/s/{session.code}"' in resp.text  # Go to the lobby
+    assert f"{settings.base_url}/s/{session.code}" in resp.text  # invite_url
+
+
+def test_share_page_guest_participant_404(client, post, db_session):
+    """A joined guest (participant cookie, no account) is not the host → 404,
+    never 403 (no existence oracle)."""
+    session, _host, _group, _collection = _share_session(db_session)
+    resp = post(f"/s/{session.code}/join", data={"display_name": "Sam"}, follow_redirects=False)
+    assert resp.status_code == 303
+    assert client.get(f"/s/{session.code}/share").status_code == 404
+
+
+def test_share_page_stranger_404(client, db_session):
+    session, _host, _group, _collection = _share_session(db_session)
+    assert client.get(f"/s/{session.code}/share").status_code == 404
+
+
+def test_share_page_non_host_account_404(client, db_session):
+    """A signed-in account that isn't this session's host gets 404 too."""
+    session, _host, _group, _collection = _share_session(db_session)
+    other = _get_or_make_account(db_session, "other@example.com", "Other")
+    _login(client, db_session, other.email)
+    assert client.get(f"/s/{session.code}/share").status_code == 404
+
+
+def test_share_page_voting_session_redirects(client, post, db_session):
+    """Sharing is a lobby-time surface: once voting starts, the host is
+    bounced to the session itself."""
+    session, host, _group, collection = _share_session(db_session)
+    _make_item(db_session, collection.id, "Apple", type="dinner")
+    _make_item(db_session, collection.id, "Banana", type="dinner")
+    db_session.add(SessionTarget(session_id=session.id, track_label="dinner", target_count=1))
+    db_session.commit()
+    _login(client, db_session, host.email)
+    resp = post(f"/s/{session.code}/start", follow_redirects=False)
+    assert resp.status_code == 303
+    db_session.refresh(session)
+    assert session.status == "voting"
+    resp = client.get(f"/s/{session.code}/share", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
+
+
+def test_share_page_ended_session_renders_ended(client, db_session):
+    session, host, _group, _collection = _share_session(db_session)
+    _login(client, db_session, host.email)
+    session.status = "expired"
+    db_session.commit()
+    resp = client.get(f"/s/{session.code}/share")
+    assert resp.status_code == 200
+    assert "This session has ended." in resp.text
+
+
+def test_share_page_unknown_code_404(client, db_session):
+    _get_or_make_account(db_session, "host@example.com", "Host")
+    _login(client, db_session, "host@example.com")
+    assert client.get("/s/ghost-0000/share").status_code == 404
+
+
+def test_joined_count_pluralization(client, db_session):
+    session, _host, _group, _collection = _share_session(db_session)
+    assert client.get(f"/s/{session.code}/joined-count").text == "Nobody has joined yet"
+
+    db_session.add(SessionParticipant(session_id=session.id, account_id=None, display_name="Sam"))
+    db_session.commit()
+    assert client.get(f"/s/{session.code}/joined-count").text == "1 person has joined"
+
+    db_session.add(SessionParticipant(session_id=session.id, account_id=None, display_name="Lee"))
+    db_session.commit()
+    assert client.get(f"/s/{session.code}/joined-count").text == "2 people have joined"
+
+
+def test_joined_count_poll_exempt_from_join_limiter(client, db_session):
+    """M7 S4: the joined-count poll is exempt from the join rate limiter,
+    exactly like the roster poll — a visitor's every-3s poll must never 429,
+    while a same-IP code guesser still burns the bucket."""
+    session, _host, _group, _collection = _share_session(db_session)
+    db_session.add(SessionParticipant(session_id=session.id, account_id=None, display_name="Sam"))
+    db_session.commit()
+    # Burn the window with unknown-code guesses: the 21st 429s...
+    statuses = [client.get(f"/s/wrong-code-{i}").status_code for i in range(21)]
+    assert statuses[:20] == [404] * 20
+    assert statuses[20] == 429
+    # ...but the poll still answers.
+    resp = client.get(f"/s/{session.code}/joined-count")
+    assert resp.status_code == 200
+    assert resp.text == "1 person has joined"
 
 
 # ---------------------------------------------------------------------------
