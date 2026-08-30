@@ -1024,3 +1024,17 @@ login serving the M7 compositions and lean copy (zero "no account" strings), ses
 404-clean on bogus codes, dark tokens + PWA assets served. Signed-in flows are covered by
 the 392-test suite CI ran against this exact commit (prod sign-in is Google-only; no test
 account exists in prod by design).
+
+## 2026-08-29 — M8 cycle 1 (R1: tokens + global styles) — 00b09ef
+
+- Loud Moments token swap (light+dark), fonts, flat buttons, ink+acid-underline links,
+  ink focus ring, meta/manifest colors. Fresh implementer session (old one retired at ~4x
+  cost per round). Review (sonnet) majors, both fixed: acid used as border/ring was
+  near-invisible on light surfaces (1.16–1.26:1 — selection rings now ink, accent moved
+  into the check bubble; token-reveal border de-acidified) and a deleted dark-mode
+  override left white-on-violet at 3.37:1 (ink text restored). Added
+  tests/test_contrast.py — dependency-free WCAG ratio assertions over the parsed token
+  blocks (reviewer suggestion; guards the remaining slices). Verified clean: link-opt-out
+  catalog (11 selectors, zero mismatches), zero Quiet Kitchen literals anywhere, compat
+  token pairings, dark mode holistically.
+- Tests 392 → 403, ruff clean. Not pushed.
