@@ -1121,3 +1121,25 @@ with real sessions (poppy-0553, mango-3318 — both created for testing and ende
 "3 Cheese Bacon Grilled Cheese Bake" pick was kept to Meals in mango-3318's plan).
 Tests 415 → 421. Lesson recorded: polling pages need transition tests that HOLD the page
 across state changes — added for all three polls.
+
+## 2026-08-30 — Host-votes incident: five fixes, gauntlet-validated live, prod stats reset
+
+Charlie's second real session: the host never got to vote (server supported host-as-
+participant; no UI path ever existed — every harness joined the host programmatically).
+Fixes shipped in sequence, each verified live on prod with real browsers (Charlie's Chrome
+as host, a second browser + an HTTP client as participants):
+- HOTFIX3: host auto-joins at creation ("★ you, host" in roster, cards at start, counted in
+  unanimity; account-based participant resolution covers second devices; idempotent join).
+- HOTFIX4/4b: participant-identity collision found DURING validation — §5.5 finish-deletes
+  + SQLite id recycling let a stale cookie silently become someone in a new session
+  (observed: an unauthenticated browser became the host). Cookies are now a per-session
+  map, participant PKs AUTOINCREMENT (migration 0013), legacy flat cookies dead.
+- HOTFIX5: the voting card's staleness poll had the results-page predicate — a mid-card
+  voter sat on a dead card when a batch closed with no next batch (observed live). New
+  card-state predicate: refresh whenever the card's batch is not the open batch.
+- Migration 0014 (Charlie's request): one-off wipe of all session/batch history + zeroed
+  item counters after test pollution. Verified: sessions 404, library shows 0×/— across
+  all 145 meals.
+Full gauntlet passed hands-off: lobby→voting, host voting with counted votes (2-1 splits),
+auto-close on last vote, live Keep→"Kept by the host" on both views, results→completion
+auto-advance. Tests 421 → 435.
