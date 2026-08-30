@@ -249,23 +249,38 @@ def _get_session_by_code(db: Session, code: str) -> VotingSession | None:
 # browser can hold distinct identities in several live sessions at once (the
 # flat cookie was last-join-wins). The cap keeps the signed cookie small —
 # entries are evicted oldest-first, the most recent re-inserted last.
+#
+# HOTFIX4b: the legacy flat key is NEVER honored — pre-migration rows were
+# created under the recycled-id rowid-alias PK, so a browser's stale flat id
+# can still collide with a LIVE participant in a new session and impersonate
+# them. The key is deleted on sight (read and join/create paths both) so the
+# stale identity drops out of the browser's cookie on the next response.
 _SESSION_PARTICIPANT_COOKIE_KEY = "session_participants"
 _SESSION_PARTICIPANT_COOKIE_CAP = 20
 
 
+def _purge_legacy_participant_cookie(request: Request) -> None:
+    """HOTFIX4b: delete the pre-HOTFIX4 flat ``participant_id`` key whenever it
+    is seen. It must never resolve — ids were recycled before migration 0013,
+    so honoring it would impersonate whoever now owns that id — and dropping it
+    from ``request.session`` makes the response's Set-Cookie drop it from the
+    browser too."""
+    if "participant_id" in request.session:
+        del request.session["participant_id"]
+
+
 def _session_cookie_participant_id(request: Request, code: str) -> int | None:
     """The participant id this browser holds for ``code``: the per-session map
-    first, then the legacy flat ``participant_id`` cookie (pre-HOTFIX4
-    browsers). The caller still verifies the row exists AND belongs to the
+    (HOTFIX4 shape) ONLY. The legacy flat ``participant_id`` cookie is never
+    consulted (see ``_purge_legacy_participant_cookie``) and is purged whenever
+    present. The caller still verifies the row exists AND belongs to the
     session, so a stale/foreign id never resolves to a participant."""
+    _purge_legacy_participant_cookie(request)
     participants = request.session.get(_SESSION_PARTICIPANT_COOKIE_KEY)
     if isinstance(participants, dict):
         participant_id = participants.get(code)
         if isinstance(participant_id, int):
             return participant_id
-    legacy = request.session.get("participant_id")
-    if isinstance(legacy, int):
-        return legacy
     return None
 
 
@@ -274,8 +289,9 @@ def _set_session_cookie_participant(
 ) -> None:
     """Record this browser's participant row for ``code`` in the per-session
     map (HOTFIX4 shape). The entry is re-inserted last so the cap evicts the
-    oldest session first; legacy flat cookies are left in place but lose
-    precedence to the map."""
+    oldest session first. Any legacy flat ``participant_id`` key is purged —
+    the join/create paths see it too, and it must never resolve."""
+    _purge_legacy_participant_cookie(request)
     session = request.session
     participants = session.get(_SESSION_PARTICIPANT_COOKIE_KEY)
     if not isinstance(participants, dict):
@@ -299,7 +315,8 @@ def _viewer_participant(
        it still exists AND belongs to this session. A stale/foreign
        participant id is treated as no participant at all (join page again).
        The map is per code (HOTFIX4), so one browser keeps distinct
-       identities per session; a legacy flat cookie still resolves.
+       identities per session; the pre-HOTFIX4 flat cookie never resolves
+       (ids were recycled across sessions) and is purged on sight (HOTFIX4b).
     2. A signed-in account's own row in THIS session (HOTFIX3): the host is
        auto-inserted at session creation, and any signed-in member's row
        follows them across devices — the sign-in cookie alone is enough to

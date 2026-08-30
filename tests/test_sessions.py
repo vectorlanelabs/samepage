@@ -150,12 +150,41 @@ def _stamp_participant(client, participant_id: int, code: str) -> None:
 
 
 def _stamp_legacy_participant(client, participant_id: int) -> None:
-    """Stamp the PRE-HOTFIX4 flat cookie shape ({participant_id: N}) — what
-    old-app browsers hold. Exercises the legacy fallback in
-    _session_cookie_participant_id."""
+    """Point the next request's Cookie HEADER at a PRE-HOTFIX4 flat cookie — a
+    flat ``participant_id`` plus a benign marker key. HOTFIX4b: the
+    participant_id key must NEVER resolve to a participant; the app purges it
+    on sight, and the marker key proves it — the re-set cookie keeps any OTHER
+    session data the browser held and drops only participant_id.
+
+    The legacy cookie rides as an explicit Cookie header, NOT a jar entry:
+    httpx's jar can never replace a manually-stamped cookie on the dotless
+    test host. A Set-Cookie response for ``testserver`` is stored under the
+    RFC-2965 default domain ``testserver.local`` — a jar bucket that is never
+    even sent back to ``testserver`` — so a stamped jar entry would linger
+    forever (and duplicate as a second 'session' cookie). Sending the cookie
+    via header means the jar's ONLY session entry is whatever the middleware
+    re-signed, which is exactly the browser-visible purge the assertion
+    checks. (The jar also silently ignores Starlette's ``session=null``
+    deletion cookie — an emptied session never visibly clears — so the marker
+    key keeps the session non-empty and forces a real re-signed cookie.)"""
     client.cookies.clear()
-    payload = base64.b64encode(json.dumps({"participant_id": participant_id}).encode())
-    client.cookies.set("session", TimestampSigner("test-secret-for-tests").sign(payload).decode())
+    payload = base64.b64encode(
+        json.dumps({"participant_id": participant_id, "pre_hotfix4_browser": True}).encode()
+    )
+    client.headers["Cookie"] = (
+        f"session={TimestampSigner('test-secret-for-tests').sign(payload).decode()}"
+    )
+
+
+def _decoded_session_cookie(client) -> dict:
+    """Decode the client jar's signed session cookie into the session dict. An
+    absent cookie (the middleware deletes an emptied session) decodes to {} —
+    callers treat both as 'no legacy key'."""
+    signed = client.cookies.get("session")
+    if signed is None:
+        return {}
+    raw = TimestampSigner("test-secret-for-tests").unsign(signed)
+    return json.loads(base64.b64decode(raw))
 
 
 class _FakeCookieRequest:
@@ -1690,8 +1719,8 @@ def test_stale_cookie_from_finished_session_does_not_become_new_participant(
     assert lee is not None and lee.id > sam_id
 
     # The browser still holds its stale cookie for session_a. In session_b it
-    # must NOT resolve to Lee: the map is keyed by session code, and even the
-    # legacy flat fallback cannot match (the row is gone and never recreated).
+    # must NOT resolve to Lee: the map is keyed by session code, and the
+    # legacy flat fallback no longer exists (HOTFIX4b).
     _stamp_participant(client, sam_id, session_a.code)
     page = client.get(f"/s/{session_b.code}")
     assert page.status_code == 200
@@ -1746,15 +1775,19 @@ def test_browser_keeps_distinct_identities_per_session(client, post, db_session)
     assert "Rae" not in roster_b.text
 
 
-def test_legacy_flat_participant_cookie_still_resolves(client, post, db_session):
-    """HOTFIX4: pre-HOTFIX4 browsers hold the old flat {participant_id: N}
-    cookie. The new helper falls back to it for a live same-session
-    participant, so an upgraded server doesn't log everyone out mid-vote.
+def test_legacy_flat_participant_cookie_never_resolves_and_is_purged(
+    client, post, db_session
+):
+    """HOTFIX4b: the pre-HOTFIX4 flat {participant_id: N} cookie must NEVER
+    resolve to a participant — participant ids were recycled across sessions
+    before migration 0013, so honoring a stale flat id would silently
+    impersonate whoever NOW owns that id in a new session (the live prod
+    exploit). The legacy key alone yields the join page (no participant), and
+    the key is purged from the cookie on the next response.
 
     Two items keep the batch OPEN after the single vote — a roster-of-one
     vote on a one-item batch would auto-close it, and close deletes the
-    per-person vote rows by design (privacy invariant), so there'd be no
-    row left to assert."""
+    per-person vote rows by design (privacy invariant)."""
     session, _, _ = _make_voting_setup(
         db_session,
         item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
@@ -1768,7 +1801,24 @@ def test_legacy_flat_participant_cookie_still_resolves(client, post, db_session)
     assert sam is not None
     post(f"/s/{session.code}/start", follow_redirects=False)
 
-    # Old-shape cookie only (no per-session map): the legacy fallback.
+    # The flat cookie points at Sam's LIVE row — it must STILL not resolve:
+    # the per-session map is the only honored shape, so this browser is a
+    # stranger and gets the join page, not Sam's voting card.
+    _stamp_legacy_participant(client, sam.id)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Voting has already started. Ask the host." in page.text  # join page
+    assert 'name="choice"' not in page.text  # …not Sam's voting card
+
+    # …and the legacy key is gone from the cookie after that response: the
+    # re-signed cookie keeps the marker key (other session data survives) and
+    # drops only participant_id — the jar visibly replaced the old entry.
+    decoded = _decoded_session_cookie(client)
+    assert "participant_id" not in decoded
+    assert decoded.get("pre_hotfix4_browser") is True
+
+    # A fresh legacy-only cookie still cannot vote: no participant row
+    # resolves, so the POST is refused and no vote lands under Sam's id.
     _stamp_legacy_participant(client, sam.id)
     first = _batch_items(db_session, _open_batch(db_session, session.id).id)[0]
     resp = post(
@@ -1776,11 +1826,28 @@ def test_legacy_flat_participant_cookie_still_resolves(client, post, db_session)
         data={"batch_item_id": str(first.id), "choice": "yes"},
         follow_redirects=False,
     )
-    assert resp.status_code == 303
+    assert resp.status_code == 403
     rows = db_session.scalars(
         select(BatchResponse).where(BatchResponse.batch_item_id == first.id)
     ).all()
-    assert len(rows) == 1 and rows[0].session_participant_id == sam.id
+    assert rows == []
+
+
+def test_legacy_key_purged_on_join_and_create_paths():
+    """HOTFIX4b: the join/create writer (_set_session_cookie_participant) and
+    the read helper both delete a legacy flat ``participant_id`` key on sight —
+    the flat key must never survive long enough to resolve anywhere."""
+    request = _FakeCookieRequest()
+    request.session["participant_id"] = 999
+    _set_session_cookie_participant(request, "code-abc", 42)
+    assert "participant_id" not in request.session
+    assert _session_cookie_participant_id(request, "code-abc") == 42
+
+    # The read path purges too: a legacy-only session yields NO participant.
+    request2 = _FakeCookieRequest()
+    request2.session["participant_id"] = 999
+    assert _session_cookie_participant_id(request2, "code-abc") is None
+    assert "participant_id" not in request2.session
 
 
 def test_participant_cookie_map_caps_oldest_first():

@@ -36,6 +36,7 @@ from app.models import (
     Session as VotingSession,
 )
 from app.ratelimit import JOIN_LIMITER, SlidingWindowLimiter, client_ip
+from app.routes.sessions import _SESSION_PARTICIPANT_COOKIE_KEY
 from app.session_logic import BATCH_SIZE
 
 Address = namedtuple("Address", ["host", "port"])
@@ -148,14 +149,17 @@ def test_client_ip_unknown_without_client():
 # ---------------------------------------------------------------------------
 
 
-def _stamp_participant(client, participant_id: int) -> None:
-    """Point the client's signed session cookie at a participant row (like
-    conftest.stamp_session does for accounts). Clears the jar first — a real
-    browser holds ONE session cookie, but the test client accumulates a second
-    'session' entry (server-set + manually-set) that httpx then can't
+def _stamp_participant(client, participant_id: int, code: str) -> None:
+    """Point the client's signed session cookie at a participant row in the
+    per-session map (HOTFIX4 shape: {code: participant_id}) — the flat
+    participant_id shape no longer resolves (HOTFIX4b). Clears the jar first —
+    a real browser holds ONE session cookie, but the test client accumulates a
+    second 'session' entry (server-set + manually-set) that httpx then can't
     disambiguate, so the switch silently wouldn't reach the server."""
     client.cookies.clear()
-    payload = base64.b64encode(json.dumps({"participant_id": participant_id}).encode())
+    payload = base64.b64encode(
+        json.dumps({_SESSION_PARTICIPANT_COOKIE_KEY: {code: participant_id}}).encode()
+    )
     client.cookies.set(
         "session", TimestampSigner("test-secret-for-tests").sign(payload).decode()
     )
@@ -216,7 +220,7 @@ def test_session_member_exempt_while_guessing_still_limited(client, post, db_ses
     assert resp.status_code == 303
 
     # The guest participant loops all 15 options: card → recipe → vote.
-    _stamp_participant(client, guest.id)
+    _stamp_participant(client, guest.id, session.code)
     batch = db_session.scalar(
         select(Batch).where((Batch.session_id == session.id) & (Batch.status == "open"))
     )
