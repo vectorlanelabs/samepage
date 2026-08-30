@@ -39,7 +39,7 @@ from app.models import (
     MealType,
     Tag,
 )
-from app.templating import short_date_label, templates
+from app.templating import short_date_label, source_domain, templates
 
 router = APIRouter()
 
@@ -664,6 +664,10 @@ def recipe_view(
             "type_labels": [MEAL_TYPE_LABELS[t] for t in _item_meal_types(db, item.id)],
             "ingredients": ingredients,
             "safe_source_url": _safe_source_url(detail.source_url if detail else None),
+            "source_domain": source_domain(detail.source_url if detail else None),
+            "last_kept_label": (
+                short_date_label(item.last_kept_at) if item.last_kept_at else None
+            ),
             "nav_collections": _nav_collections(db, account, collection.id),
         },
     )

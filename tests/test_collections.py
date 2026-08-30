@@ -195,4 +195,4 @@ def test_collections_hub_shows_new_collection_button(client, db_session):
     assert resp.status_code == 200
     assert 'href="/collections/new"' in resp.text
     assert "+ New collection" in resp.text
-    assert "No collections yet — create one to get started." in resp.text
+    assert "No collections yet. Create one to get started." in resp.text

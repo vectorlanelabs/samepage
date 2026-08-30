@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
@@ -29,6 +30,18 @@ def short_date_label(value: datetime) -> str:
     """
     month, day = value.strftime("%b %d").split()
     return f"{month} {day.lstrip('0')}"
+
+
+def source_domain(url: str | None) -> str | None:
+    """The source URL's hostname with a leading 'www.' stripped, for recipe
+    views' 'Full recipe at {domain}' link labels. None when the URL has no
+    hostname (the link is already gated on ``_safe_source_url``)."""
+    if not url:
+        return None
+    hostname = urlsplit(url).hostname
+    if not hostname:
+        return None
+    return hostname.removeprefix("www.")
 
 
 

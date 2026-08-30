@@ -92,13 +92,43 @@ def test_report_renders_by_item_and_by_tag(client, post, db_session):
     assert "Pizza" in resp.text
     assert "0% rejected" in resp.text
     assert "Kept 2 of 2 offered" in resp.text
-    assert "never kept" in resp.text
+    # Kept > 0 without a last_kept date is NOT "never kept" — the clause is
+    # gated on kept == 0 (regression: the old template said never kept for any
+    # row lacking a last_kept date).
+    assert "never kept" not in resp.text
     # Higher reject rate first.
     assert resp.text.index("Tuna Night") < resp.text.index("Pizza")
 
     # By tag: fish = Tuna only → 7/10 → 70%; quick = Tuna + Pizza → 7/12 → 58%.
     assert "Kept 5 of 12 offered" in resp.text
     assert resp.text.index(">fish<") < resp.text.index(">quick<")
+
+
+def test_report_never_kept_only_when_kept_is_zero(client, post, db_session):
+    """'never kept' is the kept == 0 clause, not the missing-last_kept clause:
+    an item that was kept but never got a last_kept date must NOT read 'never
+    kept', while a genuinely unkept item still does."""
+    group = _make_group(db_session, owner_email="owner@example.com")
+    collection = _make_collection(db_session, group.id)
+
+    kept_but_no_date = _make_item(db_session, collection.id, group.id, "Kept But No Date")
+    kept_but_no_date.times_offered = 4
+    kept_but_no_date.times_kept = 1
+    never = _make_item(db_session, collection.id, group.id, "Never Chosen")
+    never.times_offered = 6
+    never.times_kept = 0
+    db_session.commit()
+
+    _login(client, db_session, "owner@example.com")
+    resp = client.get(f"/collections/{collection.id}/report")
+    assert resp.status_code == 200
+    assert "Kept 1 of 4 offered" in resp.text
+    assert "Kept 0 of 6 offered" in resp.text
+    assert "never kept" in resp.text
+    # The never-kept clause must appear only once — on the truly unkept item,
+    # whose card (sorted first at 100% rejected) precedes the other item.
+    assert resp.text.count("never kept") == 1
+    assert resp.text.index("Never Chosen") < resp.text.index("never kept")
 
 
 # ---------- Empty state ----------
@@ -111,7 +141,7 @@ def test_report_empty_state_when_nothing_offered(client, post, db_session):
     _login(client, db_session, "owner@example.com")
     resp = client.get(f"/collections/{collection.id}/report")
     assert resp.status_code == 200
-    assert "No voting history yet — run a session to see which meals land." in resp.text
+    assert "No voting history yet. Run a session to see which meals land." in resp.text
 
 
 # ---------- Cross-tenant (the §6 requirement) ----------

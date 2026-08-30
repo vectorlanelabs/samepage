@@ -32,7 +32,6 @@ from __future__ import annotations
 import random
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -81,7 +80,7 @@ from app.session_logic import (
     next_seq,
 )
 from app.settings import settings
-from app.templating import short_date_label, templates
+from app.templating import short_date_label, source_domain, templates
 
 router = APIRouter()
 
@@ -1156,18 +1155,6 @@ def session_page(request: Request, code: str, db: Annotated[Session, Depends(get
 # --- Session recipe view (Slice B) -----------------------------------------
 
 
-def _source_domain(url: str | None) -> str | None:
-    """The source URL's hostname with a leading 'www.' stripped, for the
-    session recipe view's 'Full recipe at {domain}' link label. None when the
-    URL has no hostname (the link is already gated on ``_safe_source_url``)."""
-    if not url:
-        return None
-    hostname = urlsplit(url).hostname
-    if not hostname:
-        return None
-    return hostname.removeprefix("www.")
-
-
 @router.get("/s/{code}/recipe/{item_id}")
 def session_recipe_page(
     request: Request,
@@ -1242,7 +1229,7 @@ def session_recipe_page(
             "ingredients": _item_ingredients(db, item.id),
             "recipe_text": detail.recipe_text if detail else None,
             "safe_source_url": _safe_source_url(detail.source_url if detail else None),
-            "source_domain": _source_domain(detail.source_url) if detail else None,
+            "source_domain": source_domain(detail.source_url) if detail else None,
             "last_kept_label": (
                 short_date_label(item.last_kept_at) if item.last_kept_at else None
             ),

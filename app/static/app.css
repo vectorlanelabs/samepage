@@ -538,6 +538,9 @@ button { font-family: var(--sp-font-sans); }
   max-width: 32em;
 }
 
+/* Short phone subtitle; the full pitch swaps in on wider screens. */
+.landing-sub--desktop { display: none; }
+
 .landing .hero-cta { margin-top: 22px; }
 
 /* Join-by-code is the secondary audience (guests with a code) — present, but it
@@ -609,6 +612,8 @@ button { font-family: var(--sp-font-sans); }
     padding-top: 24px;
   }
   .landing-title { font-size: 40px; }
+  .landing-sub--phone { display: none; }
+  .landing-sub--desktop { display: inline; }
   .landing-steps {
     grid-template-columns: repeat(3, 1fr);
     gap: 36px;

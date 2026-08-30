@@ -3,7 +3,7 @@
 {% block sidebar_extra %}{% include "_sidebar_collections.html" %}{% endblock %}
 {% block content %}
 <div class="page page--narrow">
-  <a class="back-link" href="/collections/{{ collection.id }}">← Back to library</a>
+  <a class="back-link" href="/collections/{{ collection.id }}">← {{ collection.name }}</a>
   <h1 class="page-title recipe-title">{{ meal.name }}</h1>
   <div class="chip-row" style="margin-top:12px;">
     {% for tl in type_labels %}
@@ -13,9 +13,6 @@
     <span class="chip">{{ t }}</span>
     {% endfor %}
   </div>
-  {% if meal.times_kept > 0 %}
-  <div class="kept-count recipe-kept">Kept {{ meal.times_kept }}× before</div>
-  {% endif %}
 
   {% if ingredients %}
   <section class="card recipe-section">
@@ -35,8 +32,8 @@
   </section>
   {% endif %}
 
-  {% if safe_source_url %}
-  <a href="{{ safe_source_url }}" target="_blank" rel="noopener" class="text-link recipe-source">Originally sourced from this recipe ↗</a>
+  {% if safe_source_url and source_domain %}
+  <a href="{{ safe_source_url }}" target="_blank" rel="noopener" class="text-link recipe-source">Full recipe at {{ source_domain }} ↗</a>
   {% endif %}
 
   {% if not ingredients and not (detail and detail.recipe_text) %}
@@ -45,6 +42,9 @@
 
   <div class="recipe-footer">
     <span>Offered {{ meal.times_offered }}× · kept {{ meal.times_kept }}×</span>
+    {% if last_kept_label %}
+    <span>Last kept {{ last_kept_label }}</span>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

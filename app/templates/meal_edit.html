@@ -52,14 +52,14 @@
     </details>
     {% endif %}
 
-    <div class="field-label">Ingredients (one per line — just the item)</div>
+    <div class="field-label">Ingredients (one per line)</div>
     <textarea name="ingredients" rows="5" placeholder="chicken thigh&#10;rice&#10;onion&#10;garlic" class="input textarea">{{ form.ingredients }}</textarea>
 
     <div class="field-label">Instructions</div>
     <textarea name="instructions" rows="5" placeholder="The steps, the way we actually make it…" class="input textarea">{{ form.instructions }}</textarea>
 
     <div class="field-label">Original source (optional)</div>
-    <input type="text" name="source_url" value="{{ form.source_url }}" placeholder="https://… — where this was originally found" class="input">
+    <input type="text" name="source_url" value="{{ form.source_url }}" placeholder="https://…" class="input">
 
     <button type="submit" class="btn btn-primary btn-block" style="margin-top:20px;">Save meal</button>
   </form>

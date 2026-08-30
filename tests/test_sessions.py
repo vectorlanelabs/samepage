@@ -234,7 +234,7 @@ def test_new_session_page_lists_groups_and_collections(client, db_session):
     assert resp.status_code == 200
     assert "Host a session" in resp.text
     assert "Household" in resp.text
-    assert "Ad hoc — type options on the spot" in resp.text
+    assert "Ad hoc: type options on the spot" in resp.text
     assert "Weeknight dinners" in resp.text
     assert 'name="group_id"' in resp.text
     assert 'name="collection_id"' in resp.text
@@ -812,7 +812,7 @@ def test_voting_session_join_is_waiting_state(client, post, db_session):
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Voting has already started — ask the host." in page.text
+    assert "Voting has already started. Ask the host." in page.text
     assert 'name="display_name"' not in page.text
     assert '<span class="chip chip--static">' not in page.text
     assert "2 options" not in page.text
@@ -1057,7 +1057,7 @@ def test_start_voting_host_sets_voting_and_is_idempotent(client, post, db_sessio
     # placeholder, not a ballot, and no batch was assembled.
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Ad hoc voting is coming soon — options entry lands in a later release." in page.text
+    assert "Ad hoc voting is coming soon. Options entry lands in a later release." in page.text
 
 
 def test_remove_participant_requires_signin(client, post, db_session):
@@ -1712,7 +1712,7 @@ def test_ad_hoc_start_shows_coming_soon_placeholder(client, post, db_session):
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Ad hoc voting is coming soon — options entry lands in a later release." in page.text
+    assert "Ad hoc voting is coming soon. Options entry lands in a later release." in page.text
 
 
 # ---------------------------------------------------------------------------
@@ -2106,7 +2106,7 @@ def test_results_pending_shows_host_controls_only_for_host(client, post, db_sess
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Your call on 1" in page.text
-    assert "Majority said yes — your call" in page.text
+    assert "Majority said yes. Your call." in page.text
     assert f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/keep" in page.text
     assert f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/pass" in page.text
     assert "2 yes · 1 no" in page.text
@@ -2117,7 +2117,7 @@ def test_results_pending_shows_host_controls_only_for_host(client, post, db_sess
     assert page.status_code == 200
     assert "Batch 1 results" in page.text
     assert "The host is reviewing 1 option." in page.text  # count only — no names/aggregates
-    assert "Majority said yes — your call" not in page.text
+    assert "Majority said yes. Your call." not in page.text
     assert "2 yes" not in page.text  # pending aggregates are host-view-only
     assert "/keep" not in page.text
     assert "/pass" not in page.text
@@ -2155,7 +2155,7 @@ def test_host_kept_item_stays_visible_in_results(client, post, db_session):
     assert "Kept by the host" in page.text
     assert "Apple" in page.text
     assert "2 yes · 1 no" in page.text
-    assert "Majority said yes — your call" not in page.text  # nothing pending left
+    assert "Majority said yes. Your call." not in page.text  # nothing pending left
 
 
 def test_non_host_sees_kept_by_host_with_aggregates(client, post, db_session):
@@ -2191,7 +2191,7 @@ def test_non_host_sees_kept_by_host_with_aggregates(client, post, db_session):
     assert "Apple" in page.text
     assert "2 yes · 1 no" in page.text
     assert "The host is reviewing" not in page.text  # nothing pending left
-    assert "Majority said yes — your call" not in page.text
+    assert "Majority said yes. Your call." not in page.text
     assert "/keep" not in page.text  # voters never get host controls
     assert "/pass" not in page.text
 

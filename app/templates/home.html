@@ -4,7 +4,10 @@
 <div class="landing">
   <div class="landing-hero">
     <h1 class="landing-title">Decide together, without the group chat spiral.</h1>
-    <p class="landing-sub">Your group builds a library of meals and ideas, then votes in private, one option at a time. Unanimous yeses are in; the rest is the host's call.</p>
+    <p class="landing-sub">
+      <span class="landing-sub--phone">Build a library, vote in private, keep what everyone loves.</span>
+      <span class="landing-sub--desktop">Your group builds a library of meals and ideas, then votes in private, one option at a time. Unanimous yeses are in; the rest is the host's call.</span>
+    </p>
     <div class="hero-cta">
       <a class="btn btn-primary" href="/login">Host a session</a>
       <a class="btn btn-secondary" href="/login">Sign in</a>
@@ -12,7 +15,7 @@
   </div>
   <section class="card join-card">
     <h2 class="join-card-title">Joining someone's session?</h2>
-    <p class="join-card-sub">Enter the code the host shared. No account needed.</p>
+    <p class="join-card-sub">Enter the code the host shared.</p>
     <form method="get" action="/join"
           onsubmit="var c=this.code.value.trim();if(c){location.href='/s/'+encodeURIComponent(c);}return false;">
       <input type="text" name="code" class="input input--code" placeholder="e.g. plum-42"

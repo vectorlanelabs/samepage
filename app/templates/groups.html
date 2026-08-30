@@ -20,7 +20,7 @@
     {% for group in groups %}
     <a class="group-card" href="/groups/{{ group.id }}">
       <div class="group-card-name">{{ group.name }}</div>
-      <div class="group-card-meta">{% if group.is_owner %}Owner{% else %}Admin{% endif %}</div>
+      <div class="group-card-meta">{% if group.is_owner %}Owner{% else %}Admin{% endif %} · {{ group.collection_count }} collection{{ "s" if group.collection_count != 1 else "" }}</div>
     </a>
     {% endfor %}
   </div>

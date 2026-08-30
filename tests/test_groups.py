@@ -3,7 +3,7 @@
 from conftest import stamp_session
 from sqlalchemy import select
 
-from app.models import Account, Group, GroupAdmin
+from app.models import Account, Collection, Group, GroupAdmin
 
 
 def _make_account(db_session, email="test@example.com", display_name="Test User"):
@@ -107,6 +107,36 @@ def test_list_groups_owned_and_admined(client, post, db_session):
     assert resp.status_code == 200
     assert "Other Group" in resp.text
     assert "Admin" in resp.text
+
+
+def test_groups_page_meta_counts_collections(client, post, db_session):
+    """The card meta line shows the role plus the collection count, with
+    singular/plural handled — the count is a per-group aggregate, not the
+    account's total."""
+    owner = _make_account(db_session, email="owner@example.com")
+    admin = _make_account(db_session, email="admin@example.com")
+    owned = _make_group(db_session, "Owned Group", owner)
+    other = _make_group(db_session, "Other Group")
+    db_session.add(GroupAdmin(group_id=other.id, account_id=admin.id))
+    db_session.add(Collection(group_id=owned.id, kind="meal", name="Dinners"))
+    db_session.add(Collection(group_id=owned.id, kind="meal", name="Lunches"))
+    db_session.add(Collection(group_id=other.id, kind="meal", name="Snacks"))
+    db_session.commit()
+
+    # Owner sees their two collections on their card; the admined group's
+    # single collection belongs to a different card (admin-only).
+    _login(client, db_session, "owner@example.com")
+    resp = client.get("/groups")
+    assert resp.status_code == 200
+    assert "Owner · 2 collections" in resp.text
+    assert "Admin · 1 collection" not in resp.text
+
+    # Admin sees their own card with the singular form.
+    post("/logout", follow_redirects=False)
+    _login(client, db_session, "admin@example.com")
+    resp = client.get("/groups")
+    assert resp.status_code == 200
+    assert "Admin · 1 collection" in resp.text
 
 
 def test_group_detail_requires_owner_or_admin(client, post, db_session):

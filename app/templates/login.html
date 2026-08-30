@@ -7,7 +7,6 @@
     {% if error %}
     <p class="form-error">{{ error }}</p>
     {% endif %}
-    <p class="auth-sub">Accounts are only for hosting sessions and managing collections — voters just use an invite link.</p>
     <a class="btn {% if sso_configured %}btn-primary{% else %}btn-secondary{% endif %} btn-block" href="/auth/google{% if next %}?next={{ next|urlencode }}{% endif %}">Continue with Google</a>
     {% if not sso_configured %}
     <p class="auth-note">Google sign-in isn't configured on this server yet.</p>

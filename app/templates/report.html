@@ -24,12 +24,12 @@
           <div style="height:100%;width:{{ row.reject_rate_pct }}%;background:var(--sp-accent);border-radius:4px;"></div>
         </div>
         <div class="report-meta">
-          Kept {{ row.kept }} of {{ row.offered }} offered{% if row.last_kept %} · last kept {{ row.last_kept }}{% else %} · never kept{% endif %}
+          Kept {{ row.kept }} of {{ row.offered }} offered{% if row.last_kept %} · last kept {{ row.last_kept }}{% elif row.kept == 0 %} · never kept{% endif %}
         </div>
       </div>
       {% endfor %}
     {% else %}
-      <p class="empty-state">No voting history yet — run a session to see which meals land.</p>
+      <p class="empty-state">No voting history yet. Run a session to see which meals land.</p>
     {% endif %}
   </section>
 
@@ -49,7 +49,7 @@
       </div>
       {% endfor %}
     {% else %}
-      <p class="empty-state">No tag data yet — tags appear after their meals have been offered.</p>
+      <p class="empty-state">No tag data yet. Tags appear after their meals have been offered.</p>
     {% endif %}
   </section>
 

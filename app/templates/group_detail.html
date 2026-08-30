@@ -56,12 +56,12 @@
   <section class="card" style="padding:20px;margin-top:20px;">
     <h2 class="section-title">API &amp; MCP access</h2>
     <p class="page-meta" style="margin-bottom:14px;">
-      A per-group token lets your AI tools — ChatGPT, Claude, and the like — read and update this group's library and read its reports, over MCP or the JSON API. It never exposes sessions or individual votes. Owner-only.
+      A per-group token gives your own AI tools read/update access to this group's library and reports over the JSON API. Sessions and votes are never exposed. Owner-only.
     </p>
 
     {% if api_token_plaintext %}
     <div class="token-reveal">
-      <div class="token-reveal-head">Your new token — copy it now. It won't be shown again.</div>
+      <div class="token-reveal-head">Your new token. Copy it now. It won't be shown again.</div>
       <div class="copy-field">
         <code class="copy-value">{{ api_token_plaintext }}</code>
         <button type="button" class="copy-btn" data-copy="{{ api_token_plaintext }}">Copy</button>
@@ -127,6 +127,5 @@
   </script>
   {% endif %}
 
-  <p class="auth-note">Admins manage collections and host sessions. Voting never requires membership.</p>
 </div>
 {% endblock %}

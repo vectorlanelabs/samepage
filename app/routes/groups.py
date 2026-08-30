@@ -9,12 +9,12 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.auth import is_group_owner, require_account, require_group_admin
 from app.db import get_db
-from app.models import Account, ApiToken, Group, GroupAdmin
+from app.models import Account, ApiToken, Collection, Group, GroupAdmin
 from app.templating import templates
 from app.tokens import generate_token, hash_token
 
@@ -46,12 +46,23 @@ def _groups_context(db: Session, account: Account) -> dict:
     ).all()
     # Combine and dedupe.
     all_groups = list(dict.fromkeys(owned_groups + admin_groups))
+    # Count collections per group for the card meta line.
+    group_ids = [g.id for g in all_groups]
+    collection_counts: dict[int, int] = {}
+    if group_ids:
+        rows = db.execute(
+            select(Collection.group_id, func.count(Collection.id))
+            .where(Collection.group_id.in_(group_ids))
+            .group_by(Collection.group_id)
+        ).all()
+        collection_counts = {gid: count for gid, count in rows}
     return {
         "groups": [
             {
                 "id": g.id,
                 "name": g.name,
                 "is_owner": g.owner_account_id == account.id,
+                "collection_count": collection_counts.get(g.id, 0),
             }
             for g in all_groups
         ]

@@ -13,7 +13,7 @@
 
   {% if is_host and pending %}
   <section class="card results-call-card">
-    <h2 class="results-group-label results-group-label--host">Majority said yes — your call</h2>
+    <h2 class="results-group-label results-group-label--host">Majority said yes. Your call.</h2>
     {% for item in pending %}
     <div class="results-row">
       <div class="results-row-main">
@@ -41,7 +41,7 @@
   <section class="card results-card">
     {% if kept_unanimous %}
     <div class="results-group">
-      <h2 class="results-group-label">{% if is_host %}Kept automatically — everyone said yes{% else %}Everyone said yes{% endif %}</h2>
+      <h2 class="results-group-label">{% if is_host %}Kept automatically. Everyone said yes.{% else %}Everyone said yes{% endif %}</h2>
       {% for item in kept_unanimous %}
       <div class="results-row">
         <div class="results-name">{{ item.name }}</div>

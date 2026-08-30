@@ -791,7 +791,9 @@ def test_recipe_view_renders(client, post, db_session):
     assert "2 cans beans" in resp.text
     assert "1 onion" in resp.text
     assert "Brown the beef. Simmer an hour." in resp.text
-    assert "Originally sourced from this recipe ↗" in resp.text
+    assert "Full recipe at example.com ↗" in resp.text
+    assert "← Meal Planner" in resp.text  # back link goes to the collection
+    assert "Back to library" not in resp.text
     assert "Kept 0×" not in resp.text  # no kept line when times_kept == 0
 
 
