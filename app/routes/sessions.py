@@ -36,7 +36,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -1416,6 +1416,11 @@ def roster_partial(request: Request, code: str, db: Annotated[Session, Depends(g
         return templates.TemplateResponse(
             request, "_session_ended_note.html", {"session": session}
         )
+    if session.status == "voting":
+        # Voting has started: a plain roster row is meaningless now — htmx
+        # reloads the whole page, which routes the viewer to the voting card /
+        # done state / host overview (HOTFIX: lobby polls never auto-advanced).
+        return Response(status_code=200, headers={"HX-Refresh": "true"})
     account = get_current_account(request, db)
     participant = _viewer_participant(request, db, session)
     viewer_participant_id = participant.id if participant is not None else None
@@ -1792,14 +1797,48 @@ def voting_status_partial(
     if session is None:
         raise HTTPException(404, "Session not found")
     _expire_if_stale(db, session)  # lazy §5.5 expiry on load
-    if session.status in ENDED_STATUSES:
-        return templates.TemplateResponse(
-            request, "_session_ended_note.html", {"session": session}
-        )
+    if (
+        _open_batch(db, session) is None
+        or session.status == "complete"
+        or session.status in ENDED_STATUSES
+    ):
+        # No open batch (closed → results screen) or the session is over: the
+        # counts partial is meaningless now — htmx reloads the whole page,
+        # which routes to the results / completion / ended screen (HOTFIX:
+        # done-view polls never auto-advanced).
+        return Response(status_code=200, headers={"HX-Refresh": "true"})
     finished, roster = _voting_progress_counts(db, session)
     return templates.TemplateResponse(
         request, "_voting_status.html", {"finished": finished, "roster": roster}
     )
+
+
+# --- Results-screen polling ---------------------------------------------------
+
+
+@router.get("/s/{code}/results-state/{batch_id}")
+def results_state_partial(
+    request: Request, code: str, batch_id: int, db: Annotated[Session, Depends(get_db)]
+):
+    """htmx poll target on the batch_results screen (M3d): a plain empty 200
+    while the displayed closed batch is still the most recent one (the host is
+    reviewing), and HX-Refresh the moment the host starts the next batch (a new
+    open batch supersedes ``batch_id``), finishes the session, or the session
+    expires — htmx then reloads the page, which routes to voting / the
+    completion screen. Public like the roster poll: no join limiter, no
+    membership check, and no participant or vote data in the response."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry on load
+    open_batch = _open_batch(db, session)
+    if (
+        (open_batch is not None and open_batch.id != batch_id)
+        or session.status == "complete"
+        or session.status in ENDED_STATUSES
+    ):
+        return Response(status_code=200, headers={"HX-Refresh": "true"})
+    return Response(status_code=200)
 
 
 @router.post("/s/{code}/participants/{pid}/remove")

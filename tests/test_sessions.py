@@ -963,10 +963,13 @@ def test_joined_count_poll_exempt_from_join_limiter(client, db_session):
     statuses = [client.get(f"/s/wrong-code-{i}").status_code for i in range(21)]
     assert statuses[:20] == [404] * 20
     assert statuses[20] == 429
-    # ...but the poll still answers.
+    # ...but the polls still answer.
     resp = client.get(f"/s/{session.code}/joined-count")
     assert resp.status_code == 200
     assert resp.text == "1 person has joined"
+    # The results-state poll is exempt too: still 200 after the bucket burn.
+    resp = client.get(f"/s/{session.code}/results-state/0")
+    assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -999,6 +1002,35 @@ def test_roster_partial_remove_buttons_only_for_host(client, db_session):
     resp = client.get(f"/s/{session.code}/roster")
     assert resp.status_code == 200
     assert resp.text.count("Remove") == 1
+
+
+def test_roster_partial_refreshes_once_voting_starts(client, post, db_session):
+    """HOTFIX: the lobby roster poll answers with the plain partial while the
+    session is in the lobby, and with HX-Refresh the moment voting starts —
+    htmx reloads the whole page, which routes the viewer to the voting card /
+    done state / host overview."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Household", host.email)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, "Apple", type="dinner")
+    session = _make_session(db_session, group.id, host.id, collection_id=collection.id)
+    db_session.add(SessionTarget(session_id=session.id, track_label="dinner", target_count=1))
+    db_session.commit()
+
+    # Lobby: plain partial, no refresh header.
+    resp = client.get(f"/s/{session.code}/roster")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+    assert "Nobody has joined yet" in resp.text
+
+    _login(client, db_session, host.email)
+    resp = post(f"/s/{session.code}/start", follow_redirects=False)
+    assert resp.status_code == 303
+
+    # Voting: the poll answers HX-Refresh so htmx reloads the page.
+    resp = client.get(f"/s/{session.code}/roster")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
 
 
 # ---------------------------------------------------------------------------
@@ -1654,7 +1686,9 @@ def test_voting_done_and_finished_counts(client, post, db_session):
     assert "1 / 2" in status.text
     assert "width: 50.0%" in status.text
 
-    # Lee votes on everything → finished == roster.
+    # Lee votes on everything → the last vote auto-closes the batch, so the
+    # poll now answers HX-Refresh (the done view reloads to the results
+    # screen) instead of a full-progress counts partial.
     _stamp_participant(client, lee.id)
     for bi in batch_items:
         resp = post(
@@ -1663,11 +1697,42 @@ def test_voting_done_and_finished_counts(client, post, db_session):
             follow_redirects=False,
         )
         assert resp.status_code == 303
+    db_session.expire_all()
+    assert _open_batch(db_session, session.id) is None
     status = client.get(f"/s/{session.code}/voting-status")
     assert status.status_code == 200
-    assert "Voters finished" in status.text
-    assert "2 / 2" in status.text
-    assert "width: 100.0%" in status.text
+    assert status.headers["hx-refresh"] == "true"
+
+
+def test_voting_status_partial_refreshes_once_batch_closes(client, post, db_session):
+    """HOTFIX: the done-view /voting-status poll answers with the counts
+    partial while the batch is open, and with HX-Refresh the moment it closes —
+    htmx reloads the whole page, which routes to the batch results screen."""
+    session, _batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    # Open batch → plain counts partial, no refresh header.
+    resp = client.get(f"/s/{session.code}/voting-status")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+    assert "Voters finished" in resp.text
+    assert "0 / 2" in resp.text
+
+    # The last vote auto-closes the batch → the poll now answers HX-Refresh.
+    for bi in items:
+        _cast(client, post, db_session, session, sam, bi.id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[1].id, "no")  # auto-closes
+    db_session.expire_all()
+    assert _open_batch(db_session, session.id) is None
+
+    resp = client.get(f"/s/{session.code}/voting-status")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
 
 
 def test_host_overview_when_not_joined(client, post, db_session):
@@ -2086,6 +2151,59 @@ def test_results_page_is_aggregate_only(client, post, db_session):
     assert "/keep" not in page.text
     assert "/pass" not in page.text
     assert "Waiting for the host." in page.text
+
+
+def test_results_state_poll_refreshes_on_next_batch_and_finish(client, post, db_session):
+    """HOTFIX: the results-screen poll answers a plain empty 200 while the
+    displayed closed batch is still the most recent one (host reviewing), and
+    HX-Refresh once the host starts the next batch (a new open batch
+    supersedes it) or finishes the session."""
+    session, batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner"), ("Salad", "lunch")],
+        roster_names=["Sam", "Lee"],
+        targets=[("dinner", 1), ("lunch", 1)],
+    )
+    # Canonical track order is breakfast, lunch, dinner → batch 1 is the LUNCH
+    # track (Salad only); the dinner options arrive in the advanced batch.
+    (salad,) = items
+    _cast(client, post, db_session, session, sam, salad.id, "yes")
+    _cast(client, post, db_session, session, lee, salad.id, "yes")  # auto-closes
+    db_session.expire_all()
+    assert batch.status == "closed"
+    assert _open_batch(db_session, session.id) is None
+
+    # Host dawdling on the results screen → plain empty 200, no refresh.
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+    assert resp.text == ""
+
+    # Host starts the next batch → the poll for the old batch refreshes.
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/next-batch", follow_redirects=False)
+    assert resp.status_code == 303
+    batch2 = _open_batch(db_session, session.id)
+    assert batch2 is not None and batch2.id != batch.id
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
+    # The poll for the now-open batch itself stays quiet (never rendered, but
+    # the branch must not refresh on its own id).
+    resp = client.get(f"/s/{session.code}/results-state/{batch2.id}")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+
+    # Host finishes the session → the poll refreshes again (status complete).
+    resp = post(f"/s/{session.code}/finish", follow_redirects=False)
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert session.status == "complete"
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
 
 
 def test_results_pending_shows_host_controls_only_for_host(client, post, db_session):

@@ -96,4 +96,5 @@
     <p class="page-meta results-waiting">Waiting for the host.</p>
   {% endif %}
 </div>
+<div hx-get="/s/{{ session.code }}/results-state/{{ batch.id }}" hx-trigger="every 2s" hx-swap="none"></div>
 {% endblock %}
