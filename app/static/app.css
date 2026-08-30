@@ -895,8 +895,6 @@ button { font-family: var(--sp-font-sans); }
   padding: 14px 16px;
 }
 
-.meal-card--archived { opacity: 0.6; }
-
 .meal-card-top {
   display: flex;
   align-items: center;
@@ -912,29 +910,12 @@ button { font-family: var(--sp-font-sans); }
   text-decoration: none;
 }
 
-.meal-type-form { margin: 0; flex: none; }
-
-.meal-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
 .kept-count {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--sp-faint);
   margin-left: auto;
 }
-
-.meal-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.meal-archive-form { margin: 0 0 0 auto; }
 
 /* Floating "+ Add a meal" pill — phone; static button on desktop. */
 .floating-add {

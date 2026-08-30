@@ -4,9 +4,10 @@ The limiter is pure in-memory state keyed by string, so every behavior is
 testable with a fake clock. ``client_ip`` is security-relevant header
 plumbing, so its trust-boundary behavior is pinned here too.
 
-One integration regression test lives at the end (Slice B fix): a session
-member must never be join-rate-limited by their own session's card/recipe/
-vote traffic, while a same-IP code guesser still 429s.
+Two integration regression tests live at the end (Slice B fix + the final
+audit's share-screen carve-out): a session member — and the share screen's
+host — must never be join-rate-limited by their own session's traffic, while
+a same-IP code guesser still 429s.
 """
 
 from __future__ import annotations
@@ -246,6 +247,32 @@ def test_session_member_exempt_while_guessing_still_limited(client, post, db_ses
     # The member's 45 hits never touched the limiter — the bucket is empty,
     # so the same IP's code guessing is still throttled from scratch: 20
     # unknown-code GETs 404 (each burning a hit), the 21st 429.
+    statuses = [client.get(f"/s/wrong-code-{i}").status_code for i in range(21)]
+    assert statuses[:20] == [404] * 20
+    assert statuses[20] == 429
+
+
+def test_share_page_host_exempt_while_guessing_still_limited(client, db_session):
+    """Final audit fix: /s/{code}/share draws from the SAME shared
+    JOIN_LIMITER bucket and is host-only — every legitimate call IS the host,
+    yet the route used to enforce the limiter unconditionally as its first
+    line. A host reloading their own invite screen could burn the bucket and
+    lock themselves out of it — the exact self-lockout the Slice B carve-out
+    closes everywhere else. The share route now gets the same treatment: the
+    host never pays, while a same-IP code guesser still 429s. Both halves run
+    in ONE test so the host traffic and the guessing share the same window
+    (the autouse clearing fixture can't reset the limiter between them)."""
+    session, host, _guest = _collection_session(db_session)
+    stamp_session(client, host)
+
+    # 25 share-screen hits (> the 20/min limit) in one window — all 200: the
+    # host's own /share traffic never touches the bucket.
+    statuses = [client.get(f"/s/{session.code}/share").status_code for _ in range(25)]
+    assert statuses == [200] * 25
+
+    # The host's 25 hits left the bucket empty, so the same IP's code
+    # guessing is still throttled from scratch: 20 unknown-code GETs 404
+    # (each burning a hit), the 21st 429.
     statuses = [client.get(f"/s/wrong-code-{i}").status_code for i in range(21)]
     assert statuses[:20] == [404] * 20
     assert statuses[20] == 429

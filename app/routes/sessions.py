@@ -23,8 +23,10 @@ by link/code per plan §2 — while every host mutation re-checks
 client IP (20 lookups/minute, M5b: ``app/ratelimit.py``) — but only for
 viewers who are NOT participants of, or the host of, the session they're
 hitting: a voter's post-vote redirect and lobby polls must never 429, while a
-code guesser keeps burning the bucket (Slice B fix). The roster/voting-status
-polls are not limited at all.
+code guesser keeps burning the bucket (Slice B fix). The host-only share
+screen follows the same rule (final audit fix): the host never pays, anyone
+else does before the 404. The roster/voting-status polls are not limited at
+all.
 """
 
 from __future__ import annotations
@@ -1261,23 +1263,33 @@ def session_share_page(
     count. Sharing is a lobby-time surface: once voting starts the host is
     redirected to the session itself.
 
-    Guards mirror the other session routes: the code in the URL is a guessing
-    surface, so the join-rate limiter is enforced FIRST (before the lookup —
-    a guesser pays for the 404); ended sessions render the ended page; only
-    the HOST account sees it — anyone else is 404, never 403 (no existence
-    oracle, CLAUDE.md #6); a non-lobby session bounces to itself."""
-    _enforce_join_rate_limit(request)
+    Membership-exempt throttling (same carve-out as ``GET /s/{code}`` and the
+    recipe view): the join limiter is enforced ONLY for viewers who are not
+    the host. An unknown code pays a bucket hit before the 404 (guessers
+    can't probe for free), and a stranger/participant who knows a valid code
+    pays before the host-only 404 (no existence oracle, CLAUDE.md #6) — but
+    the HOST never pays, because /share is host-only and every legitimate
+    call IS the host: a host reloading their own invite screen must not burn
+    the shared bucket and lock themselves out of it. Ended sessions render
+    the ended page; a non-lobby session bounces to itself."""
     session = _get_session_by_code(db, code)
     if session is None:
+        # Unknown code: the guesser keeps burning the bucket — enforce BEFORE
+        # the 404 so the status code can't be read without paying.
+        _enforce_join_rate_limit(request)
         raise HTTPException(404, "Session not found")
+    account = get_current_account(request, db)
+    if account is None or account.id != session.host_account_id:
+        # Only the host may share: everyone else — participants and strangers
+        # alike — pays the code-guessing bucket before the 404, so /share
+        # can't be probed for free either.
+        _enforce_join_rate_limit(request)
+        raise HTTPException(404, "Only the host can share this session")
     _expire_if_stale(db, session)  # lazy §5.5 expiry on load
     if session.status in ENDED_STATUSES:
         return templates.TemplateResponse(
             request, "session_ended.html", {"session": session, "chrome": "session"}
         )
-    account = get_current_account(request, db)
-    if account is None or account.id != session.host_account_id:
-        raise HTTPException(404, "Only the host can share this session")
     if session.status != "lobby":
         # Sharing is lobby-time: a voting/complete session sends the host to
         # the session itself.
