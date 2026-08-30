@@ -45,7 +45,7 @@ Budget: 6 cycles. Compositions are unchanged — tokens/type/shape/link reskin o
 |---|---|---|
 | R1 | Tokens + global styles: `--sp-*` swap (light+dark), Schibsted Grotesk + mono fonts, flat 10/12px buttons/cards, ink+acid-underline links, theme-color/manifest, interim tint/avatar/chip mappings | [x] 00b09ef |
 | R2 | Session-flow deltas: voting card (mono tags/count, 40/800), results (mono labels/counts, accent CTA), ink-ground completion payoff, share/lobby/waiting mono voice | [x] 9db92ed |
-| R3 | App-side deltas: hub, landing, library, groups, edit, report — mono metas, chip/pill retirement, link treatment sweep | [ ] |
+| R3 | App-side deltas: hub, landing, library, groups, edit, report — mono metas, chip/pill retirement, link treatment sweep | [x] 1377a42 |
 
 ## M7 — Design fidelity (Oscar design review 2026-08-29)
 

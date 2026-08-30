@@ -1052,3 +1052,16 @@ account exists in prod by design).
   authored by this loop; content reads as a lead-voice execution spec awaiting post-reskin
   main. Left untracked — flagged to Charlie.)
 - Tests 403 → 405, ruff clean. Not pushed.
+
+## 2026-08-29 — M8 cycle 3 (R3: app-side deltas) + wrap-up — 1377a42
+
+- Mono voice app-wide with the user-name casing ruling honored (verified live against
+  O'Brien-style names), pill purge complete (test-guarded), meal-edit chip a11y fix
+  survived, landing steps de-pilled. Review (sonnet) found one major — pre-existing since
+  M7 S10, not this run: the library filter row crushed its four selects to ~1 character at
+  390px. Fixed here (84px floor + two-up wrap under 560px) with the reviewer's live repro
+  as the acceptance case. Contrast tests extended to host/chip-ink pairs.
+- M8 COMPLETE: 3 slices + fix rounds, tests 392 → 409 (contrast guard included), every
+  slice reviewed. Branch loud-moments NOT pushed — Charlie's call (push = prod deploy).
+- Untracked docs/SPEC-collection-templates-execution.md (not authored by this loop) left
+  in place for Charlie.
