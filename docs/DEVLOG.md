@@ -915,3 +915,17 @@ the `claude` CLI is not authed in this environment — noted for future cycles).
   existence oracles (404-only). Accepted as-is: per-cause 404 detail strings (pre-existing
   app-wide convention).
 - Tests 339 → 348, ruff clean. Not pushed.
+
+## 2026-08-29 — M7 cycle 3 (S3+S4: create-session + share screen) — aac5435
+
+- Shipped: create-session per artboard (radio cards w/ :has(:checked) accent ring + keyboard
+  focus, dashed ad-hoc card, stepper rows over real number inputs, ?group_id switcher);
+  host-only /s/{code}/share (uppercase 40px mono code, copy-link JS, native share, htmx
+  joined-count poll exempt from the join limiter); create → 303 → share.
+- Review (sonnet): no blockers. Major fixed: targets cap (0–20) was UI-only — server now 400s
+  >20 (repro was POST dinners=999 → target row 999). Nit fixed: active-item-count query
+  aggregated every tenant's items before filtering — now scoped. Polish: share code nowrap +
+  clamp. Clean: group_id oracle/injection, share auth (3 distinct 404 tests), joined-count
+  privacy + poll exemption (verified by burning the limiter), invite_url Host-header
+  independence, no-JS fallback. REQUESTS.md: confirm SP_BASE_URL in Coolify.
+- Tests 348 → 362, ruff clean. Not pushed.
