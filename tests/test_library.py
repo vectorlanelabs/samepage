@@ -328,7 +328,9 @@ def test_library_page_lists_items(client, post, db_session):
     assert "Meal Library" in resp.text
     assert "Taco Tuesday" in resp.text
     assert "Pancakes" in resp.text
-    assert "2 active · 0 archived." in resp.text
+    assert "2 meals" in resp.text
+    # No archived clause when nothing is archived.
+    assert "archived" not in resp.text
     # Links/forms are collection-scoped, not /library.
     assert f"/collections/{collection.id}/items/new" in resp.text
     assert f"/collections/{collection.id}/items/" in resp.text
@@ -402,6 +404,53 @@ def test_library_tag_filter_or_semantics(client, post, db_session):
     assert "Homemade bread" in resp.text
 
 
+def test_library_time_filter_and_dropdown_split(client, post, db_session):
+    r"""Time tags (names matching ^\d+\s?min$, like "40 min") are split out of
+    the Tags dropdown into their own Time dropdown (route-side), and the time
+    filter is AND-ed with every other filter."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Sheet pan chicken", tags=["40 min"])
+    _make_item(db_session, collection.id, group.id, "Slow ribs", tags=["90 min"])
+    _make_item(db_session, collection.id, group.id, "Brisket", tags=["3 hours"])
+    _make_item(db_session, collection.id, group.id, "Takeout night", tags=["takeout"])
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}")
+    assert resp.status_code == 200
+    # The Time dropdown lists only duration tags; the Tags dropdown the rest
+    # (including "3 hours", which does not match the time-tag pattern).
+    time_select = resp.text.split('name="time"')[1].split("</select>")[0]
+    assert "40 min" in time_select
+    assert "90 min" in time_select
+    assert "3 hours" not in time_select
+    assert "takeout" not in time_select
+    tags_select = resp.text.split('name="tags"')[1].split("</select>")[0]
+    assert "takeout" in tags_select
+    assert "3 hours" in tags_select
+    assert "40 min" not in tags_select
+    # Filtering by a time tag keeps only items carrying it.
+    resp = client.get(f"/collections/{collection.id}", params={"time": "40 min"})
+    assert "Sheet pan chicken" in resp.text
+    assert "Slow ribs" not in resp.text
+    assert "Takeout night" not in resp.text
+    # Time ANDs with the Tags select (an item must carry both).
+    resp = client.get(
+        f"/collections/{collection.id}", params={"time": "40 min", "tags": "takeout"}
+    )
+    assert "Sheet pan chicken" not in resp.text
+    assert "Takeout night" not in resp.text
+
+
+def test_library_hides_time_dropdown_without_time_tags(client, post, db_session):
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Plain meal", tags=["takeout"])
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}")
+    assert 'name="time"' not in resp.text
+    assert 'name="tags"' in resp.text
+
+
 def test_archived_hidden_by_default_visible_with_status(client, post, db_session):
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
@@ -411,15 +460,22 @@ def test_archived_hidden_by_default_visible_with_status(client, post, db_session
     resp = client.get(f"/collections/{collection.id}")
     assert "Fresh tacos" in resp.text
     assert "Old pasta" not in resp.text
-    assert "1 active · 1 archived." in resp.text
+    assert "1 meals" in resp.text
+    # The archived count is a link into the archived view.
+    assert "1 archived" in resp.text
+    assert "?status=archived" in resp.text
+    assert "Show active" not in resp.text
     resp = client.get(f"/collections/{collection.id}", params={"status": "all"})
     assert "Old pasta" in resp.text
     resp = client.get(f"/collections/{collection.id}", params={"status": "archived"})
     assert "Old pasta" in resp.text
     assert "Fresh tacos" not in resp.text
+    assert "Show active" in resp.text
 
 
-def test_library_kept_label_and_recipe_link(client, post, db_session):
+def test_library_kept_label_and_row_link(client, post, db_session):
+    """The kept count is lowercase and rows link straight to the edit screen —
+    no per-row Edit/Recipe/Archive actions on the library list itself."""
     group = _make_group(db_session)
     collection = _make_collection(db_session, group.id)
     item = _make_item(db_session, collection.id, group.id, "Brisket", recipe_text="Slow cook it.")
@@ -427,8 +483,11 @@ def test_library_kept_label_and_recipe_link(client, post, db_session):
     db_session.commit()
     _login(client, db_session)
     resp = client.get(f"/collections/{collection.id}")
-    assert "Kept 3×" in resp.text
-    assert "Recipe →" in resp.text
+    assert "kept 3×" in resp.text
+    assert f"/collections/{collection.id}/items/{item.id}/edit" in resp.text
+    # The row is the only action surface; archive/recipe live on the edit screen.
+    assert "Recipe →" not in resp.text
+    assert "Archive" not in resp.text
 
 
 def test_library_page_renders_item_with_no_meal_detail(client, post, db_session):
@@ -694,6 +753,44 @@ def test_update_item_rename_and_type(client, post, db_session):
     assert item.normalized_name == "new name"  # recomputed on rename
     assert _meal_types_of(db_session, item.id) == {"lunch", "dinner"}
     assert _tags_of(db_session, item.id) == {"takeout", "newtag"}
+
+
+def test_edit_page_tag_chips_applied_and_adder(client, post, db_session):
+    """Applied tags render as checked chips; the rest sit unchecked behind the
+    '+ tag' adder — pure HTML, no JS toggling."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    _make_item(db_session, collection.id, group.id, "Chili", tags=["spicy", "40 min"])
+    _make_item(db_session, collection.id, group.id, "Other meal", tags=["weeknight"])
+    item = db_session.scalar(select(Item).where(Item.normalized_name == "chili"))
+    _login(client, db_session)
+    resp = client.get(f"/collections/{collection.id}/items/{item.id}/edit")
+    assert resp.status_code == 200
+    # Applied tags are checked chips.
+    assert 'value="spicy" checked' in resp.text
+    assert 'value="40 min" checked' in resp.text
+    # Remaining tags live unchecked behind the adder.
+    assert '<details class="tag-adder">' in resp.text
+    assert 'value="weeknight">' in resp.text
+    # No JS toggle script and no per-chip ✕ span (the ✕ is CSS-on-checked now).
+    assert "document.querySelectorAll('.tag-chip')" not in resp.text
+    assert "tag-chip-x" not in resp.text
+
+
+def test_update_unchecking_a_tag_removes_it(client, post, db_session):
+    """The update POST replaces the tag set: a tag unchecked on the edit form
+    disappears (delete-all + re-add, never merged)."""
+    group = _make_group(db_session)
+    collection = _make_collection(db_session, group.id)
+    item = _make_item(db_session, collection.id, group.id, "Burger night", tags=["takeout", "snack"])
+    _login(client, db_session)
+    resp = post(
+        f"/collections/{collection.id}/items/{item.id}",
+        data={"name": "Burger night", "types": ["dinner"], "tags": ["snack"]},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert _tags_of(db_session, item.id) == {"snack"}
 
 
 def test_update_rename_collision_400(client, post, db_session):

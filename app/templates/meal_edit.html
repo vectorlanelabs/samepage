@@ -29,14 +29,27 @@
     </div>
 
     <div class="field-label">Tags</div>
-    <div class="chip-row">
-      {% for tag in all_tags %}
-      <label class="tag-chip{% if tag.name in selected_tags %} tag-chip--on{% endif %}">
-        <input type="checkbox" name="tags" value="{{ tag.name }}" {% if tag.name in selected_tags %}checked{% endif %}>
-        {{ tag.name }}<span class="tag-chip-x" aria-hidden="true">✕</span>
+    <div class="chip-row tag-applied">
+      {% for tag in applied_tags %}
+      <label class="tag-chip tag-chip--on">
+        <input type="checkbox" name="tags" value="{{ tag.name }}" checked>
+        {{ tag.name }}
       </label>
       {% endfor %}
     </div>
+    {% if other_tags %}
+    <details class="tag-adder">
+      <summary>+ tag</summary>
+      <div class="chip-row tag-adder-list">
+        {% for tag in other_tags %}
+        <label class="tag-chip">
+          <input type="checkbox" name="tags" value="{{ tag.name }}">
+          {{ tag.name }}
+        </label>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
 
     <div class="field-label">Ingredients (one per line — just the item)</div>
     <textarea name="ingredients" rows="5" placeholder="chicken thigh&#10;rice&#10;onion&#10;garlic" class="input textarea">{{ form.ingredients }}</textarea>
@@ -59,20 +72,4 @@
   </div>
   {% endif %}
 </div>
-
-<script>
-(function () {
-  document.querySelectorAll('.tag-chip').forEach(function (label) {
-    function paint() {
-      label.classList.toggle('tag-chip--on', label.querySelector('input').checked);
-    }
-    label.addEventListener('click', function (e) {
-      e.preventDefault();
-      var cb = label.querySelector('input');
-      cb.checked = !cb.checked;
-      paint();
-    });
-  });
-})();
-</script>
 {% endblock %}

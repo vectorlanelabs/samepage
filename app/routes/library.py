@@ -49,6 +49,10 @@ MEAL_TYPES = ("breakfast", "lunch", "dinner")
 MEAL_TYPE_LABELS = {"breakfast": "Breakfast", "lunch": "Lunch", "dinner": "Dinner"}
 VALID_MEAL_TYPES = frozenset(MEAL_TYPES)
 
+# A "time tag" is a group tag whose name looks like a duration ("40 min",
+# "40min") — the library splits these into their own Time dropdown.
+TIME_TAG_RE = re.compile(r"^\d+\s?min$", re.IGNORECASE)
+
 
 def _parse_meal_types(raw: list[str] | None) -> list[str]:
     """Validated, deduped meal types in canonical order (breakfast, lunch,
@@ -222,14 +226,6 @@ def _item_meal_detail(db: Session, item_id: int) -> MealDetail | None:
     return db.scalar(select(MealDetail).where(MealDetail.item_id == item_id))
 
 
-def _has_recipe(detail: MealDetail | None, has_ingredients: bool) -> bool:
-    if has_ingredients:
-        return True
-    if detail is None:
-        return False
-    return bool(detail.source_url or detail.recipe_text)
-
-
 def _safe_source_url(url: str | None) -> str | None:
     """Return url only when it is an absolute http(s) URL with a host, else None."""
     if not url:
@@ -263,6 +259,10 @@ def _render_edit(
     instructions/source_url) — from the item/detail for GETs, from the submitted
     POST body for 400 re-renders so nothing the user typed is lost.
     """
+    all_tags = _all_tags(db, collection.group_id)
+    applied = set(selected_tags)
+    applied_tags = [t for t in all_tags if t.name in applied]
+    other_tags = [t for t in all_tags if t.name not in applied]
     return templates.TemplateResponse(
         request,
         "meal_edit.html",
@@ -271,7 +271,9 @@ def _render_edit(
             "collection": collection,
             "form": form,
             "selected_tags": selected_tags,
-            "all_tags": _all_tags(db, collection.group_id),
+            "all_tags": all_tags,
+            "applied_tags": applied_tags,
+            "other_tags": other_tags,
             "meal_type_options": [
                 {"value": t, "label": MEAL_TYPE_LABELS[t], "checked": t in form["types"]}
                 for t in MEAL_TYPES
@@ -386,18 +388,22 @@ def library_page(
     q: str = "",
     type: str = "",
     tags: str = "",
+    time: str = "",
     status: str = "active",
     added: int = 0,
 ):
     """Collection browse (signed-in accounts only): search (q), type / tag (OR)
-    / status filters, scoped to the collection in the URL. ``?added=1`` (set by
-    the create redirect) shows a "meal added" confirmation banner."""
+    / time (AND) / status filters, scoped to the collection in the URL.
+    ``?added=1`` (set by the create redirect) shows a "meal added" confirmation
+    banner."""
     account = require_account(request, db)
     collection = _get_owned_collection_or_404(db, account, collection_id)
 
     type = type if type in VALID_MEAL_TYPES else ""
     status = status if status in ("active", "archived", "all") else "active"
     tag_names = [t.strip() for t in tags.split(",") if t.strip()]
+    # The Time dropdown is one more tag filter — AND-ed with the Tags select.
+    time_names = [t.strip() for t in time.split(",") if t.strip()]
 
     stmt = select(Item).where(Item.collection_id == collection.id)
     if q:
@@ -416,6 +422,14 @@ def library_page(
             .distinct()
         ).all()
         stmt = stmt.where(Item.id.in_(item_ids))
+    for time_name in time_names:
+        item_ids = db.scalars(
+            select(ItemTag.item_id)
+            .join(Tag, Tag.id == ItemTag.tag_id)
+            .where(Tag.name == time_name)
+            .distinct()
+        ).all()
+        stmt = stmt.where(Item.id.in_(item_ids))
     if status == "active":
         stmt = stmt.where(Item.archived_at.is_(None))
     elif status == "archived":
@@ -423,12 +437,8 @@ def library_page(
     items = db.scalars(stmt.order_by(Item.normalized_name)).all()
     item_ids = [item.id for item in items]
 
-    # Fetch meal details and tags for this collection's items in one query each
-    # (not one query per item, and not every item-tag link on the deployment).
-    item_details: dict[int, MealDetail] = {
-        detail.item_id: detail
-        for detail in db.scalars(select(MealDetail).where(MealDetail.item_id.in_(item_ids)))
-    }
+    # Fetch tags for this collection's items in one query (not one query per
+    # item, and not every item-tag link on the deployment).
     item_tags = db.execute(
         select(ItemTag.item_id, Tag.name)
         .join(Tag, Tag.id == ItemTag.tag_id)
@@ -448,28 +458,24 @@ def library_page(
     def _types_of(item: Item) -> list[str]:
         return _parse_meal_types(raw_types_by_item.get(item.id, []))
 
-    items_with_ingredients = set(
-        db.scalars(
-            select(MealIngredient.item_id)
-            .where(MealIngredient.item_id.in_(item_ids))
-            .distinct()
-        ).all()
-    )
-
     rows = [
         {
             "id": item.id,
             "name": item.name,
             "type_label": _types_label(_types_of(item)),
             "tags": sorted(tags_by_item.get(item.id, [])),
-            "kept_label": f"Kept {item.times_kept}×" if item.times_kept > 0 else None,
-            "has_recipe": _has_recipe(
-                item_details.get(item.id), item.id in items_with_ingredients
-            ),
+            "kept_label": f"kept {item.times_kept}×" if item.times_kept > 0 else None,
             "archived": item.archived_at is not None,
         }
         for item in items
     ]
+    # Row subtitle: "{type} · {tags…}" — the archived marker is a trailing
+    # " · archived" suffix. Missing parts are omitted (no dangling dots).
+    for row in rows:
+        parts = [p for p in [row["type_label"], *row["tags"]] if p]
+        if row["archived"]:
+            parts.append("archived")
+        row["subtitle"] = " · ".join(parts) or None
 
     active_count = (
         db.scalar(
@@ -489,29 +495,37 @@ def library_page(
     )
 
     # Filters render as compact dropdowns (v4): one <select> each for type,
-    # status, and tag. Options carry their own selected flag; the form GETs back
-    # to this same page.
+    # tag, and time. Options carry their own selected flag; the form GETs back
+    # to this same page. "Time tags" (names like "40 min") are split out of the
+    # tag list into their own Time dropdown (route-side, so the template never
+    # decides what counts as a duration).
     type_options = [
         {
-            "label": "All types" if key == "all" else MEAL_TYPE_LABELS[key],
+            "label": "All" if key == "all" else MEAL_TYPE_LABELS[key],
             "value": "" if key == "all" else key,
             "selected": type == ("" if key == "all" else key),
         }
         for key in ("all", *MEAL_TYPES)
     ]
-    status_options = [
-        {"label": label, "value": value, "selected": status == value}
-        for label, value in (("Active", "active"), ("Archived", "archived"), ("All", "all"))
-    ]
     # Tag filtering keeps its comma-separated OR-capable param, but the dropdown
     # picks one at a time; a single selected tag round-trips.
+    all_group_tags = _all_tags(db, collection.group_id)
     selected_tag = tag_names[0] if tag_names else ""
-    tag_options = [{"label": "All tags", "value": "", "selected": not selected_tag}] + [
+    tag_options = [{"label": "Any", "value": "", "selected": not selected_tag}] + [
         {"label": tag.name, "value": tag.name, "selected": tag.name == selected_tag}
-        for tag in _all_tags(db, collection.group_id)
+        for tag in all_group_tags
+        if not TIME_TAG_RE.match(tag.name)
+    ]
+    # The Time dropdown posts a single time tag; the route ANDs it with the
+    # Tags select (and any other filters).
+    selected_time = time_names[0] if time_names else ""
+    time_options = [{"label": "Any", "value": "", "selected": not selected_time}] + [
+        {"label": tag.name, "value": tag.name, "selected": tag.name == selected_time}
+        for tag in all_group_tags
+        if TIME_TAG_RE.match(tag.name)
     ]
 
-    any_filter_active = bool(q or type or tag_names or status != "active")
+    any_filter_active = bool(q or type or tag_names or time_names or status != "active")
 
     return templates.TemplateResponse(
         request,
@@ -525,11 +539,14 @@ def library_page(
             "q": q,
             "type": type,
             "tags": tags,
+            "time": time,
             "status": status,
+            "viewing_archived": status == "archived",
             "type_options": type_options,
-            "status_options": status_options,
             "tag_options": tag_options,
+            "time_options": time_options,
             "has_tags": len(tag_options) > 1,
+            "has_times": len(time_options) > 1,
             "any_filter_active": any_filter_active,
             "clear_url": f"/collections/{collection.id}",
             "flash": "Meal added." if added else None,
