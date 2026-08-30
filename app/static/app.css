@@ -193,7 +193,20 @@ button { font-family: var(--sp-font-sans); }
   color: var(--sp-faint);
 }
 
-.sidebar-spacer { flex: 1; }
+/* R5b: the nav/collections region owns the sidebar's flexible space and
+   scrolls internally, so the bottom cluster (Host/Join/account/Sign out)
+   stays pinned at the bottom of the 100vh sidebar no matter how many
+   collections an account has. Replaces the old .sidebar-spacer { flex: 1 }
+   spacer, which pushed the cluster down but let a long collections list
+   overflow the sidebar and shove it off-screen. min-height: 0 lets the
+   region shrink below its content so overflow-y scrolls instead of
+   escaping the column. */
+.sidebar-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
 
 /* Sidebar "Collections" section (M7 S10): pages with collection context list
    the account's collections under a small section heading. */
@@ -219,6 +232,16 @@ button { font-family: var(--sp-font-sans); }
   font-size: 14px;
   flex: none;
   margin-bottom: 10px;
+}
+
+/* M8 R5: "Join with a code" sits directly under the host button — same
+   sizing treatment (46px min-height, 14px type, full width via the
+   sidebar's column stretch), pulled 8px below its sibling. */
+.sidebar-join-btn {
+  min-height: 46px;
+  font-size: 14px;
+  flex: none;
+  margin-top: 8px;
 }
 
 /* ---------- Top bar (mobile only) ---------- */
@@ -1072,6 +1095,10 @@ button { font-family: var(--sp-font-sans); }
   /* The floating "+ Add a meal" pill is phone-only; the header row carries a
      normal primary button on desktop. */
   .floating-add { display: none; }
+
+  /* The hub's bottom CTA stack (Host + Join) is phone-only too — the desktop
+     sidebar carries both actions. Markup stays; phone is unchanged. */
+  .hub-cta { display: none; }
 
   /* Search (280px) + add button sit in the header row's right side,
      content-sized instead of the phone's full-width wrap. */

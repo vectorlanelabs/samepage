@@ -40,15 +40,21 @@
       <span class="brand-glyph" aria-hidden="true"><i></i><i></i><i></i></span>
       Same Page
     </a>
-    <nav class="nav">
-      <a class="nav-link{% if request.url.path.startswith('/collections') %} is-active{% endif %}" href="/collections">Collections</a>
-      <a class="nav-link{% if request.url.path.startswith('/groups') %} is-active{% endif %}" href="/groups">Groups</a>
-    </nav>
-    {# Library pages (and any page that has collection context) fill this with
-       a "Collections" section listing the account's collections. #}
-    {% block sidebar_extra %}{% endblock %}
-    <div class="sidebar-spacer"></div>
+    {# R5b: the nav + collections region is the sidebar's one scroll area. The
+       .sidebar-scroll wrapper is flex: 1 1 auto with overflow-y: auto (app.css),
+       so Host/Join/account/Sign out stay pinned at the bottom of the 100vh
+       sidebar no matter how many collections an account has. #}
+    <div class="sidebar-scroll">
+      <nav class="nav">
+        <a class="nav-link{% if request.url.path.startswith('/collections') %} is-active{% endif %}" href="/collections">Collections</a>
+        <a class="nav-link{% if request.url.path.startswith('/groups') %} is-active{% endif %}" href="/groups">Groups</a>
+      </nav>
+      {# Library pages (and any page that has collection context) fill this with
+         a "Collections" section listing the account's collections. #}
+      {% block sidebar_extra %}{% endblock %}
+    </div>
     <a class="btn btn-primary sidebar-host-btn" href="/sessions/new">Host a session</a>
+    <a class="btn btn-secondary sidebar-join-btn" href="/join">Join with a code</a>
     <span class="nav-account">{{ current_account.display_name }}</span>
     <form method="post" action="/logout"><button type="submit" class="nav-link">Sign out</button></form>
   </aside>

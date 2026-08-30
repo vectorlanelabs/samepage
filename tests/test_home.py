@@ -118,3 +118,16 @@ def test_signed_in_nav_shows_app_links(client, db_session):
     assert 'href="/collections"' in body
     assert 'href="/groups"' in body
     assert '<form method="post" action="/logout">' in body
+
+
+def test_signed_in_sidebar_has_join_button(client, db_session):
+    """M8 R5: the app-shell sidebar carries a secondary "Join with a code"
+    button directly under Host a session (the desktop counterpoint to the
+    phone-only hub CTA stack)."""
+    _make_account(db_session)
+    _login(client, db_session)
+    body = client.get("/collections").text
+    assert 'class="btn btn-secondary sidebar-join-btn" href="/join"' in body
+    assert 'class="btn btn-primary sidebar-host-btn" href="/sessions/new"' in body
+    # Directly under the host button, per the sidebar layout.
+    assert body.index("sidebar-host-btn") < body.index("sidebar-join-btn")

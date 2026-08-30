@@ -747,6 +747,42 @@ def test_library_area_pages_share_sidebar_collections(client, post, db_session):
         assert f'class="nav-link" href="/collections/{other.id}"' in resp.text
 
 
+def test_library_sidebar_many_collections_pins_bottom_cluster(client, post, db_session):
+    """R5b: with enough collections to overflow a 100vh sidebar, the nav +
+    collections region is the only scrollable part. Every collection row lives
+    inside the .sidebar-scroll wrapper, and the bottom cluster (Host a session /
+    Join with a code / account / Sign out) renders outside it as direct sidebar
+    siblings — so the cluster stays pinned on-screen while the list scrolls."""
+    group = _make_group(db_session)
+    first = _make_collection(db_session, group.id, name="Dinners 00")
+    for i in range(1, 40):
+        _make_collection(db_session, group.id, name=f"Dinners {i:02d}")
+    _login(client, db_session)
+    resp = client.get(f"/collections/{first.id}")
+    assert resp.status_code == 200
+    body = resp.text
+    scroll_start = body.index('class="sidebar-scroll"')
+    scroll_end = body.index("</div>", scroll_start)
+    region = body[scroll_start:scroll_end]
+    # The scroll wrapper closes before the cluster begins (nav + section only).
+    assert scroll_start < scroll_end
+    for i in range(40):
+        assert f"Dinners {i:02d}" in region
+    # Pinned cluster: none of it sits inside the scroll region...
+    assert "sidebar-host-btn" not in region
+    assert "sidebar-join-btn" not in region
+    assert "nav-account" not in region
+    assert 'action="/logout"' not in region
+    # ...and all of it still renders after it, at the sidebar's bottom.
+    for marker in (
+        'class="btn btn-primary sidebar-host-btn" href="/sessions/new"',
+        'class="btn btn-secondary sidebar-join-btn" href="/join"',
+        'class="nav-account"',
+        '<form method="post" action="/logout">',
+    ):
+        assert body.index(marker) > scroll_end
+
+
 def test_library_page_renders_item_with_no_meal_detail(client, post, db_session):
     """Regression: an Item with no meal_detail row (the schema allows it --
     meal_detail is an optional 1:1 extension) must not 500 the whole library

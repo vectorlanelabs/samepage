@@ -98,6 +98,50 @@ def test_guest_topbar_has_visible_display_rule():
     assert "display: none" not in block
 
 
+def test_sidebar_scroll_region_declares_overflow_y_auto():
+    """R5b: the sidebar's nav/collections region is the one scroll area — the
+    .sidebar-scroll rule must declare overflow-y: auto on a flex: 1 1 auto
+    region so the Host/Join/account/Sign out cluster stays pinned at the
+    bottom of the 100vh sidebar when an account has many collections (the old
+    .sidebar-spacer let the list overflow and shove the cluster off-screen).
+    String-level is enough — this class of layout bug is invisible to
+    template tests."""
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.css").read_text()
+    block = css[css.index(".sidebar-scroll") :]
+    block = block[: block.index("}")]
+    assert "flex: 1 1 auto;" in block
+    assert "min-width: 0;" in block
+    assert "overflow-y: auto;" in block
+
+
+def test_hub_cta_hidden_at_desktop_widths():
+    """M8 R5: the hub's bottom CTA stack (Host a session + Join with a code)
+    is phone-only — at >=900px the desktop sidebar carries both actions, so
+    .hub-cta hides. String-level like the guest-topbar test: verify the rule
+    sits inside the min-width: 900px media query (a top-level display:none
+    would kill the phone CTAs too)."""
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.css").read_text()
+    start = css.index("@media (min-width: 900px)")
+    # Walk to the media query's closing brace, depth-aware — the block
+    # contains many nested selector rules.
+    depth = 0
+    end = len(css)
+    for i, ch in enumerate(css[start:], start):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    media = css[start:end]
+    assert ".hub-cta { display: none; }" in media
+
+
 def test_hub_card_meta_uses_mono_voice(client):
     """M8 R3: the collections-hub card meta line (items count · last session
     date) renders in the mono voice — faint 12px IBM Plex Mono."""
