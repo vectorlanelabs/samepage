@@ -134,6 +134,9 @@ def signup_page(next: str | None = None):
 
 @router.post("/logout")
 def logout(request: Request):
-    """Clear the session cookie (works for any session, signed-in or not)."""
+    """Clear the session cookie (works for any session, signed-in or not).
+
+    Lands on the guest landing, not /login — the bare auth screen is a dead
+    end to arrive at when you've just chosen to leave (Charlie, 2026-08-30)."""
     request.session.clear()
-    return RedirectResponse("/login", status_code=303)
+    return RedirectResponse("/", status_code=303)

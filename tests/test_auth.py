@@ -235,7 +235,7 @@ def test_logout_clears_session(client, post, db_session):
     stamp_session(client, account)
     resp = post("/logout", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/login"
+    assert resp.headers["location"] == "/"  # guest landing, not the bare /login
     # Signed out: the response instructs the browser to drop the session cookie.
     # (Asserted on the header because the test jar keeps manually-stamped
     # cookies; a real browser honors this deletion.)
