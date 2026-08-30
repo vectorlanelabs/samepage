@@ -1,48 +1,63 @@
-/* Same Page — "Quiet Kitchen" design system (M2d).
+/* Same Page — "Loud Moments" design system (M8 R1).
    Tokens copied verbatim from `Design Handoff/README.md` (light + dark).
    Component classes below replace the old per-element inline-style pattern. */
 
 :root {
-  --sp-bg:        #F6F4F0;  /* app background        */
-  --sp-card:      #FFFFFF;  /* raised surfaces        */
-  --sp-field:     #FDFCFA;  /* inputs                 */
-  --sp-ink:       #2B2E3E;  /* primary text           */
-  --sp-sub:       #83817A;  /* secondary text         */
-  --sp-faint:     #A3A099;  /* tertiary / disabled    */
-  --sp-chip-bg:   #F0EDE7;  /* tag chips, code pills  */
-  --sp-chip-ink:  #6A675E;
-  --sp-border:    #E7E3DC;  /* card borders           */
-  --sp-hairline:  #F0EDE7;  /* in-card row dividers   */
-  --sp-border-strong: #C9C4B9;  /* inputs, secondary buttons */
-  --sp-accent:    #4468D2;  /* the one action color   */
-  --sp-accent-tint: #EAEFFB;
-  --sp-host:      #8177C9;  /* host-only affordances  */
-  --sp-host-tint: #F0EDF9;  /* forward-declared for M3 host-only screens (design README) */
-  --sp-danger:    #B65C4E;  /* remove / archive / end */
-  --sp-avatar:    #E9E5DD;
-  /* Layered card shadow: crisp 1px contact + soft ambient (Quiet Kitchen v2). */
-  --sp-shadow:    0 1px 2px rgba(43, 46, 62, 0.04), 0 12px 32px rgba(43, 46, 62, 0.07);
-  /* Primary-button depth: contact shadow, accent glow, hairline inset top highlight. */
-  --sp-btn-shadow: 0 1px 2px rgba(43, 46, 62, 0.18), 0 4px 14px rgba(68, 104, 210, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --sp-bg:            #FCFCFD;  /* app background                      */
+  --sp-card:          #FFFFFF;  /* raised surfaces                     */
+  --sp-field:         #FFFFFF;  /* inputs                              */
+  --sp-ink:           #101114;  /* primary text; solid-ink buttons     */
+  --sp-sub:           #5E626E;  /* secondary text (6.1:1)              */
+  --sp-faint:         #6E7280;  /* tertiary/meta text (5:1 — AA floor) */
+  --sp-border:        #E4E5E9;  /* hairline structure                  */
+  --sp-border-strong: #D6D8DE;  /* cards, inputs, secondary buttons    */
+  --sp-hairline:      #EEEFF2;  /* in-card row dividers                */
+  --sp-accent:        #CCF53F;  /* THE accent — surfaces only          */
+  --sp-accent-ink:    #101114;  /* text on accent surfaces             */
+  --sp-accent-deep:   #4E6200;  /* accent's text-safe form (labels)    */
+  --sp-host:          #6C5CE8;  /* host-only affordances               */
+  --sp-host-tint:     #F0EEFC;
+  --sp-danger:        #C64B36;  /* text-only; R1 audit: darkened 3 units to clear AA on --sp-bg (was #C74E39, 4.47:1) */
+  --sp-shadow:        0 1px 2px rgba(16, 17, 20, 0.05);  /* cards only; buttons flat */
 
-  /* Type (not part of the handoff token block): Hanken Grotesk + IBM Plex Mono. */
-  --sp-font-sans: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Interim compatibility tokens (M8 R1 — templates still reference these;
+     later slices retire the call sites). */
+  --sp-accent-tint: #F2FAD2;
+  --sp-chip-bg: #EEEFF2;
+  --sp-chip-ink: #5E626E;
+  --sp-avatar: #E4E5E9;
+  --sp-btn-shadow: none;
+
+  /* Type (not part of the handoff token block): Schibsted Grotesk + IBM Plex Mono. */
+  --sp-font-sans: "Schibsted Grotesk", "Helvetica Neue", Arial, system-ui, sans-serif;
   --sp-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --sp-bg: #191A21;      --sp-card: #23242E;   --sp-field: #23242E;
-    --sp-ink: #EDECE7;     --sp-sub: #9B99A6;    --sp-faint: #6E6D78;
-    --sp-chip-bg: #2E2F3A; --sp-chip-ink: #B8B6C2;
-    --sp-border: #33343F;  --sp-hairline: #2E2F3A; --sp-border-strong: #454652;
-    --sp-accent: #7E9AEC;  --sp-accent-tint: #262C3E;  /* dark: accent buttons use dark ink text #14151B */
-    --sp-host: #A69DE0;    --sp-host-tint: #2E2A40;
-    --sp-danger: #D48575;  --sp-avatar: #2E2F3A;
-    --sp-shadow: none;     /* dark relies on borders, not shadows */
-    /* Dark drops card shadows; the accent button keeps only a faint glow. */
-    --sp-btn-shadow: 0 4px 14px rgba(126, 154, 236, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --sp-bg: #101114;      --sp-card: #1A1B21;   --sp-field: #1A1B21;
+    --sp-ink: #FFFFFF;     --sp-sub: #ABAEB9;    --sp-faint: #8A8DA0;
+    --sp-border: #22242B;  --sp-border-strong: #3A3C46; --sp-hairline: #2A2C34;
+    --sp-accent: #CCF53F;  --sp-accent-ink: #101114;    --sp-accent-deep: #B8E018;
+    --sp-host: #8B7CF0;    --sp-host-tint: #262143;
+    --sp-danger: #E06A55;  --sp-shadow: none;
+
+    --sp-accent-tint: #2A3313;
+    --sp-chip-bg: #22242B;
+    --sp-chip-ink: #ABAEB9;
+    --sp-avatar: #2A2C34;
+    --sp-btn-shadow: none;
   }
+}
+
+/* Dark mode: the host color is a light violet (#8B7CF0), so white text on
+   it fails AA (3.4:1). Host-surface text takes the dark ink instead — same
+   pattern as .btn-primary (R1 audit restore: the Quiet Kitchen CSS had this
+   for .results-keep; the reskin dropped it, and .here-chip--host picked up
+   the same white-on-violet failure). */
+@media (prefers-color-scheme: dark) {
+  .results-keep { color: #101114; }
+  .here-chip--host .here-avatar { color: #101114; }
 }
 
 /* ---------- Reset / base ---------- */
@@ -60,7 +75,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-a { color: var(--sp-accent); text-decoration: none; }
+/* Loud Moments links: ink text with a 2px accent underline; hover flips the
+   underline to ink. Classes rendered as <a> that are NOT text links must set
+   text-decoration: none (audited per component below). */
+a {
+  color: var(--sp-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--sp-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+a:hover { text-decoration-color: var(--sp-ink); }
 
 button { font-family: var(--sp-font-sans); }
 
@@ -95,6 +121,7 @@ button { font-family: var(--sp-font-sans); }
   font-weight: 700;
   font-size: 17px;
   color: var(--sp-ink);
+  text-decoration: none;
   margin-bottom: 22px;
   white-space: nowrap;
   flex: none;
@@ -278,8 +305,8 @@ button { font-family: var(--sp-font-sans); }
 
 .page-title {
   font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: 800;
+  letter-spacing: -0.022em;
   line-height: 1.2;
   color: var(--sp-ink);
   margin: 0;
@@ -312,7 +339,11 @@ button { font-family: var(--sp-font-sans); }
   min-height: 44px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--sp-accent);
+  color: var(--sp-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--sp-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 /* ---------- Buttons ---------- */
@@ -325,7 +356,7 @@ button { font-family: var(--sp-font-sans); }
   min-height: 48px;
   padding: 0 22px;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   font-family: var(--sp-font-sans);
   font-weight: 600;
   font-size: 15px;
@@ -336,18 +367,16 @@ button { font-family: var(--sp-font-sans); }
 
 .btn-primary {
   background: var(--sp-accent);
-  color: #fff;
-  box-shadow: var(--sp-btn-shadow);
+  color: var(--sp-accent-ink);
 }
 
-.btn-primary:hover { filter: brightness(1.06); }
+.btn-primary:hover { filter: brightness(0.96); }
 
 /* Solid-ink button: used where a primary sits among accent CTAs and needs to
    read as the lead action without competing on color (e.g. the hub's Host). */
 .btn-ink {
   background: var(--sp-ink);
   color: var(--sp-bg);
-  box-shadow: 0 1px 2px rgba(43, 46, 62, 0.18), 0 4px 14px rgba(43, 46, 62, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 .btn-ink:hover { filter: brightness(1.12); }
@@ -360,14 +389,10 @@ button { font-family: var(--sp-font-sans); }
 
 .btn-secondary:hover { border-color: var(--sp-ink); }
 
-/* Dark mode: the accent is a light blue, so its buttons take dark ink text. */
-@media (prefers-color-scheme: dark) {
-  .btn-primary { color: #14151B; }
-}
-
 .btn-block { width: 100%; }
 
-/* Text-style links/actions in rows (min 44px hit target). */
+/* Text-style links/actions in rows (min 44px hit target). Loud Moments: a
+   text link is ink text with the 2px accent underline (same as .back-link). */
 .text-link {
   display: inline-flex;
   align-items: center;
@@ -378,12 +403,15 @@ button { font-family: var(--sp-font-sans); }
   font-family: var(--sp-font-sans);
   font-size: 13px;
   font-weight: 600;
-  color: var(--sp-accent);
+  color: var(--sp-ink);
   cursor: pointer;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: var(--sp-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
-/* Danger is text-only — never filled red. */
+/* Danger is text-only — never filled red, never a text link. */
 .danger-text {
   display: inline-flex;
   align-items: center;
@@ -452,7 +480,7 @@ button { font-family: var(--sp-font-sans); }
   font-size: 12px;
   color: var(--sp-chip-ink);
   background: var(--sp-chip-bg);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 5px 10px;
 }
 
@@ -460,8 +488,8 @@ button { font-family: var(--sp-font-sans); }
 
 .card {
   background: var(--sp-card);
-  border: 1px solid var(--sp-border);
-  border-radius: 16px;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: 12px;
   box-shadow: var(--sp-shadow);
 }
 
@@ -477,12 +505,11 @@ button { font-family: var(--sp-font-sans); }
   min-height: 50px;
   padding: 0 15px;
   border: 1.5px solid var(--sp-border-strong);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--sp-field);
   color: var(--sp-ink);
   font-family: var(--sp-font-sans);
   font-size: 15px;
-  box-shadow: inset 0 1px 2px rgba(43, 46, 62, 0.04);  /* fields read as wells */
 }
 
 .input::placeholder { color: var(--sp-faint); }
@@ -522,8 +549,8 @@ button { font-family: var(--sp-font-sans); }
 
 .landing-title {
   font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: -0.022em;
   line-height: 1.15;
   color: var(--sp-ink);
   margin: 0;
@@ -564,7 +591,7 @@ button { font-family: var(--sp-font-sans); }
   height: 34px;
   border-radius: 999px;
   background: var(--sp-accent-tint);
-  color: var(--sp-accent);
+  color: var(--sp-accent-deep);
   font-family: var(--sp-font-mono);
   font-weight: 500;
   font-size: 15px;
@@ -611,7 +638,7 @@ button { font-family: var(--sp-font-sans); }
     gap: 40px;
     padding-top: 24px;
   }
-  .landing-title { font-size: 40px; }
+  .landing-title { font-size: 42px; letter-spacing: -0.024em; }
   .landing-sub--phone { display: none; }
   .landing-sub--desktop { display: inline; }
   .landing-steps {
@@ -639,7 +666,7 @@ button { font-family: var(--sp-font-sans); }
 
 .hub-group-name {
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.018em;
   color: var(--sp-ink);
 }
@@ -647,7 +674,11 @@ button { font-family: var(--sp-font-sans); }
 .hub-group-manage {
   font-size: 13px;
   font-weight: 600;
-  color: var(--sp-accent);
+  color: var(--sp-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--sp-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .hub-list {
@@ -701,8 +732,8 @@ button { font-family: var(--sp-font-sans); }
   justify-content: space-between;
   gap: 12px;
   background: var(--sp-card);
-  border: 1px solid var(--sp-border);
-  border-radius: 14px;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: 12px;
   box-shadow: var(--sp-shadow);
   padding: 16px 18px;
   text-decoration: none;
@@ -767,9 +798,12 @@ button { font-family: var(--sp-font-sans); }
 
 /* Quiet inline link inside the meta line (archived toggle / show active). */
 .meta-link {
-  color: var(--sp-accent);
+  color: var(--sp-ink);
   font-weight: 600;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: var(--sp-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 /* The toolbar form carries the whole library chrome (header row, search,
@@ -831,8 +865,8 @@ button { font-family: var(--sp-font-sans); }
   margin-top: 16px;
   padding: 4px 18px;
   background: var(--sp-card);
-  border: 1px solid var(--sp-border);
-  border-radius: 16px;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: 12px;
   box-shadow: var(--sp-shadow);
 }
 
@@ -889,8 +923,8 @@ button { font-family: var(--sp-font-sans); }
   flex-direction: column;
   gap: 8px;
   background: var(--sp-card);
-  border: 1px solid var(--sp-border);
-  border-radius: 16px;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: 12px;
   box-shadow: var(--sp-shadow);
   padding: 14px 16px;
 }
@@ -925,16 +959,15 @@ button { font-family: var(--sp-font-sans); }
   gap: 6px;
   min-height: 52px;
   padding: 0 22px;
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--sp-accent);
-  color: #fff;
+  color: var(--sp-accent-ink);
   font-weight: 600;
   font-size: 15px;
   text-decoration: none;
-  box-shadow: 0 6px 16px rgba(68, 104, 210, 0.3);
 }
 
-.floating-add:hover { filter: brightness(1.06); }
+.floating-add:hover { filter: brightness(0.96); }
 
 /* ---------- Library desktop (>=900px) ---------- */
 
@@ -1046,7 +1079,7 @@ button { font-family: var(--sp-font-sans); }
   padding: 11px 14px;
   border-radius: 12px;
   background: var(--sp-accent-tint);
-  color: var(--sp-accent);
+  color: var(--sp-accent-deep);
   font-size: 13.5px;
   font-weight: 600;
 }
@@ -1056,7 +1089,7 @@ button { font-family: var(--sp-font-sans); }
 .segmented {
   display: flex;
   border: 1.5px solid var(--sp-border-strong);
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
   background: var(--sp-field);
   margin-top: 6px;
@@ -1116,7 +1149,7 @@ button { font-family: var(--sp-font-sans); }
 .tag-chip--on,
 .tag-chip:has(input:checked) {
   background: var(--sp-accent-tint);
-  color: var(--sp-accent);
+  color: var(--sp-accent-deep);
   border-color: var(--sp-accent-tint);
 }
 
@@ -1144,7 +1177,7 @@ button { font-family: var(--sp-font-sans); }
   border: 1.5px dashed var(--sp-border-strong);
   border-radius: 999px;
   background: none;
-  color: var(--sp-accent);
+  color: var(--sp-accent-deep);
   font-family: var(--sp-font-sans);
   font-size: 12.5px;
   font-weight: 600;
@@ -1339,8 +1372,8 @@ button { font-family: var(--sp-font-sans); }
   justify-content: space-between;
   gap: 12px;
   background: var(--sp-card);
-  border: 1px solid var(--sp-border);
-  border-radius: 14px;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: 12px;
   box-shadow: var(--sp-shadow);
   padding: 15px 17px;
   cursor: pointer;
@@ -1353,12 +1386,12 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .pick-card:has(input:checked) {
-  border-color: var(--sp-accent);
-  box-shadow: var(--sp-shadow), 0 0 0 1px var(--sp-accent) inset;
+  border-color: var(--sp-ink);
+  box-shadow: var(--sp-shadow), 0 0 0 1px var(--sp-ink) inset;
 }
 
 .pick-card:has(input:focus-visible) {
-  outline: 2px solid var(--sp-accent);
+  outline: 2px solid var(--sp-ink);
   outline-offset: 2px;
 }
 
@@ -1395,7 +1428,7 @@ button { font-family: var(--sp-font-sans); }
   flex: none;
   border-radius: 999px;
   background: var(--sp-accent);
-  color: #fff;
+  color: var(--sp-accent-ink);
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
@@ -1407,8 +1440,8 @@ button { font-family: var(--sp-font-sans); }
    the ad-hoc Picks row (the inline script toggles which one shows). */
 .stepper-card {
   background: var(--sp-card);
-  border: 1px solid var(--sp-border);
-  border-radius: 14px;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: 12px;
   box-shadow: var(--sp-shadow);
   padding: 4px 17px;
 }
@@ -1492,7 +1525,7 @@ button { font-family: var(--sp-font-sans); }
 
 .share-title {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.018em;
   color: var(--sp-ink);
   margin: 4px 0 0;
@@ -1568,8 +1601,8 @@ button { font-family: var(--sp-font-sans); }
 .group-card {
   display: block;
   background: var(--sp-card);
-  border: 1px solid var(--sp-border);
-  border-radius: 14px;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: 12px;
   box-shadow: var(--sp-shadow);
   padding: 16px 18px;
   text-decoration: none;
@@ -1692,7 +1725,7 @@ button { font-family: var(--sp-font-sans); }
   margin: 18px 0 0;
 }
 
-.auth-switch a { font-weight: 600; color: var(--sp-accent); }
+.auth-switch a { font-weight: 600; color: var(--sp-ink); }
 
 /* ---------- Mobile (<900px) ---------- */
 
@@ -1778,8 +1811,11 @@ button { font-family: var(--sp-font-sans); }
 
 /* ---------- Keyboard focus ---------- */
 
+/* M8 R1: the accent is acid on white, so a thin acid outline is too
+   low-contrast for focus — the focus ring is 2px ink instead (dark mode
+   resolves --sp-ink to white, which is fine). */
 :focus-visible {
-  outline: 2px solid var(--sp-accent);
+  outline: 2px solid var(--sp-ink);
   outline-offset: 2px;
 }
 
@@ -1808,12 +1844,12 @@ button { font-family: var(--sp-font-sans); }
 .prose p { margin: 0 0 12px; color: var(--sp-ink); }
 .prose ul { margin: 0 0 12px; padding-left: 20px; }
 .prose li { margin: 0 0 6px; }
-.prose a { color: var(--sp-accent); }
+.prose a { color: var(--sp-ink); }
 
 /* ---------- API / MCP token panel ---------- */
 
 .token-reveal {
-  border: 1.5px solid var(--sp-accent);
+  border: 1.5px solid var(--sp-border-strong);
   border-radius: 12px;
   padding: 14px;
   margin-bottom: 16px;
@@ -1840,7 +1876,7 @@ button { font-family: var(--sp-font-sans); }
   display: flex;
   align-items: center;
   padding: 9px 12px;
-  border: 1px solid var(--sp-border);
+  border: 1px solid var(--sp-border-strong);
   border-radius: 10px;
   background: var(--sp-field);
   font-family: var(--sp-font-mono);
@@ -1865,7 +1901,7 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .copy-btn:hover { border-color: var(--sp-ink); }
-.copy-btn.is-copied { background: var(--sp-accent); color: #fff; border-color: var(--sp-accent); }
+.copy-btn.is-copied { background: var(--sp-accent); color: var(--sp-accent-ink); border-color: var(--sp-accent); }
 
 .conn-block { margin-top: 4px; }
 
@@ -1878,7 +1914,7 @@ button { font-family: var(--sp-font-sans); }
 .doc-block summary {
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--sp-accent);
+  color: var(--sp-accent-deep);
   cursor: pointer;
 }
 
@@ -1909,7 +1945,7 @@ button { font-family: var(--sp-font-sans); }
 
 .results-title {
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.018em;
   line-height: 1.2;
   color: var(--sp-ink);
@@ -1957,7 +1993,7 @@ button { font-family: var(--sp-font-sans); }
 .results-group-label {
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--sp-accent);
+  color: var(--sp-accent-deep);
   margin: 10px 0 0;
 }
 
@@ -2043,12 +2079,6 @@ button { font-family: var(--sp-font-sans); }
 
 .results-pass:hover { border-color: var(--sp-ink); }
 
-/* Dark mode: the host color is a light lavender, so the solid Keep button
-   takes dark ink text (same pattern as .btn-primary). */
-@media (prefers-color-scheme: dark) {
-  .results-keep { color: #14151B; }
-}
-
 .results-finish-center {
   margin-top: 20px;
   text-align: center;
@@ -2069,7 +2099,7 @@ button { font-family: var(--sp-font-sans); }
 
 .complete-title {
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.018em;
   line-height: 1.2;
   color: var(--sp-ink);
@@ -2120,7 +2150,7 @@ button { font-family: var(--sp-font-sans); }
 .complete-pill {
   font-size: 11.5px;
   font-weight: 600;
-  color: var(--sp-accent);
+  color: var(--sp-accent-deep);
   background: var(--sp-accent-tint);
   border-radius: 999px;
   padding: 4px 10px;
@@ -2137,7 +2167,7 @@ button { font-family: var(--sp-font-sans); }
 /* Join screen hero: invite title, collection-with-group subject, chips. */
 .join-title {
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.018em;
   line-height: 1.2;
   color: var(--sp-ink);
@@ -2176,7 +2206,7 @@ button { font-family: var(--sp-font-sans); }
 
 .lobby-title {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.01em;
   line-height: 1.2;
   color: var(--sp-ink);
@@ -2338,7 +2368,7 @@ button { font-family: var(--sp-font-sans); }
 
 .here-chip--you .here-avatar {
   background: var(--sp-accent);
-  color: #fff;
+  color: var(--sp-accent-ink);
 }
 
 .here-chip--host .here-avatar {
@@ -2368,7 +2398,7 @@ button { font-family: var(--sp-font-sans); }
   height: 62px;
   border-radius: 50%;
   background: var(--sp-accent-tint);
-  color: var(--sp-accent);
+  color: var(--sp-accent-deep);
   font-size: 28px;
   font-weight: 700;
   margin: 16px 0 4px;
@@ -2376,7 +2406,7 @@ button { font-family: var(--sp-font-sans); }
 
 .waiting-title {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.01em;
   line-height: 1.2;
   color: var(--sp-ink);
@@ -2415,7 +2445,7 @@ button { font-family: var(--sp-font-sans); }
 .waiting-progress-count {
   font-size: 14px;
   font-weight: 600;
-  color: var(--sp-accent);
+  color: var(--sp-accent-deep);
 }
 
 .waiting-progress-track {

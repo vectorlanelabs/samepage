@@ -4,6 +4,26 @@ def test_app_css_served(client):
     assert "--sp-accent" in resp.text
 
 
+def test_base_template_uses_loud_moments_fonts_and_ink_theme(client):
+    """M8 R1: base.html pulls Schibsted Grotesk + IBM Plex Mono and sets the
+    Loud Moments ink theme color (was Hanken Grotesk + accent blue)."""
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "Schibsted+Grotesk" in resp.text
+    assert "IBM+Plex+Mono" in resp.text
+    assert 'content="#101114"' in resp.text
+    assert "#4468D2" not in resp.text
+
+
+def test_app_css_has_no_quiet_kitchen_accent_literals():
+    """M8 R1: the Quiet Kitchen accent blue is gone from the stylesheet —
+    read the file directly so a serving/config regression can't hide it."""
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.css").read_text()
+    assert "#4468D2" not in css
+
+
 def test_lib_cell_metadata_color_is_chip_ink_not_link_accent(client):
     """Desktop library metadata cells (type/tags/kept/last) explicitly set
     chip-ink — the row is an <a>, so without an explicit color they'd inherit
