@@ -35,6 +35,18 @@ never built) starts. Full architecture: `docs/PLAN-v2-samepage.md`. `docs/PLAN-v
 | **M6a** | **Per-group API tokens + JSON API**: owner-minted per-group Bearer token (256-bit, SHA-256 hashed, one-time reveal), `/api/v1` for library items + reports, scoped to one group, no sessions/votes | [x] landed 2026-08-29 | Delivers "AI lives outside the app" via a plain JSON API. |
 | **M6b** | **MCP server** (FastMCP wrapper over the M6a operations) | [ ] **paused — needs Charlie** | Deferred by a lead decision (2026-08-29): adds a heavyweight new runtime dependency + a new protocol, hard to verify unattended, and the JSON API already covers the use case. See REQUESTS.md. |
 
+## M8 — Loud Moments reskin (design handoff v5)
+
+Source: `Design Handoff/README.md` (v5, Charlie-approved 2026-08-29, acid-green accent).
+Branch `loud-moments`; commits stay local until Charlie's word (push = prod deploy).
+Budget: 6 cycles. Compositions are unchanged — tokens/type/shape/link reskin only.
+
+| ID | Slice | Status |
+|---|---|---|
+| R1 | Tokens + global styles: `--sp-*` swap (light+dark), Schibsted Grotesk + mono fonts, flat 10/12px buttons/cards, ink+acid-underline links, theme-color/manifest, interim tint/avatar/chip mappings | [ ] |
+| R2 | Session-flow deltas: voting card (mono tags/count, 40/800), results (mono labels/counts, accent CTA), ink-ground completion payoff, share/lobby/waiting mono voice | [ ] |
+| R3 | App-side deltas: hub, landing, library, groups, edit, report — mono metas, chip/pill retirement, link treatment sweep | [ ] |
+
 ## M7 — Design fidelity (Oscar design review 2026-08-29)
 
 Source: `docs/OSCAR-REVIEW-design-2026-08-29.md` vs `Design Handoff/` v4. Run started 2026-08-29 on
