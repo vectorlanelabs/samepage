@@ -1038,3 +1038,17 @@ account exists in prod by design).
   catalog (11 selectors, zero mismatches), zero Quiet Kitchen literals anywhere, compat
   token pairings, dark mode holistically.
 - Tests 392 → 403, ruff clean. Not pushed.
+
+## 2026-08-29 — M8 cycle 2 (R2: session-flow deltas) — 9db92ed
+
+- Voting card mono tags/count + 40/800 name; results mono outcome labels/counts; the
+  ink-ground completion payoff (scoped tokens, theme-invariant incl. pinned host violet);
+  share/lobby/waiting mono voice. Review (sonnet): approve with caveats — two lead rulings
+  applied: user-typed names never lowercase (system tokens only; O'Brien repro), host pill
+  pinned on the ink ground. Verified clean: full-viewport ink coverage incl. empty state,
+  no bare global-a links on the ink ground, " / " separator reached the polled partial,
+  10/10 contrast tests, 44px floors + form contracts untouched.
+- Note: an untracked docs/SPEC-collection-templates-execution.md appeared mid-run (not
+  authored by this loop; content reads as a lead-voice execution spec awaiting post-reskin
+  main. Left untracked — flagged to Charlie.)
+- Tests 403 → 405, ruff clean. Not pushed.
