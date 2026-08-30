@@ -1027,6 +1027,10 @@ def test_joined_count_poll_exempt_from_join_limiter(client, db_session):
     # The results-state poll is exempt too: still 200 after the bucket burn.
     resp = client.get(f"/s/{session.code}/results-state/0")
     assert resp.status_code == 200
+    # …and so is the voting card's card-state poll (HOTFIX5) — a voter's
+    # every-2s card poll must never 429 either.
+    resp = client.get(f"/s/{session.code}/card-state/0")
+    assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -2083,10 +2087,11 @@ def test_host_overview_when_not_joined(client, post, db_session):
     assert "All your votes are in." not in page.text
 
 
-def test_voting_card_has_results_state_poll(client, post, db_session):
-    """HOTFIX2: the voting card carries the same staleness poll as the results
-    screen — htmx reloads the page when the card's batch is no longer the open
-    batch (closed and superseded), or the session is complete/ended."""
+def test_voting_card_has_card_state_poll(client, post, db_session):
+    """HOTFIX5: the voting card carries its OWN staleness poll — card-state,
+    not results-state — so a voter mid-card reloads the page the moment their
+    batch is no longer the session's open batch (closed-no-next, superseded,
+    or the session ended), which routes them off the dead card."""
     session, _collection, _group = _make_voting_setup(
         db_session,
         item_specs=[("Apple", "dinner")],
@@ -2102,10 +2107,11 @@ def test_voting_card_has_results_state_poll(client, post, db_session):
     assert page.status_code == 200
     assert 'class="vote-name"' in page.text  # a voting card is showing
     assert "Apple" in page.text
-    poll = f'hx-get="/s/{session.code}/results-state/{batch.id}"'
+    poll = f'hx-get="/s/{session.code}/card-state/{batch.id}"'
     assert poll in page.text
     assert 'hx-trigger="every 2s"' in page.text
     assert 'hx-swap="none"' in page.text
+    assert "results-state" not in page.text  # the card never polls results-state
 
 
 def test_ad_hoc_start_shows_coming_soon_placeholder(client, post, db_session):
@@ -2552,6 +2558,76 @@ def test_results_state_poll_refreshes_on_next_batch_and_finish(client, post, db_
     resp = client.get(f"/s/{session.code}/results-state/{batch.id}")
     assert resp.status_code == 200
     assert resp.headers["hx-refresh"] == "true"
+
+
+def test_card_state_poll_refreshes_on_close_and_complete(client, post, db_session):
+    """HOTFIX5: the voting card's poll answers HX-Refresh the moment its batch
+    is no longer the session's OPEN batch — including the observed prod hole:
+    the batch closed (last vote auto-close or host manual close) and the host
+    has NOT started the next one. results-state deliberately stays quiet for
+    that state (its closed batch is still the most recent on the RESULTS
+    page), but a voter mid-card has nothing left to vote on — the refresh
+    reloads the page, which routes them to the results screen."""
+    session, batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner"), ("Salad", "lunch")],
+        roster_names=["Sam", "Lee"],
+        targets=[("dinner", 1), ("lunch", 1)],
+    )
+    # Canonical track order is breakfast, lunch, dinner → batch 1 is the LUNCH
+    # track (Salad only); the dinner options arrive in the advanced batch.
+    (salad,) = items
+    # While the batch is open, the card poll stays quiet.
+    resp = client.get(f"/s/{session.code}/card-state/{batch.id}")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+
+    # Both voters answer → the last vote auto-closes the batch (unanimous, so
+    # nothing is left pending); the host has NOT advanced. The results-state
+    # predicate stays quiet (results page behavior unchanged)…
+    _cast(client, post, db_session, session, sam, salad.id, "yes")
+    _cast(client, post, db_session, session, lee, salad.id, "yes")  # auto-closes
+    db_session.expire_all()
+    assert batch.status == "closed"
+    assert _open_batch(db_session, session.id) is None
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+    # …but the CARD poll must refresh: the voter is on a dead card.
+    resp = client.get(f"/s/{session.code}/card-state/{batch.id}")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
+
+    # Host starts the next batch → the old batch's card poll still refreshes,
+    # and the now-open batch's poll stays quiet.
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session.code}/next-batch", follow_redirects=False)
+    assert resp.status_code == 303
+    batch2 = _open_batch(db_session, session.id)
+    assert batch2 is not None and batch2.id != batch.id
+    resp = client.get(f"/s/{session.code}/card-state/{batch.id}")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
+    resp = client.get(f"/s/{session.code}/card-state/{batch2.id}")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+
+    # Host finishes the session → any card poll refreshes (completion screen).
+    resp = post(f"/s/{session.code}/finish", follow_redirects=False)
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert session.status == "complete"
+    resp = client.get(f"/s/{session.code}/card-state/{batch2.id}")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
+
+
+def test_card_state_unknown_code_404(client):
+    """HOTFIX5: the card-state poll mirrors results-state — an unknown code is
+    404 (no existence oracle), and the poll carries no vote/participant data."""
+    assert client.get("/s/ghost-0000/card-state/1").status_code == 404
 
 
 def test_results_pending_shows_host_controls_only_for_host(client, post, db_session):

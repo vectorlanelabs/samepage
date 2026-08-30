@@ -1974,6 +1974,36 @@ def results_state_partial(
     return Response(status_code=200)
 
 
+@router.get("/s/{code}/card-state/{batch_id}")
+def card_state_partial(
+    request: Request, code: str, batch_id: int, db: Annotated[Session, Depends(get_db)]
+):
+    """htmx poll target on the voting card (HOTFIX5): HX-Refresh whenever
+    ``batch_id`` is NOT the session's currently-open batch — the batch closed
+    and the host hasn't started the next one (the observed prod hole: a voter
+    mid-card sat on a dead card because results-state deliberately stays quiet
+    for a closed-no-next batch, whose closed batch is still the most recent on
+    the RESULTS page), the next batch is open, or the session is
+    complete/ended. htmx then reloads the page, which routes the voter to the
+    results screen (their batch closed) or the completion screen. A plain 200
+    while the batch is still the session's open one. Public like the
+    roster/results polls: no join limiter, no membership check, and no
+    participant or vote data in the response."""
+    session = _get_session_by_code(db, code)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    _expire_if_stale(db, session)  # lazy §5.5 expiry on load
+    open_batch = _open_batch(db, session)
+    if (
+        open_batch is None
+        or open_batch.id != batch_id
+        or session.status == "complete"
+        or session.status in ENDED_STATUSES
+    ):
+        return Response(status_code=200, headers={"HX-Refresh": "true"})
+    return Response(status_code=200)
+
+
 @router.post("/s/{code}/participants/{pid}/remove")
 def remove_participant(
     request: Request,
