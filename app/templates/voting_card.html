@@ -4,7 +4,7 @@
 <div class="vote-screen">
   <div class="vote-head">
     <span class="vote-context">{{ collection_name }} · {{ group_name }}</span>
-    <span class="vote-count">{{ responded + 1 }} of {{ total }}</span>
+    <span class="vote-count">{{ responded + 1 }} / {{ total }}</span>
   </div>
 
   <div class="vote-progress" aria-hidden="true">
@@ -14,12 +14,7 @@
   <div class="vote-middle">
     <section class="card vote-card">
       {% if option.type_label %}
-      <div class="chip-row">
-        <span class="chip chip--static">{{ option.type_label }}</span>
-        {% for t in option.tags %}
-        <span class="chip chip--static">{{ t }}</span>
-        {% endfor %}
-      </div>
+      <p class="vote-tags">{{ option.type_label|lower }}{% for t in option.tags %} · {{ t|lower }}{% endfor %}</p>
       {% endif %}
       <h1 class="vote-name">{{ option.name }}</h1>
       {% if option.description %}

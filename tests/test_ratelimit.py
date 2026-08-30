@@ -232,7 +232,7 @@ def test_session_member_exempt_while_guessing_still_limited(client, post, db_ses
     for index, batch_item in enumerate(batch_items):
         card = client.get(f"/s/{session.code}")
         assert card.status_code == 200, card.status_code
-        assert f"{index + 1} of {BATCH_SIZE}" in card.text
+        assert f"{index + 1} / {BATCH_SIZE}" in card.text
         # The card links this option's recipe (every item has recipe_text).
         assert f'href="/s/{session.code}/recipe/{batch_item.item_id}"' in card.text
         recipe = client.get(f"/s/{session.code}/recipe/{batch_item.item_id}")

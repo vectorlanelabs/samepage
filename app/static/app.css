@@ -54,7 +54,9 @@
    it fails AA (3.4:1). Host-surface text takes the dark ink instead — same
    pattern as .btn-primary (R1 audit restore: the Quiet Kitchen CSS had this
    for .results-keep; the reskin dropped it, and .here-chip--host picked up
-   the same white-on-violet failure). */
+   the same white-on-violet failure). The completion pill is NOT in here:
+   body.complete-ground pins --sp-host to the light-theme #6C5CE8, so its
+   white label stays AA in both themes (R2 ruling — theme-invariant screen). */
 @media (prefers-color-scheme: dark) {
   .results-keep { color: #101114; }
   .here-chip--host .here-avatar { color: #101114; }
@@ -1289,7 +1291,10 @@ button { font-family: var(--sp-font-sans); }
 
 .vote-count {
   flex: none;
-  font-weight: 600;
+  /* R2: the header count is part of the mono voice — "4 / 15" (handoff). */
+  font-family: var(--sp-font-mono);
+  font-weight: 500;
+  font-size: 13px;
   color: var(--sp-ink);
 }
 
@@ -1322,17 +1327,28 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .vote-name {
-  font-size: 34px;
-  font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: -0.018em;
+  /* R2: the option name is the card's loud moment — 40/800, −0.022em at 40px. */
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.022em;
   color: var(--sp-ink);
   margin: 0;
 }
 
-/* Chips first (when present) → the name needs air; ad hoc options start the
-   card with the name alone. */
-.chip-row + .vote-name { margin-top: 16px; }
+/* R2: the option's type + tags collapse into ONE mono line (no chip
+   backgrounds) — "dinner · fish · 35 min" in the faint mono voice. */
+.vote-tags {
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--sp-faint);
+  margin: 0;
+}
+
+/* Mono line first (when present) → the name needs air; ad hoc options start
+   the card with the name alone. */
+.vote-tags + .vote-name { margin-top: 14px; }
 
 .vote-desc {
   font-size: 14.5px;
@@ -1567,6 +1583,13 @@ button { font-family: var(--sp-font-sans); }
   font-size: 14px;
   font-weight: 600;
   color: var(--sp-ink);
+}
+
+/* R2: the joined line ("2 people have joined") is part of the mono voice. */
+.share-joined-count {
+  font-family: var(--sp-font-mono);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .share-dot {
@@ -1991,8 +2014,10 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .results-group-label {
-  font-size: 12.5px;
-  font-weight: 600;
+  /* R2: outcome section labels are mono (accent-deep / host / faint). */
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 500;
   color: var(--sp-accent-deep);
   margin: 10px 0 0;
 }
@@ -2032,8 +2057,10 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .results-meta {
-  font-size: 12.5px;
-  font-weight: 500;
+  /* R2: row counts ("6 yes", "4 yes · 2 no") are mono. */
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
   color: var(--sp-sub);
   white-space: nowrap;
 }
@@ -2089,45 +2116,73 @@ button { font-family: var(--sp-font-sans); }
   text-align: center;
 }
 
-/* Completion plan (session_complete.html). */
-.complete-context {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--sp-sub);
-  margin: 0 0 4px;
+/* Completion plan (session_complete.html) — M8 R2: the ink-ground payoff.
+
+   The screen flips to #101114 in BOTH themes ("the one full-bleed
+   accent-on-ink surface" — Design Handoff/README.md). The scoped tokens below
+   pin the dark-mode values the reversed type needs — including --sp-host back
+   to the light-theme #6C5CE8 — so every .complete-* rule can keep using
+   var(--sp-*) instead of hardcoded light/dark branches, and the screen is
+   fully theme-invariant. */
+body.complete-ground {
+  --sp-ink: #FFFFFF;
+  --sp-sub: #ABAEB9;
+  --sp-faint: #8A8DA0;
+  --sp-host: #6C5CE8;  /* R2: the host violet is pinned to the LIGHT value on the
+                          ink ground — the screen is theme-invariant, so white
+                          pill text stays AA (~4.85:1; dark #8B7CF0 would fail) */
+  --sp-border-strong: #3A3C46;
+  --sp-hairline: #2A2C34;
+  background: #101114;
 }
 
-.complete-title {
-  font-size: 30px;
-  font-weight: 800;
-  letter-spacing: -0.018em;
-  line-height: 1.2;
-  color: var(--sp-ink);
+/* The page is a full-height flex column so the ghost Done pins to the bottom
+   (same calc trick as .vote-screen). */
+.complete-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 60px);
+}
+
+.complete-context {
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--sp-faint);
   margin: 0;
 }
 
+.complete-title {
+  /* 46/800 payoff display, −0.026em at 46px. */
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -0.026em;
+  line-height: 1.02;
+  color: var(--sp-ink);
+  margin: 14px 0 0;
+}
+
 .complete-meta {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--sp-sub);
-  margin: 6px 0 0;
+  font-family: var(--sp-font-mono);
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--sp-faint);
+  margin: 12px 0 0;
 }
 
-.complete-card {
-  margin-top: 20px;
-  padding: 4px 20px 8px;
-}
-
-.complete-group + .complete-group {
+/* Kept rows as a hairline list — no card box on the ink ground. */
+.complete-list {
   border-top: 1px solid var(--sp-hairline);
-  margin-top: 4px;
+  margin-top: 28px;
 }
 
 .complete-track-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--sp-sub);
-  margin: 14px 0 2px;
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sp-faint);
+  margin: 18px 0 0;
 }
 
 .complete-row {
@@ -2135,32 +2190,58 @@ button { font-family: var(--sp-font-sans); }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--sp-hairline);
 }
 
-.complete-row:last-child { border-bottom: none; }
-
 .complete-name {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
   color: var(--sp-ink);
 }
 
+/* Mono outcome pills: accent+ink "everyone", host "host's call" — white on
+   --sp-host, which complete-ground pins to #6C5CE8 in BOTH themes so the
+   white label stays AA (~4.85:1) on the ink ground. */
 .complete-pill {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--sp-accent-deep);
-  background: var(--sp-accent-tint);
-  border-radius: 999px;
-  padding: 4px 10px;
+  font-family: var(--sp-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sp-accent-ink);
+  background: var(--sp-accent);
+  border-radius: 6px;
+  padding: 4px 9px;
   white-space: nowrap;
 }
 
 .complete-pill--host {
-  color: var(--sp-host);
-  background: var(--sp-host-tint);
+  color: #FFFFFF;
+  background: var(--sp-host);
 }
+
+/* "Saved to Meal Planner." — sans caption, faint on ink. */
+.complete-saved {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sp-faint);
+  margin: 16px 0 0;
+}
+
+/* Ghost "Done" pinned to the bottom: flat ink button with the dark-theme
+   strong border (1.5px #3A3C46) per the handoff. */
+.complete-done {
+  margin-top: auto;
+  min-height: 56px;
+  font-size: 16px;
+  font-weight: 700;
+  background: #101114;
+  color: #FFFFFF;
+  border: 1.5px solid #3A3C46;
+}
+
+.complete-done:hover { border-color: #FFFFFF; }
+
+.complete-empty { padding: 32px 0; }
 
 /* ---------- Join landing + lobbies + waiting (M7 S8) ---------- */
 
@@ -2318,8 +2399,10 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .here-count {
+  /* R2: mono voice — "2 people" in the roster card. */
+  font-family: var(--sp-font-mono);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--sp-ink);
 }
 
@@ -2384,8 +2467,10 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .waiting-count {
+  /* R2: mono voice — "4 / 4" (all options seen). */
+  font-family: var(--sp-font-mono);
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--sp-sub);
   margin: 0;
 }
@@ -2443,8 +2528,10 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .waiting-progress-count {
-  font-size: 14px;
-  font-weight: 600;
+  /* R2: mono voice — "1 / 2" voters finished. */
+  font-family: var(--sp-font-mono);
+  font-size: 13px;
+  font-weight: 500;
   color: var(--sp-accent-deep);
 }
 

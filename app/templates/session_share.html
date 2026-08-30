@@ -13,7 +13,7 @@
 
 <div class="share-joined">
   <span class="share-dot" aria-hidden="true"></span>
-  <span id="joined-count" hx-get="/s/{{ session.code }}/joined-count" hx-trigger="every 3s" hx-swap="innerHTML">{{ joined_label }}</span>
+  <span id="joined-count" class="share-joined-count" hx-get="/s/{{ session.code }}/joined-count" hx-trigger="every 3s" hx-swap="innerHTML">{{ joined_label }}</span>
 </div>
 
 <div class="share-spacer"></div>

@@ -1,16 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Your plan · {{ session.code }} · Same Page{% endblock %}
+{% block body_class %}complete-ground{% endblock %}
 {% block content %}
-<div class="page page--narrow">
-  <p class="page-meta complete-context">{% if collection_name %}{{ collection_name }} · {% endif %}{{ group_name }}</p>
+<div class="page page--narrow complete-page">
+  <p class="complete-context">{% if collection_name %}{{ collection_name }} · {% endif %}{{ group_name }}</p>
   <h1 class="complete-title">{% if collection_kind == "meal" %}Dinner's sorted.{% else %}All set.{% endif %}</h1>
   <p class="complete-meta">{{ kept_total }} pick{{ "s" if kept_total != 1 }} in {{ batch_count }} batch{{ "es" if batch_count != 1 }} · {{ options_seen }} option{{ "s" if options_seen != 1 }} seen</p>
 
   {% if kept_groups %}
-  <section class="card complete-card">
+  <section class="complete-list">
     {% for group in kept_groups %}
     <div class="complete-group">
-      <h2 class="section-title complete-track-label">{{ group.label }}</h2>
+      {% if kept_groups|length > 1 %}<h2 class="complete-track-label">{{ group.label }}</h2>{% endif %}
       {% for item in group.kept_items %}
       <div class="complete-row">
         <span class="complete-name">{{ item.name }}</span>
@@ -21,13 +22,11 @@
     {% endfor %}
   </section>
   {% else %}
-  <section class="card complete-card">
-    <p class="empty-state">No meals were kept this session.</p>
-  </section>
+  <p class="empty-state complete-empty">No meals were kept this session.</p>
   {% endif %}
 
-  <div style="margin-top:24px;">
-    <a class="btn btn-secondary btn-block" href="/">Done</a>
-  </div>
+  {% if collection_name %}<p class="complete-saved">Saved to {{ collection_name }}.</p>{% endif %}
+
+  <a class="btn btn-block complete-done" href="/">Done</a>
 </div>
 {% endblock %}

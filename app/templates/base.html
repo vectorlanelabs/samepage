@@ -25,7 +25,7 @@
   }
 </script>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
 {# Two chrome modes share one content block (a block name may only be defined
    once per template). Session screens (join/lobby/vote/results) run in a
    focused flow — no sidebar, no topbar nav, no site footer — per the "session

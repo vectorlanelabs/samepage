@@ -1,6 +1,6 @@
 <div class="waiting-progress-row">
   <span class="waiting-progress-label">Voters finished</span>
-  <span class="waiting-progress-count">{{ finished }} of {{ roster }}</span>
+  <span class="waiting-progress-count">{{ finished }} / {{ roster }}</span>
 </div>
 <div class="waiting-progress-track">
   <div class="waiting-progress-fill" style="width: {{ (finished / roster * 100) | round(1) if roster else 0 }}%"></div>

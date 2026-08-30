@@ -1297,9 +1297,9 @@ def test_start_twice_creates_one_batch(client, post, db_session):
 
 
 def test_voting_card_progresses_through_options(client, post, db_session):
-    """A joined participant sees one option at a time ('1 of N' in the header,
-    progress bar below), with type label + tags and a session-scoped recipe
-    link, and advances to option 2 after voting."""
+    """A joined participant sees one option at a time ('1 / N' in the header,
+    progress bar below), with type label + tags in the mono line and a
+    session-scoped recipe link, and advances to option 2 after voting."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
     collection = _make_collection(db_session, group.id)
@@ -1321,10 +1321,10 @@ def test_voting_card_progresses_through_options(client, post, db_session):
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "1 of 3" in page.text
+    assert "1 / 3" in page.text
     assert "Apple" in page.text
-    assert "Dinner" in page.text
-    assert "quick" in page.text
+    # R2: type + tags collapse into one lowercase mono line (no chips).
+    assert "dinner · quick" in page.text
     # The recipe link is session-scoped (Slice B) — the old owner-only
     # /collections/... link 401'd guests and 404'd non-owning voters.
     assert f'href="/s/{session.code}/recipe/{apple.id}"' in page.text
@@ -1347,7 +1347,7 @@ def test_voting_card_progresses_through_options(client, post, db_session):
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "2 of 3" in page.text
+    assert "2 / 3" in page.text
     assert "Banana" in page.text
 
 
@@ -1643,14 +1643,14 @@ def test_voting_done_and_finished_counts(client, post, db_session):
     assert page.status_code == 200
     assert "That's all two." in page.text
     assert "Voters finished" in page.text
-    assert "1 of 2" in page.text
+    assert "1 / 2" in page.text
     assert 'class="waiting-progress-track"' in page.text
     assert 'class="waiting-progress-fill"' in page.text
     assert "width: 50.0%" in page.text
     status = client.get(f"/s/{session.code}/voting-status")
     assert status.status_code == 200
     assert "Voters finished" in status.text
-    assert "1 of 2" in status.text
+    assert "1 / 2" in status.text
     assert "width: 50.0%" in status.text
 
     # Lee votes on everything → finished == roster.
@@ -1665,7 +1665,7 @@ def test_voting_done_and_finished_counts(client, post, db_session):
     status = client.get(f"/s/{session.code}/voting-status")
     assert status.status_code == 200
     assert "Voters finished" in status.text
-    assert "2 of 2" in status.text
+    assert "2 / 2" in status.text
     assert "width: 100.0%" in status.text
 
 
@@ -1687,7 +1687,7 @@ def test_host_overview_when_not_joined(client, post, db_session):
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Voters finished" in page.text
-    assert "0 of 1" in page.text
+    assert "0 / 1" in page.text
     assert "width: 0.0%" in page.text
     assert f'hx-get="/s/{session.code}/voting-status"' in page.text
     assert "Option 1 of" not in page.text
@@ -2323,6 +2323,8 @@ def test_completion_meal_title_and_pills(client, post, db_session):
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Dinner's sorted." in page.text
+    # R2: the ink-ground context line is mono; user-typed names keep their
+    # original case — only system tokens (tags, dates, counts, codes) lower.
     assert "Meal Planner · Household" in page.text
     assert "2 picks in 1 batch · 2 options seen" in page.text
     assert "Apple" in page.text
