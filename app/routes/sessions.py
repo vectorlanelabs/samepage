@@ -596,9 +596,17 @@ def _first_track(db: Session, session: VotingSession) -> str | None:
 def _eligible_item_ids(db: Session, session: VotingSession, track: str) -> list[int]:
     """Non-archived items in the session's collection eligible for the track —
     a meal track ('breakfast'/'lunch'/'dinner') selects items whose meal-type
-    set includes that slot; any other track label selects all items. Ordered by
-    normalized_name for deterministic batches (recency-weighting is a post-MVP
-    refinement)."""
+    set includes that slot; any other track label selects all items. The
+    deterministic normalized_name fetch order is only the shuffle input: the
+    returned list is that order shuffled with ``random.Random(session.id)``, so
+    batch composition is RANDOM PER SESSION (RANDOM-BATCH — no more head-of-
+    alphabet bias, every session deals the same first items) yet STABLE within
+    a session: the same session always sees the same order, batch 2 continues
+    batch 1's shuffled order, and re-renders / idempotent re-transitions
+    shuffle identically. The rng is seeded from session.id rather than injected
+    (compare make_code's passed-in rand) because cross-request stability
+    requires the session itself to be the seed; tests control the order by
+    choosing which session they query."""
     stmt = select(Item.id).where(
         (Item.collection_id == session.collection_id) & Item.archived_at.is_(None)
     )
@@ -606,7 +614,9 @@ def _eligible_item_ids(db: Session, session: VotingSession, track: str) -> list[
         stmt = stmt.where(
             Item.id.in_(select(MealType.item_id).where(MealType.meal_type == track))
         )
-    return list(db.scalars(stmt.order_by(Item.normalized_name, Item.id)).all())
+    ids = list(db.scalars(stmt.order_by(Item.normalized_name, Item.id)).all())
+    random.Random(session.id).shuffle(ids)
+    return ids
 
 
 def _track_progress(db: Session, session: VotingSession) -> list[dict]:
@@ -897,15 +907,23 @@ def _close_batch(db: Session, session: VotingSession, batch: Batch, *, manual: b
 def _results_context(
     db: Session, session: VotingSession, batch: Batch, account: Account | None
 ) -> dict:
-    """Render data for the results screen: the closed batch's items grouped by
-    outcome with AGGREGATE counts only (yes_count/no_count) — never who voted
-    which way (vote privacy is the strong invariant, CLAUDE.md #4) — plus the
-    session's target progress and what the host can do next (M3e/M7 S7).
+    """Render data for the results screen (UX-RESULTS). Three surfaces, each
+    with AGGREGATE counts only (yes_count/no_count) — never who voted which
+    way (vote privacy is the strong invariant, CLAUDE.md #4):
 
-    Four outcome groups, each rendered when non-empty: pending majority items
-    (host view only), kept_unanimous, kept_host, not_kept. ``kept_host`` has
-    existed since M3d's keep/pass but was dropped from the host results view —
-    M7 S7 restores it ('Kept by the host')."""
+    - ``kept_so_far``: EVERY kept batch_item across the WHOLE session (all
+      batches, outcome in kept_unanimous/kept_host), ordered by batch seq then
+      item name, with the design pills ('everyone' / "host's call") and mono
+      counts. This replaces the old per-batch 'Kept automatically'/'Kept by
+      the host' groups — one session-wide card, no duplication.
+    - ``pending``: THIS batch's outcome-NULL majority items. Rendered for host
+      AND participants; only the host gets Keep/Pass controls (the template
+      keys controls off ``is_host``).
+    - ``not_kept``: THIS batch's failed items — "Didn't make it" stays
+      batch-scoped.
+
+    Plus the session's target progress and what the host can do next
+    (M3e/M7 S7)."""
     collection = db.get(Collection, session.collection_id) if session.collection_id else None
     is_host = account is not None and account.id == session.host_account_id
     rows = []
@@ -920,6 +938,30 @@ def _results_context(
                 "outcome": batch_item.outcome,
             }
         )
+    kept_rows = db.execute(
+        select(BatchItem.outcome, BatchItem.yes_count, BatchItem.no_count, Item.name)
+        .join(Batch, Batch.id == BatchItem.batch_id)
+        .join(Item, Item.id == BatchItem.item_id)
+        .where(
+            (Batch.session_id == session.id)
+            & BatchItem.outcome.in_([Outcome.KEPT_UNANIMOUS.value, Outcome.KEPT_HOST.value])
+        )
+        .order_by(Batch.seq, Item.normalized_name, Item.id)
+    ).all()
+    kept_so_far = [
+        {
+            "name": name,
+            "outcome": outcome,
+            "pill": (
+                "everyone"
+                if outcome == Outcome.KEPT_UNANIMOUS.value
+                else "host's call"
+            ),
+            "yes_count": yes_count,
+            "no_count": no_count,
+        }
+        for outcome, yes_count, no_count, name in kept_rows
+    ]
     track_progress = _track_progress(db, session)
     all_targets_met = all(row["met"] for row in track_progress)
     next_track, _ = _next_batch_assembly(db, session)
@@ -929,8 +971,7 @@ def _results_context(
         "collection_name": collection.name if collection else "Ad hoc session",
         "is_host": is_host,
         "batch": batch,
-        "kept_unanimous": [r for r in rows if r["outcome"] == Outcome.KEPT_UNANIMOUS.value],
-        "kept_host": [r for r in rows if r["outcome"] == Outcome.KEPT_HOST.value],
+        "kept_so_far": kept_so_far,
         "pending": [r for r in rows if r["outcome"] is None],
         "not_kept": [r for r in rows if r["outcome"] == Outcome.NOT_KEPT.value],
         "track_progress": track_progress,
@@ -1951,15 +1992,38 @@ def voting_status_partial(
 
 @router.get("/s/{code}/results-state/{batch_id}")
 def results_state_partial(
-    request: Request, code: str, batch_id: int, db: Annotated[Session, Depends(get_db)]
+    request: Request,
+    code: str,
+    batch_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    pending: str | None = None,
 ):
-    """htmx poll target on the batch_results screen (M3d): a plain empty 200
-    while the displayed closed batch is still the most recent one (the host is
-    reviewing), and HX-Refresh the moment the host starts the next batch (a new
-    open batch supersedes ``batch_id``), finishes the session, or the session
-    expires — htmx then reloads the page, which routes to voting / the
-    completion screen. Public like the roster poll: no join limiter, no
-    membership check, and no participant or vote data in the response."""
+    """htmx poll target on the batch_results screen (M3d + UX-RESULTS): a plain
+    empty 200 while the displayed closed batch is still the most recent one (the
+    host is reviewing), and HX-Refresh the moment the host starts the next batch
+    (a new open batch supersedes ``batch_id``), finishes the session, or the
+    session expires — htmx then reloads the page, which routes to voting / the
+    completion screen.
+
+    UX-RESULTS: host Keep/Pass decisions must reach participants live, so the
+    page sends its rendered pending count (``?pending=N`` — how many outcome-
+    NULL items this batch had when the page rendered) and the endpoint ALSO
+    returns HX-Refresh when that count has changed (a host decision shrank the
+    pending card; the full page reload shows the new kept-so-far/pending mix).
+    The param is optional — absent keeps the old behavior (and a malformed
+    value is ignored, never a 422 on a public poll). Public like the roster
+    poll: no join limiter, no membership check, and no participant or vote
+    data in the response.
+
+    LEAKFIX: every ``batch_id``-derived read is scoped to THIS session. The
+    open-batch staleness check compares only against the session's own open
+    batch (``_open_batch`` filters ``Batch.session_id``), and the pending-count
+    query joins ``Batch`` and requires ``Batch.session_id == session.id``. A
+    cross-tenant probe — this session's code plus an enumerable batch id from
+    ANOTHER session — is stale/irrelevant: the pending comparison never runs
+    for it, so ``?pending=`` cannot become an oracle on another session's live
+    count (and the answer is never a differently-coded 404, which would be an
+    oracle of a different kind)."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
@@ -1971,6 +2035,41 @@ def results_state_partial(
         or session.status in ENDED_STATUSES
     ):
         return Response(status_code=200, headers={"HX-Refresh": "true"})
+    if pending is not None:
+        try:
+            expected_pending = int(pending)
+        except (TypeError, ValueError):
+            expected_pending = None
+        if expected_pending is not None:
+            # LEAKFIX: the polled batch must be one of THIS session's batches —
+            # a foreign session's id is stale/irrelevant here and must never
+            # reach the count below. The gate is a session-scoped existence
+            # check, not a 404: the poll answers the same quiet 200 either way.
+            polled_batch = db.scalar(
+                select(Batch.id).where(
+                    (Batch.id == batch_id) & (Batch.session_id == session.id)
+                )
+            )
+            if polled_batch is not None:
+                # Belt-and-braces: even though the gate above guarantees
+                # membership, the count itself joins Batch and re-requires
+                # session_id so no future refactor can turn this into a raw
+                # batch_id read.
+                current_pending = (
+                    db.scalar(
+                        select(func.count())
+                        .select_from(BatchItem)
+                        .join(Batch, Batch.id == BatchItem.batch_id)
+                        .where(
+                            (BatchItem.batch_id == batch_id)
+                            & (Batch.session_id == session.id)
+                            & BatchItem.outcome.is_(None)
+                        )
+                    )
+                    or 0
+                )
+                if current_pending != expected_pending:
+                    return Response(status_code=200, headers={"HX-Refresh": "true"})
     return Response(status_code=200)
 
 
@@ -1988,7 +2087,13 @@ def card_state_partial(
     results screen (their batch closed) or the completion screen. A plain 200
     while the batch is still the session's open one. Public like the
     roster/results polls: no join limiter, no membership check, and no
-    participant or vote data in the response."""
+    participant or vote data in the response.
+
+    LEAKFIX: ``batch_id`` never drives a data read here — no Batch/BatchItem
+    query keys off it. It is compared only against the session's own open
+    batch (``_open_batch`` is ``Batch.session_id``-scoped), so a foreign batch
+    id provokes the same constant refresh a stale one does; there is no
+    cross-tenant count to leak (contrast results-state's ``?pending=``)."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")

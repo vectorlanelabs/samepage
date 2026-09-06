@@ -1292,8 +1292,11 @@ def _make_voting_setup(
 
 def test_start_assembles_first_batch(client, post, db_session):
     """Starting a collection-backed session with N dinner items assembles batch
-    #1: seq 1, track 'dinner', min(N, BATCH_SIZE) items in normalized_name
-    order; 'both' items count for dinner, 'lunch'-only items don't."""
+    #1: seq 1, track 'dinner', min(N, BATCH_SIZE) items; 'both' items count
+    for dinner, 'lunch'-only items don't. RANDOM-BATCH: the items arrive in
+    the session's seeded shuffle (random.Random(session.id) over the
+    normalized_name pool), NOT head-of-alphabet order — the test reproduces
+    that shuffle for this session's id and compares against it."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
     collection = _make_collection(db_session, group.id)
@@ -1327,7 +1330,9 @@ def test_start_assembles_first_batch(client, post, db_session):
     assert all(bi.ad_hoc_label is None for bi in items)
     assert [bi.sort_order for bi in items] == list(range(15))
     names_in_batch = _item_names(db_session, items)
-    assert names_in_batch == sorted(names + ["Both Dish"])[:15]
+    shuffled_pool = sorted(names + ["Both Dish"])
+    random.Random(session.id).shuffle(shuffled_pool)  # the session's deal
+    assert names_in_batch == shuffled_pool[:15]
     assert "Lunch Only" not in names_in_batch
 
 
@@ -1389,10 +1394,57 @@ def test_start_twice_creates_one_batch(client, post, db_session):
     assert batches[0].status == "open"
 
 
+def test_batch_order_is_per_session_shuffle_not_head_of_alphabet(client, post, db_session):
+    """RANDOM-BATCH: batch composition is random PER SESSION — two sessions
+    over the SAME collection deal different first batches, and neither is the
+    alphabetical head of the pool. Each batch must match its own session's
+    seeded shuffle (random.Random(session.id) over the normalized_name pool);
+    that same seed is what keeps the order STABLE within a session (re-renders
+    and idempotent re-transitions shuffle identically, so the next batch can
+    continue this one's order)."""
+    host = _get_or_make_account(db_session, "host@example.com", "Host")
+    group = _make_group(db_session, "Household", host.email)
+    collection = _make_collection(db_session, group.id, "Meal Planner")
+    for i in range(20):
+        _make_item(db_session, collection.id, f"Meal {i:02d}", type="dinner")
+    session_a = _make_session(db_session, group.id, host.id, collection_id=collection.id)
+    session_b = _make_session(db_session, group.id, host.id, collection_id=collection.id)
+    for session in (session_a, session_b):
+        db_session.add(
+            SessionTarget(session_id=session.id, track_label="dinner", target_count=3)
+        )
+    db_session.commit()
+    _login(client, db_session, host.email)
+
+    pool = sorted(f"Meal {i:02d}" for i in range(20))
+    dealt = {}
+    for session in (session_a, session_b):
+        resp = post(f"/s/{session.code}/start", follow_redirects=False)
+        assert resp.status_code == 303
+        batch = _open_batch(db_session, session.id)
+        assert batch is not None and batch.track_label == "dinner"
+        dealt[session.code] = _item_names(db_session, _batch_items(db_session, batch.id))
+        assert len(dealt[session.code]) == BATCH_SIZE
+        expected = list(pool)
+        random.Random(session.id).shuffle(expected)  # the session's deal
+        assert dealt[session.code] == expected[:BATCH_SIZE], (
+            f"session {session.id} batch does not match its own seeded shuffle"
+        )
+
+    order_a, order_b = dealt[session_a.code], dealt[session_b.code]
+    assert order_a != sorted(order_a) or order_b != sorted(order_b), (
+        "both sessions dealt the alphabetical head — the shuffle never ran"
+    )
+    assert order_a != order_b, "two sessions over one collection dealt identically"
+
+
 def test_voting_card_progresses_through_options(client, post, db_session):
     """A joined participant sees one option at a time ('1 / N' in the header,
     progress bar below), with type label + tags in the mono line and a
-    session-scoped recipe link, and advances to option 2 after voting."""
+    session-scoped recipe link, and advances to the next option after voting.
+    RANDOM-BATCH: the option order is the session's seeded shuffle, so the
+    test walks WHATEVER order the session dealt — the Apple-specific chrome
+    (recipe link, mono line) is asserted on whichever card Apple lands on."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
     collection = _make_collection(db_session, group.id)
@@ -1412,36 +1464,38 @@ def test_voting_card_progresses_through_options(client, post, db_session):
     resp = post(f"/s/{session.code}/start", follow_redirects=False)
     assert resp.status_code == 303
 
-    page = client.get(f"/s/{session.code}")
-    assert page.status_code == 200
-    assert "1 / 3" in page.text
-    assert "Apple" in page.text
-    # R2: type + tags collapse into one lowercase mono line (no chips).
-    assert "dinner · quick" in page.text
-    # The recipe link is session-scoped (Slice B) — the old owner-only
-    # /collections/... link 401'd guests and 404'd non-owning voters.
-    assert f'href="/s/{session.code}/recipe/{apple.id}"' in page.text
-    assert "/collections/" not in page.text
-    # Composed voting screen: context line, progress bar, stacked vote forms.
-    assert "Meal Planner · Household" in page.text
-    assert 'class="vote-progress"' in page.text
-    assert f'action="/s/{session.code}/vote"' in page.text
-    assert 'name="batch_item_id"' in page.text
-    assert 'name="choice"' in page.text
+    order = _batch_items(db_session, _open_batch(db_session, session.id).id)
+    names = _item_names(db_session, order)
+    assert len(order) == 3
+    apple_card = names.index("Apple")  # the shuffled card Apple sits on
 
-    first = _batch_items(db_session, _open_batch(db_session, session.id).id)[0]
-    resp = post(
-        f"/s/{session.code}/vote",
-        data={"batch_item_id": str(first.id), "choice": "yes"},
-        follow_redirects=False,
-    )
-    assert resp.status_code == 303
-    assert resp.headers["location"] == f"/s/{session.code}"
-
-    page = client.get(f"/s/{session.code}")
-    assert page.status_code == 200
-    assert "2 / 3" in page.text
-    assert "Banana" in page.text
+    for i, bi in enumerate(order):
+        page = client.get(f"/s/{session.code}")
+        assert page.status_code == 200
+        assert f"{i + 1} / 3" in page.text
+        assert names[i] in page.text
+        if i == apple_card:
+            # R2: type + tags collapse into one lowercase mono line (no chips).
+            # The recipe link is session-scoped (Slice B) — the old owner-only
+            # /collections/... link 401'd guests and 404'd non-owning voters.
+            assert "Apple" in page.text
+            assert "dinner · quick" in page.text
+            assert f'href="/s/{session.code}/recipe/{apple.id}"' in page.text
+            assert "/collections/" not in page.text
+        # Composed voting screen: context line, progress bar, stacked vote forms.
+        assert "Meal Planner · Household" in page.text
+        assert 'class="vote-progress"' in page.text
+        assert f'action="/s/{session.code}/vote"' in page.text
+        assert 'name="batch_item_id"' in page.text
+        assert 'name="choice"' in page.text
+        if i < len(order) - 1:  # advance to the next card
+            resp = post(
+                f"/s/{session.code}/vote",
+                data={"batch_item_id": str(bi.id), "choice": "yes"},
+                follow_redirects=False,
+            )
+            assert resp.status_code == 303
+            assert resp.headers["location"] == f"/s/{session.code}"
 
 
 # ---------------------------------------------------------------------------
@@ -2322,7 +2376,10 @@ def test_majority_pending_then_host_keep_and_pass(client, post, db_session):
         item_specs=[("Apple", "dinner"), ("Banana", "dinner"), ("Cherry", "dinner")],
         roster_names=["Sam", "Lee", "Rae"],
     )
-    apple, banana, cherry = items
+    # RANDOM-BATCH: the batch order is the session's seeded shuffle, so map the
+    # named items to their shuffled batch rows before casting the vote patterns.
+    by_name = dict(zip(_item_names(db_session, items), items))
+    apple, banana, cherry = (by_name[name] for name in ("Apple", "Banana", "Cherry"))
     apple_item = db_session.scalar(select(Item).where(Item.name == "Apple"))
     banana_item = db_session.scalar(select(Item).where(Item.name == "Banana"))
     # Apple 2-1 and Banana 2-1 (both pending), Cherry 1-2 (not_kept).
@@ -2404,7 +2461,10 @@ def test_auto_close_on_final_vote_without_manual_close(client, post, db_session)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Results" in page.text
-    assert "Everyone said yes" in page.text
+    # UX-RESULTS: Apple (unanimous) is on the session-wide 'kept so far' card
+    # with the 'everyone' pill; Banana (tie) is under 'Didn't make it'.
+    assert "kept so far" in page.text
+    assert "everyone" in page.text
     assert "Didn't make it" in page.text
 
 
@@ -2444,12 +2504,15 @@ def test_close_twice_applies_once(client, post, db_session):
         item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
         roster_names=["Sam", "Lee"],
     )
-    apple = db_session.scalar(select(Item).where(Item.name == "Apple"))
-    banana = db_session.scalar(select(Item).where(Item.name == "Banana"))
+    # RANDOM-BATCH: whichever item the shuffle dealt first gets both yes votes
+    # (kept unanimously); the second gets Sam's yes + Lee's abstention (tie on
+    # manual close, D5). The counters are asserted on the actual rows, not names.
+    first_item = db_session.get(Item, items[0].item_id)
+    second_item = db_session.get(Item, items[1].item_id)
     _cast(client, post, db_session, session, sam, items[0].id, "yes")
     _cast(client, post, db_session, session, sam, items[1].id, "yes")
     _cast(client, post, db_session, session, lee, items[0].id, "yes")
-    # Lee hasn't voted on Banana → still open; the host closes manually.
+    # Lee hasn't voted on the second item → still open; the host closes manually.
 
     _login(client, db_session, "host@example.com")
     resp = post(f"/s/{session.code}/close", follow_redirects=False)
@@ -2462,11 +2525,11 @@ def test_close_twice_applies_once(client, post, db_session):
     assert batch.status == "closed"
     assert items[0].outcome == "kept_unanimous"
     assert items[1].outcome == "not_kept"
-    assert apple.times_offered == 1
-    assert apple.times_kept == 1
-    assert apple.last_kept_at is not None
-    assert banana.times_offered == 1
-    assert banana.times_kept == 0
+    assert first_item.times_offered == 1
+    assert first_item.times_kept == 1
+    assert first_item.last_kept_at is not None
+    assert second_item.times_offered == 1
+    assert second_item.times_kept == 0
     assert _response_count(db_session, batch.id) == 0
 
 
@@ -2560,6 +2623,156 @@ def test_results_state_poll_refreshes_on_next_batch_and_finish(client, post, db_
     assert resp.headers["hx-refresh"] == "true"
 
 
+def test_results_state_poll_refreshes_when_pending_count_changes(client, post, db_session):
+    """UX-RESULTS: the results page sends its rendered pending count
+    (?pending=N — how many outcome-NULL majority items its pending card held).
+    A host Keep/Pass decision changes that count, so the poll answers
+    HX-Refresh and the reloaded page shows the new kept-so-far/pending mix —
+    participants watching the shared pending card get the update live."""
+    session, batch, items, (sam, lee, rae) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner"), ("Salad", "lunch")],
+        roster_names=["Sam", "Lee", "Rae"],
+        targets=[("dinner", 1), ("lunch", 1)],
+    )
+    # Canonical track order is breakfast, lunch, dinner → batch 1 is the LUNCH
+    # track (Salad only); the dinner options arrive in the advanced batch.
+    (salad,) = items
+    _cast(client, post, db_session, session, sam, salad.id, "yes")
+    _cast(client, post, db_session, session, lee, salad.id, "yes")
+    _cast(client, post, db_session, session, rae, salad.id, "no")  # auto-closes → pending
+    db_session.expire_all()
+    assert batch.status == "closed"
+    assert _open_batch(db_session, session.id) is None
+
+    # Participant's page rendered 1 pending item → the poll agrees: quiet.
+    _stamp_participant(client, sam.id, session.code)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "majority said yes" in page.text
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}?pending=1")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+    assert resp.text == ""
+
+    # A stale count (0 vs 1 — as if the page had no pending card) refreshes.
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}?pending=0")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
+
+    # The host keeps the item → 0 pending remain; the ?pending=1 poll now
+    # refreshes the participant's page; the corrected ?pending=0 stays quiet.
+    _login(client, db_session, "host@example.com")
+    resp = post(
+        f"/s/{session.code}/batch/{batch.id}/items/{salad.id}/keep",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert salad.outcome == "kept_host"
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}?pending=1")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}?pending=0")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+
+    # The malformed-value and no-param variants are tolerated, never 422/400.
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}?pending=abc")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+    resp = client.get(f"/s/{session.code}/results-state/{batch.id}")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers
+
+
+def test_results_kept_so_far_spans_all_batches(client, post, db_session):
+    """UX-RESULTS: the results screen's 'kept so far' card lists EVERY kept
+    item across the WHOLE session — the batch-1 unanimous keep stays visible
+    while batch 2 is being reviewed — with its pill ("everyone" / "host's
+    call") and aggregate counts, one session-wide card, no duplication."""
+    session, batch, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner"), ("Banana", "dinner"), ("Salad", "lunch")],
+        roster_names=["Sam", "Lee"],
+        targets=[("dinner", 1), ("lunch", 1)],
+    )
+    # Canonical track order is breakfast, lunch, dinner → batch 1 is the LUNCH
+    # track (Salad only); the dinner options arrive in the advanced batch.
+    (salad,) = items
+    _cast(client, post, db_session, session, sam, salad.id, "yes")
+    _cast(client, post, db_session, session, lee, salad.id, "yes")  # auto-closes → kept
+    db_session.expire_all()
+    assert salad.outcome == "kept_unanimous"
+    assert _open_batch(db_session, session.id) is None
+
+    # On the batch-1 results screen, Salad is on the kept-so-far card.
+    _login(client, db_session, "host@example.com")
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "kept so far" in page.text
+    assert "Salad" in page.text
+    assert "everyone" in page.text
+
+    # Host starts batch 2 (dinner) and the roster votes it closed.
+    resp = post(f"/s/{session.code}/next-batch", follow_redirects=False)
+    assert resp.status_code == 303
+    batch2 = _open_batch(db_session, session.id)
+    assert batch2 is not None and batch2.id != batch.id
+    items2 = _batch_items(db_session, batch2.id)
+    names2 = _item_names(db_session, items2)
+    assert set(names2) == {"Apple", "Banana"}  # the two dinner options, shuffled
+    kept2, not_kept2 = names2  # items2[0] gets the unanimous keep, items2[1] the tie
+    _cast(client, post, db_session, session, sam, items2[0].id, "yes")
+    _cast(client, post, db_session, session, sam, items2[1].id, "yes")
+    _cast(client, post, db_session, session, lee, items2[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items2[1].id, "no")  # auto-closes
+
+    # Batch-2 results: Salad (batch 1) AND batch-2's unanimous keep share the
+    # kept card exactly once; the tie sits under "Didn't make it" with 1·1.
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert page.text.count("kept so far") == 1  # one session-wide card, not per batch
+    assert "Salad" in page.text
+    assert kept2 in page.text
+    assert "everyone" in page.text
+    assert "Didn't make it" in page.text
+    assert not_kept2 in page.text
+    assert "1 yes · 1 no" in page.text
+    assert "Dinners: target met" in page.text
+    # Nothing pending remains → the participant sees no majority card/controls,
+    # only the batch-scoped didn't-make-it list and the shared kept card.
+    assert "majority said yes" not in page.text
+    assert "/keep" not in page.text
+    assert "/pass" not in page.text
+
+
+def test_results_empty_kept_card_shows_nothing_kept_yet(client, post, db_session):
+    """UX-RESULTS: when the session has no keeps yet (batch 1 all ties/no),
+    the kept-so-far card renders its quiet empty state — the section still
+    exists so the layout doesn't jump when the first keep lands."""
+    session, _, items, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "no")  # tie → not_kept
+
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "kept so far" in page.text
+    assert "Nothing kept yet." in page.text
+    assert "Didn't make it" in page.text
+    assert "Apple" in page.text
+
+
 def test_card_state_poll_refreshes_on_close_and_complete(client, post, db_session):
     """HOTFIX5: the voting card's poll answers HX-Refresh the moment its batch
     is no longer the session's OPEN batch — including the observed prod hole:
@@ -2630,10 +2843,11 @@ def test_card_state_unknown_code_404(client):
     assert client.get("/s/ghost-0000/card-state/1").status_code == 404
 
 
-def test_results_pending_shows_host_controls_only_for_host(client, post, db_session):
-    """Pending majority items render the host's call card (Keep/Pass) for the
-    host only; non-host viewers see just a count-only 'host is reviewing' note
-    — no pending card, no host controls, no pending aggregates."""
+def test_results_pending_card_shown_to_all_controls_host_only(client, post, db_session):
+    """UX-RESULTS: the pending-majority card ('majority said yes · host's
+    call') renders for host AND participants — voting is over, so the item
+    names and yes/no aggregates leak nothing per-person (CLAUDE.md #4) — but
+    only the host's rows carry Keep/Pass controls."""
     session, batch, items, (sam, lee, rae) = _started_roster(
         client,
         post,
@@ -2649,28 +2863,35 @@ def test_results_pending_shows_host_controls_only_for_host(client, post, db_sess
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Your call on 1" in page.text
-    assert "Majority said yes. Your call." in page.text
+    assert "majority said yes" in page.text
     assert f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/keep" in page.text
     assert f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/pass" in page.text
     assert "2 yes · 1 no" in page.text
     assert "Meal Planner · Batch 1 · Host view" in page.text
+    # The page's poll echoes the pending count it rendered — a host decision
+    # that changes it will HX-Refresh every viewer's page.
+    assert f"/results-state/{batch.id}?pending=1" in page.text
 
     _stamp_participant(client, sam.id, session.code)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Batch 1 results" in page.text
-    assert "The host is reviewing 1 option." in page.text  # count only — no names/aggregates
-    assert "Majority said yes. Your call." not in page.text
-    assert "2 yes" not in page.text  # pending aggregates are host-view-only
+    # Same card and aggregates for the participant — no host controls.
+    assert "majority said yes" in page.text
+    assert "Apple" in page.text
+    assert "2 yes · 1 no" in page.text
     assert "/keep" not in page.text
     assert "/pass" not in page.text
     assert "Waiting for the host." in page.text
+    assert f"/results-state/{batch.id}?pending=1" in page.text
 
 
 def test_host_kept_item_stays_visible_in_results(client, post, db_session):
-    """M7 S7 regression: after the host keeps a pending majority item, the
-    results screen STILL lists it under 'Kept by the host' — the host view
-    must not drop decided items (it did before this slice)."""
+    """M7 S7 + UX-RESULTS regression: after the host keeps a pending majority
+    item, the results screen STILL lists it on the session-wide 'kept so far'
+    card with the "host's call" pill — the view must not drop decided items
+    (it did before M7 S7, and the old per-batch groups dropped earlier
+    batches' keeps too)."""
     session, batch, items, (sam, lee, rae) = _started_roster(
         client,
         post,
@@ -2695,16 +2916,19 @@ def test_host_kept_item_stays_visible_in_results(client, post, db_session):
 
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Kept by the host" in page.text
+    assert "kept so far" in page.text
     assert "Apple" in page.text
+    # Jinja autoescape renders the pill's apostrophe as the &#39; entity.
+    assert "host&#39;s call" in page.text  # the "host's call" pill
     assert "2 yes · 1 no" in page.text
-    assert "Majority said yes. Your call." not in page.text  # nothing pending left
+    assert "majority said yes" not in page.text  # nothing pending left
 
 
 def test_non_host_sees_kept_by_host_with_aggregates(client, post, db_session):
-    """Slice D: after the host keeps a majority item, a NON-host participant's
-    results view shows it under 'Kept by the host' with the aggregate counts —
-    the group is not host-only (the artboard shows it to voters too)."""
+    """Slice D + UX-RESULTS: after the host keeps a majority item, a NON-host
+    participant's results view shows it on the shared 'kept so far' card with
+    the "host's call" pill and the aggregate counts — the card is not
+    host-only (the artboard shows it to voters too)."""
     session, batch, items, (sam, lee, rae) = _started_roster(
         client,
         post,
@@ -2730,11 +2954,11 @@ def test_non_host_sees_kept_by_host_with_aggregates(client, post, db_session):
     _stamp_participant(client, sam.id, session.code)
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
-    assert "Kept by the host" in page.text
+    assert "kept so far" in page.text
     assert "Apple" in page.text
+    assert "host&#39;s call" in page.text  # the "host's call" pill
     assert "2 yes · 1 no" in page.text
-    assert "The host is reviewing" not in page.text  # nothing pending left
-    assert "Majority said yes. Your call." not in page.text
+    assert "majority said yes" not in page.text  # nothing pending left
     assert "/keep" not in page.text  # voters never get host controls
     assert "/pass" not in page.text
 
@@ -2876,7 +3100,9 @@ def test_completion_meal_title_and_pills(client, post, db_session):
     # Jinja autoescape renders the apostrophe as the &#39; entity — the browser
     # shows "host's call"; the raw HTML carries the escaped form.
     assert "host&#39;s call" in page.text
-    assert 'class="complete-pill complete-pill--host"' in page.text
+    # UX-RESULTS: the completion plan shares the results screen's pill — the
+    # host-kept Banana carries the --host modifier on the shared .outcome-pill.
+    assert 'class="outcome-pill outcome-pill--host"' in page.text
 
 
 def test_completion_meta_singular(client, post, db_session):
@@ -3019,7 +3245,10 @@ def test_target_progress_counts_kept_per_track(client, post, db_session):
 
 def test_next_batch_same_track_excludes_offered_items(client, post, db_session):
     """After batch 1 is fully resolved, POST /next-batch assembles batch 2 for
-    the SAME track (seq 2) excluding every item already offered in any batch."""
+    the SAME track (seq 2) excluding every item already offered in any batch.
+    RANDOM-BATCH: the session deals its pool ONCE per session — batch 1 is the
+    seeded shuffle's first BATCH_SIZE items and batch 2 continues that same
+    shuffled order with the un-offered tail (stable within a session)."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
     collection = _make_collection(db_session, group.id)
@@ -3031,6 +3260,8 @@ def test_next_batch_same_track_excludes_offered_items(client, post, db_session):
     lee = SessionParticipant(session_id=session.id, account_id=None, display_name="Lee")
     db_session.add_all([sam, lee])
     db_session.commit()
+    pool = [f"Meal {i:02d}" for i in range(20)]
+    random.Random(session.id).shuffle(pool)  # the session's single deal
     _login(client, db_session, host.email)
     resp = post(f"/s/{session.code}/start", follow_redirects=False)
     assert resp.status_code == 303
@@ -3038,7 +3269,7 @@ def test_next_batch_same_track_excludes_offered_items(client, post, db_session):
     batch1 = _open_batch(db_session, session.id)
     items1 = _batch_items(db_session, batch1.id)
     assert len(items1) == BATCH_SIZE == 15
-    assert _item_names(db_session, items1)[0] == "Meal 00"
+    assert _item_names(db_session, items1) == pool[:15]
     # Sam yes on all 15; Lee no on the first 13 (ties → not kept), yes on the
     # last 2 (unanimous keeps). target 3 → dinner still has remaining.
     for bi in items1:
@@ -3065,7 +3296,7 @@ def test_next_batch_same_track_excludes_offered_items(client, post, db_session):
     assert batches[1].track_label == "dinner"
     assert batches[1].status == "open"
     names2 = _item_names(db_session, _batch_items(db_session, batches[1].id))
-    assert names2 == [f"Meal {i:02d}" for i in range(15, 20)]
+    assert names2 == pool[15:]
     assert set(names2).isdisjoint(set(_item_names(db_session, items1)))
 
 
@@ -3122,7 +3353,9 @@ def test_next_batch_with_pending_majority_item_400(client, post, db_session):
 
 
 def test_next_batch_advances_track_when_current_met(client, post, db_session):
-    """Lunch target met → the next batch is the 'dinner' track."""
+    """Lunch target met → the next batch is the 'dinner' track. RANDOM-BATCH:
+    the two dinner options arrive in the session's seeded shuffle, not
+    alphabetical order."""
     session, _, items, (sam, lee) = _started_roster(
         client,
         post,
@@ -3146,7 +3379,9 @@ def test_next_batch_advances_track_when_current_met(client, post, db_session):
     ).all()
     assert [b.seq for b in batches] == [1, 2]
     assert batches[1].track_label == "dinner"
-    assert _item_names(db_session, _batch_items(db_session, batches[1].id)) == ["Apple", "Banana"]
+    dinner_order = ["Apple", "Banana"]
+    random.Random(session.id).shuffle(dinner_order)
+    assert _item_names(db_session, _batch_items(db_session, batches[1].id)) == dinner_order
 
 
 def test_next_batch_pool_exhausted_400(client, post, db_session):
@@ -3221,11 +3456,15 @@ def test_finish_completes_deletes_participants_and_is_idempotent(client, post, d
         item_specs=[("Apple", "dinner"), ("Banana", "dinner")],
         roster_names=["Rosa Delgado", "Mina Park"],
     )
-    apple, banana = items
-    _cast(client, post, db_session, session, rosa, apple.id, "yes")
-    _cast(client, post, db_session, session, rosa, banana.id, "yes")
-    _cast(client, post, db_session, session, mina, apple.id, "yes")
-    _cast(client, post, db_session, session, mina, banana.id, "no")  # auto-closes
+    # RANDOM-BATCH: whichever item the shuffle dealt first is the unanimous
+    # keep (both voters yes); the second is the 1-1 tie.
+    first, second = items
+    _cast(client, post, db_session, session, rosa, first.id, "yes")
+    _cast(client, post, db_session, session, rosa, second.id, "yes")
+    _cast(client, post, db_session, session, mina, first.id, "yes")
+    _cast(client, post, db_session, session, mina, second.id, "no")  # auto-closes
+    kept_name, not_kept_name = _item_names(db_session, items)
+    rosa_id = rosa.id  # finish deletes the rows; keep the id for the non-host viewer
     _login(client, db_session, "host@example.com")
 
     resp = post(f"/s/{session.code}/finish", follow_redirects=False)
@@ -3240,13 +3479,23 @@ def test_finish_completes_deletes_participants_and_is_idempotent(client, post, d
     page = client.get(f"/s/{session.code}")
     assert page.status_code == 200
     assert "Dinner's sorted." in page.text
-    assert "Apple" in page.text
+    assert kept_name in page.text
     assert "everyone" in page.text
-    assert "Banana" not in page.text  # tie → not kept
+    assert not_kept_name not in page.text  # tie → not kept
     assert "Rosa Delgado" not in page.text
     assert "Mina Park" not in page.text
 
+    # A NON-host viewer sees the same completion plan (public by code).
+    _stamp_participant(client, rosa_id, session.code)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert "Dinner's sorted." in page.text
+    assert "kept so far" not in page.text  # results screen copy never leaks here
+    assert kept_name in page.text
+
     # Idempotent finish: 303, no error, participants stay deleted.
+    # (_stamp_participant above cleared the jar → log the host back in.)
+    _login(client, db_session, "host@example.com")
     resp = post(f"/s/{session.code}/finish", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == f"/s/{session.code}"
@@ -3740,3 +3989,167 @@ def test_unanimity_requires_host_yes_with_auto_row(client, post, db_session):
     # Banana: all three yes → kept_unanimous.
     assert (by_id[items[1].id].yes_count, by_id[items[1].id].no_count) == (3, 0)
     assert by_id[items[1].id].outcome == "kept_unanimous"
+
+
+# ---------------------------------------------------------------------------
+# LEAKFIX: results-state's ?pending= count is session-scoped
+# ---------------------------------------------------------------------------
+
+
+def test_results_state_poll_foreign_batch_never_counts_other_sessions(
+    client, post, db_session
+):
+    """LEAKFIX (cross-tenant oracle): results-state's ?pending= comparison used
+    to count BatchItem rows by RAW batch_id — a session-A code plus an
+    enumerable session-B batch id answered with B's live outcome-NULL tally as
+    an HX-Refresh differential. A batch_id that isn't THIS session's is now
+    stale/irrelevant: the count never runs, every ?pending= value answers the
+    same quiet 200, and B's true count (0 unanimous, 1 majority, or an OPEN
+    batch's items) cannot change A's poll. The same-session control proves the
+    refresh still fires for a real mismatch on A's own batch."""
+    # A: closed with 1 pending majority item — the results-screen state.
+    session_a, batch_a, items_a, (sam, lee, rae) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee", "Rae"],
+    )
+    _cast(client, post, db_session, session_a, sam, items_a[0].id, "yes")
+    _cast(client, post, db_session, session_a, lee, items_a[0].id, "yes")
+    _cast(client, post, db_session, session_a, rae, items_a[0].id, "no")  # auto-close
+    db_session.expire_all()
+    assert batch_a.status == "closed"
+    assert _open_batch(db_session, session_a.id) is None
+    assert items_a[0].outcome is None  # 1 pending → A's page polls ?pending=1
+
+    # B0: a different session, closed UNANIMOUSLY — its true pending count is 0.
+    client.cookies.clear()
+    session_b0, batch_b0, items_b0, (bee, cee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Banana", "dinner")],
+        roster_names=["Bee", "Cee"],
+    )
+    _cast(client, post, db_session, session_b0, bee, items_b0[0].id, "yes")
+    _cast(client, post, db_session, session_b0, cee, items_b0[0].id, "yes")
+    db_session.expire_all()
+    assert batch_b0.status == "closed"
+    assert items_b0[0].outcome == "kept_unanimous"
+
+    # B1: a different session, closed as a MAJORITY — its true pending count
+    # is 1 (the exact count A's page is legitimately polling for ITS batch).
+    client.cookies.clear()
+    session_b1, batch_b1, items_b1, (dee, eve, fay) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Cherry", "dinner")],
+        roster_names=["Dee", "Eve", "Fay"],
+    )
+    _cast(client, post, db_session, session_b1, dee, items_b1[0].id, "yes")
+    _cast(client, post, db_session, session_b1, eve, items_b1[0].id, "yes")
+    _cast(client, post, db_session, session_b1, fay, items_b1[0].id, "no")
+    db_session.expire_all()
+    assert batch_b1.status == "closed"
+    assert items_b1[0].outcome is None
+
+    # B2: a different session STILL VOTING — its OPEN batch's outcome-NULL
+    # rows are its "live pending" (2 items, untouched).
+    client.cookies.clear()
+    _session_b2, batch_b2, items_b2, (_g1, _g2) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Date", "dinner"), ("Elderberry", "dinner")],
+        roster_names=["Gus", "Hugh"],
+    )
+    assert batch_b2.status == "open"
+    assert len(items_b2) == 2
+
+    # Same-session control: A's OWN batch still refreshes on a real mismatch.
+    resp = client.get(f"/s/{session_a.code}/results-state/{batch_a.id}?pending=1")
+    assert resp.status_code == 200
+    assert "hx-refresh" not in resp.headers  # matches A's 1 pending item
+    resp = client.get(f"/s/{session_a.code}/results-state/{batch_a.id}?pending=0")
+    assert resp.status_code == 200
+    assert resp.headers["hx-refresh"] == "true"
+
+    # Cross-tenant: A's code with each foreign batch id — identical responses
+    # across every ?pending= value and across B's differing true counts. The
+    # pending comparison never runs, so nothing about B leaks (and no variant
+    # 404s differently — same 200/empty-body shape throughout).
+    foreign = [batch_b0, batch_b1, batch_b2]
+    pending_values = ["0", "1", "2", "3", "abc", None]
+    seen = {}
+    for batch in foreign:
+        key = []
+        for pending in pending_values:
+            url = f"/s/{session_a.code}/results-state/{batch.id}"
+            if pending is not None:
+                url += f"?pending={pending}"
+            resp = client.get(url)
+            assert resp.status_code == 200
+            assert resp.text == ""
+            key.append(resp.headers.get("hx-refresh"))
+        seen[batch.id] = key
+    # No HX-Refresh differential — not within a batch across pending values,
+    # and not between B sessions whose true counts differ (0, 1, 2).
+    assert all(v is None for key in seen.values() for v in key)
+    assert seen[batch_b0.id] == seen[batch_b1.id] == seen[batch_b2.id]
+
+
+def test_results_state_poll_foreign_batch_id_never_404s(client, post, db_session):
+    """LEAKFIX: a results-state poll carrying a batch id from a DIFFERENT
+    session answers the same quiet 200 as any stale poll — never a 404. A
+    404-vs-200 split would be an existence oracle on the batch id itself
+    (CLAUDE.md #6), and it must not depend on whether the polled session has
+    an open batch, is mid-results, or is complete."""
+    session_a, batch_a, items_a, (sam, lee) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee"],
+    )
+    # A second session whose batch id exists but belongs elsewhere.
+    client.cookies.clear()
+    _session_b, batch_b, _items_b, (_guest,) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Banana", "dinner")],
+        roster_names=["Guest"],
+    )
+    assert batch_b.id != batch_a.id
+
+    # While A is mid-voting (open batch): foreign id → plain 200, same shape
+    # as a stale id of A's own would get (refresh header is constant here).
+    resp = client.get(f"/s/{session_a.code}/results-state/{batch_b.id}?pending=0")
+    assert resp.status_code == 200
+    assert resp.headers.get("hx-refresh") == "true"  # stale-id branch, not a 404
+
+    # Close A's batch → A is on the results screen; the foreign id must be a
+    # quiet 200 for every pending value (the pending comparison never runs).
+    _cast(client, post, db_session, session_a, sam, items_a[0].id, "yes")
+    _cast(client, post, db_session, session_a, lee, items_a[0].id, "yes")
+    db_session.expire_all()
+    assert batch_a.status == "closed"
+    for pending in ("0", "1", "2", None):
+        url = f"/s/{session_a.code}/results-state/{batch_b.id}"
+        if pending is not None:
+            url += f"?pending={pending}"
+        resp = client.get(url)
+        assert resp.status_code == 200
+        assert "hx-refresh" not in resp.headers
+
+    # A complete → still a plain 200 (refresh), never a 404.
+    _login(client, db_session, "host@example.com")
+    resp = post(f"/s/{session_a.code}/finish", follow_redirects=False)
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert session_a.status == "complete"
+    resp = client.get(f"/s/{session_a.code}/results-state/{batch_b.id}?pending=1")
+    assert resp.status_code == 200
+    assert resp.headers.get("hx-refresh") == "true"

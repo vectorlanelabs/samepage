@@ -51,16 +51,14 @@
 }
 
 /* Dark mode: the host color is a light violet (#8B7CF0), so white text on
-   it fails AA (3.4:1). Host-surface text takes the dark ink instead — same
-   pattern as .btn-primary (R1 audit restore: the Quiet Kitchen CSS had this
-   for .results-keep; the reskin dropped it, and .here-chip--host picked up
-   the same white-on-violet failure). The completion pill is NOT in here:
-   body.complete-ground pins --sp-host to the light-theme #6C5CE8, so its
-   white label stays AA in both themes (R2 ruling — theme-invariant screen). */
-@media (prefers-color-scheme: dark) {
-  .results-keep { color: #101114; }
-  .here-chip--host .here-avatar { color: #101114; }
-}
+   it fails AA (3.4:1). Host-surface text takes the dark ink (#101114) instead
+   — same pattern as .btn-primary (R1 audit restore). Because a later rule
+   beats an earlier one at equal specificity, each override lives right after
+   its base rule below: .results-keep and .outcome-pill--host in the results/
+   completion section, .here-chip--host .here-avatar in the lobby section.
+   UX-RESULTS: body.complete-ground is gone, so the completion "host's call"
+   pill follows the theme tokens like every other screen (white on the LIGHT
+   violet #6C5CE8 stays AA; the dark theme carries the ink override). */
 
 /* ---------- Reset / base ---------- */
 
@@ -2108,7 +2106,32 @@ button { font-family: var(--sp-font-sans); }
   overflow-x: auto;
 }
 
-/* ---------- Results + completion screens (M7 S7) ---------- */
+/* ---------- Results + completion screens (M7 S7, UX-RESULTS) ---------- */
+
+/* Outcome pill — "Kept so far" rows on the results screen AND the completion
+   plan: acid surface carries accent ink ("everyone"), host violet carries
+   white in light / dark ink in dark ("host's call"). Both token pairs AA. */
+.outcome-pill {
+  font-family: var(--sp-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sp-accent-ink);
+  background: var(--sp-accent);
+  border-radius: 6px;
+  padding: 4px 9px;
+  white-space: nowrap;
+}
+
+.outcome-pill--host {
+  color: #FFFFFF;
+  background: var(--sp-host);
+}
+
+/* Dark theme: white on the dark theme's light violet fails AA (~3.4:1) — the
+   host pill takes the dark ink instead (same as .results-keep below). */
+@media (prefers-color-scheme: dark) {
+  .outcome-pill--host { color: #101114; }
+}
 
 .results-context {
   font-size: 13px;
@@ -2133,35 +2156,45 @@ button { font-family: var(--sp-font-sans); }
   margin: 6px 0 0;
 }
 
-/* Host-only "Majority said yes — your call" card (outcome-NULL pending
-   items). Its border is the host tint so it reads as the host's surface. */
+/* Pending-majority card ("majority said yes · host's call", outcome-NULL
+   items). Renders for host AND participants (UX-RESULTS); the host-tint
+   border marks the surface whose decision is still the host's, and only the
+   host's rows carry Keep/Pass controls. */
 .results-call-card {
-  margin-top: 20px;
   padding: 6px 20px 8px;
   border: 1px solid var(--sp-host-tint);
   background: var(--sp-card);
 }
 
-/* Decided outcomes (kept_unanimous / kept_host / not_kept) share ONE white
-   card; hairline separators run between the groups. */
+/* Kept-so-far and didn't-make-it cards. Spacing between cards comes from the
+   .results-grid gap, not per-card margins. */
 .results-card {
-  margin-top: 20px;
   padding: 6px 20px 8px;
 }
 
-/* Non-host viewers: one line noting the host still has pending items to
-   review — count only, no item names or aggregates. */
-.results-pending-note {
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--sp-sub);
-  text-align: center;
-  margin: 20px 0 0;
+/* UX-RESULTS phone layout: the results content is ONE column — kept-so-far
+   card, pending card, didn't-make-it card, then the CTAs — in this order. */
+.results-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 22px;
 }
 
-.results-group + .results-group {
-  border-top: 1px solid var(--sp-hairline);
-  margin-top: 4px;
+/* The end-of-column action cluster: host next-batch / finish / end-early, or
+   the participant's "Waiting for the host." line. */
+.results-ctas {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* "Nothing kept yet." — quiet empty state inside the kept-so-far card. */
+.results-empty-note {
+  font-size: 13px;
+  color: var(--sp-faint);
+  margin: 0;
+  padding: 14px 0 10px;
 }
 
 .results-group-label {
@@ -2186,6 +2219,17 @@ button { font-family: var(--sp-font-sans); }
 }
 
 .results-row:last-child { border-bottom: none; }
+
+/* Kept-so-far rows: a long name may wrap/shrink; the pill + counts cluster
+   on the right never does. */
+.results-row > .results-name { min-width: 0; }
+
+.results-row-end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
 
 /* Pending rows: name + counts stacked on the left, Keep/Pass on the right. */
 .results-row-main {
@@ -2257,37 +2301,62 @@ button { font-family: var(--sp-font-sans); }
 
 .results-pass:hover { border-color: var(--sp-ink); }
 
+/* Dark theme: the Keep button's host surface carries dark ink — white fails
+   on the dark theme's light violet. Placed after the base rule so the
+   cascade applies it (UX-RESULTS cleanup; same move as .outcome-pill--host). */
+@media (prefers-color-scheme: dark) {
+  .results-keep { color: #101114; }
+}
+
 .results-finish-center {
-  margin-top: 20px;
   text-align: center;
 }
 
 .results-waiting {
-  margin-top: 24px;
   text-align: center;
 }
 
-/* Completion plan (session_complete.html) — M8 R2: the ink-ground payoff.
+/* Results desktop layout (>=1024px, UX-RESULTS): the results screen widens
+   past the 720px session column to ~1080px and the content becomes TWO
+   columns — "Kept so far" + "Didn't make it" on the left, the pending card +
+   the CTAs on the right. Phone stays the single column above (the DOM order
+   is the phone order). The body class is set by batch_results.html only, so
+   other session screens keep the narrow column. */
+@media (min-width: 1024px) {
+  body.results-wide .content--session { max-width: 1080px; }
 
-   The screen flips to #101114 in BOTH themes ("the one full-bleed
-   accent-on-ink surface" — Design Handoff/README.md). The scoped tokens below
-   pin the dark-mode values the reversed type needs — including --sp-host back
-   to the light-theme #6C5CE8 — so every .complete-* rule can keep using
-   var(--sp-*) instead of hardcoded light/dark branches, and the screen is
-   fully theme-invariant. */
-body.complete-ground {
-  --sp-ink: #FFFFFF;
-  --sp-sub: #ABAEB9;
-  --sp-faint: #8A8DA0;
-  --sp-host: #6C5CE8;  /* R2: the host violet is pinned to the LIGHT value on the
-                          ink ground — the screen is theme-invariant, so white
-                          pill text stays AA (~4.85:1; dark #8B7CF0 would fail) */
-  --sp-border-strong: #3A3C46;
-  --sp-hairline: #2A2C34;
-  background: #101114;
+  .results-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "kept pending"
+      "didnt ctas";
+    align-items: start;
+    gap: 24px;
+  }
+
+  /* Nothing pending → the CTAs take the top-right cell next to the kept card
+     instead of sitting under an empty pending card. */
+  .results-grid--no-pending {
+    grid-template-areas:
+      "kept ctas"
+      "didnt .";
+  }
+
+  .results-kept { grid-area: kept; }
+  .results-pending { grid-area: pending; }
+  .results-didnt { grid-area: didnt; }
+  .results-ctas { grid-area: ctas; }
 }
 
-/* The page is a full-height flex column so the ghost Done pins to the bottom
+/* Completion plan (session_complete.html) — UX-RESULTS: the forced ink ground
+   (body.complete-ground and its scoped token overrides) is GONE; the screen
+   renders on the normal theme tokens like every other screen — light in light
+   mode, dark in dark mode. The composition survives: 46/800 title, mono
+   context/meta, hairline kept list, and the shared .outcome-pill pairs above
+   (accent + accent-ink "everyone"; host violet "host's call"). */
+
+/* The page is a full-height flex column so the Done button pins to the bottom
    (same calc trick as .vote-screen). */
 .complete-page {
   flex: 1;
@@ -2322,7 +2391,7 @@ body.complete-ground {
   margin: 12px 0 0;
 }
 
-/* Kept rows as a hairline list — no card box on the ink ground. */
+/* Kept rows as a hairline list — no card box. */
 .complete-list {
   border-top: 1px solid var(--sp-hairline);
   margin-top: 28px;
@@ -2351,26 +2420,7 @@ body.complete-ground {
   color: var(--sp-ink);
 }
 
-/* Mono outcome pills: accent+ink "everyone", host "host's call" — white on
-   --sp-host, which complete-ground pins to #6C5CE8 in BOTH themes so the
-   white label stays AA (~4.85:1) on the ink ground. */
-.complete-pill {
-  font-family: var(--sp-font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--sp-accent-ink);
-  background: var(--sp-accent);
-  border-radius: 6px;
-  padding: 4px 9px;
-  white-space: nowrap;
-}
-
-.complete-pill--host {
-  color: #FFFFFF;
-  background: var(--sp-host);
-}
-
-/* "Saved to Meal Planner." — sans caption, faint on ink. */
+/* "Saved to Meal Planner." — sans caption, faint. */
 .complete-saved {
   font-size: 13px;
   font-weight: 500;
@@ -2378,19 +2428,11 @@ body.complete-ground {
   margin: 16px 0 0;
 }
 
-/* Ghost "Done" pinned to the bottom: flat ink button with the dark-theme
-   strong border (1.5px #3A3C46) per the handoff. */
+/* "Done" is a normal .btn-secondary now (no more ink-ground ghost); it keeps
+   the bottom pin from the flex column above. */
 .complete-done {
   margin-top: auto;
-  min-height: 56px;
-  font-size: 16px;
-  font-weight: 700;
-  background: #101114;
-  color: #FFFFFF;
-  border: 1.5px solid #3A3C46;
 }
-
-.complete-done:hover { border-color: #FFFFFF; }
 
 .complete-empty { padding: 32px 0; }
 

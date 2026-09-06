@@ -12,10 +12,15 @@ the light ink) in BOTH themes ("acid green carries ink text, always" —
 Design Handoff/README.md). So "ink on accent" audits #101114 on the accent
 in both themes, not the dark theme's --sp-ink token.
 
-A second scope note (M8 R2): the completion screen's host pill is theme-
-invariant — body.complete-ground pins --sp-host to #6C5CE8 (the LIGHT value)
-in both themes, so its white label is audited once against that fixed hex,
-independent of the dark theme's #8B7CF0 token (test_complete_ground_host_pill_white_aa).
+A second scope note (UX-RESULTS): the completion screen's forced ink ground
+(body.complete-ground) is gone — the screen renders on the normal theme tokens
+like every other screen — and the SHARED outcome pill (results "kept so far"
+rows and the completion plan) follows the host token in both themes: white on
+the light-theme violet, dark ink (#101114) on the dark theme's lighter violet.
+The numeric host-on-violet pairings are audited against the shipped tokens
+(test_white_on_host_aa_light_theme / test_ink_on_host_aa_dark_theme); the
+structural tests at the bottom pin the pill and Keep rules to those pairs so
+a regression to white-on-violet in dark mode can't ship.
 """
 
 from __future__ import annotations
@@ -150,33 +155,46 @@ def test_ink_on_bg_aaa_both_themes():
     _assert_ratio(DARK["sp-ink"], DARK["sp-bg"], "dark --sp-ink on --sp-bg", minimum=7)
 
 
-def test_ink_ground_reversed_type_aa():
-    """M8 R2: the completion screen flips to the ink ground (#101114) in BOTH
-    themes with reversed type — white titles/names and the faint/sub meta
-    values (#8A8DA0 / #ABAEB9) all clear AA on it. The ground is theme-
-    invariant, so the pairs are audited once against the fixed hex values."""
-    _assert_ratio("#FFFFFF", "#101114", "white on ink ground")
-    _assert_ratio("#ABAEB9", "#101114", "sub on ink ground")
-    _assert_ratio("#8A8DA0", "#101114", "faint on ink ground")
-
-
-def test_complete_ground_host_pill_white_aa():
-    """M8 R2: the completion screen is theme-invariant INCLUDING the host
-    color — body.complete-ground pins --sp-host to the light-theme violet
-    #6C5CE8 in both themes, so the "host's call" pill keeps white text on the
-    ink ground (white on #6C5CE8 ≈ 4.85:1, AA). The dark theme's #8B7CF0
-    would fail at ~3.4:1, which is why the R1 dark-mode ink override must not
-    reach the pill. The structural asserts protect the pin + override removal
-    so the numeric pair below is what actually renders."""
+def test_outcome_pill_base_accent_pairing():
+    """UX-RESULTS: the base outcome pill ("everyone") is the acid surface with
+    accent ink — the pairing the token tests audit in both themes. The base
+    rule must keep those tokens (a future host-colored base would silently
+    ship the wrong pairs)."""
     text = APP_CSS.read_text()
-    complete = re.search(r"body\.complete-ground\s*\{([^}]*)\}", text)
-    assert complete is not None, "body.complete-ground block not found in app.css"
-    pinned = re.search(r"--sp-host:\s*(#[0-9a-fA-F]{6})", complete.group(1))
-    assert pinned is not None, "--sp-host is not pinned in body.complete-ground"
-    assert pinned.group(1).upper() == "#6C5CE8", (
-        f"ink-ground --sp-host is {pinned.group(1)}, expected #6C5CE8"
+    base = re.search(r"\.outcome-pill\s*\{([^}]*)\}", text)
+    assert base is not None, ".outcome-pill rule not found in app.css"
+    body = base.group(1)
+    assert re.search(r"background:\s*var\(--sp-accent\)", body), (
+        "base outcome pill does not render on --sp-accent"
     )
-    assert not re.search(r"\.complete-pill--host\s*\{[^}]*color:\s*#101114\b", text), (
-        "dark-mode ink override still reaches .complete-pill--host"
+    assert re.search(r"color:\s*var\(--sp-accent-ink\)", body), (
+        "base outcome pill does not carry --sp-accent-ink"
     )
-    _assert_ratio("#FFFFFF", "#6C5CE8", "white on pinned ink-ground --sp-host")
+
+
+def test_outcome_pill_host_and_keep_dark_override_is_ink():
+    """UX-RESULTS: the "host's call" pill (.outcome-pill--host) and the results
+    Keep button render WHITE on --sp-host in light mode, and each carries a
+    dark-scoped override to the dark ink (#101114) — the dark theme's host
+    violet is LIGHT (#8B7CF0), where white fails at ~3.4:1 (R1 audit). The
+    structural asserts pin the rules to the token pairings audited by
+    test_white_on_host_aa_light_theme / test_ink_on_host_aa_dark_theme."""
+    text = APP_CSS.read_text()
+    host = re.search(r"\.outcome-pill--host\s*\{([^}]*)\}", text)
+    assert host is not None, ".outcome-pill--host rule not found in app.css"
+    assert re.search(r"background:\s*var\(--sp-host\)", host.group(1))
+    assert re.search(r"color:\s*#FFFFFF\b", host.group(1)), (
+        "host pill is not white in light mode"
+    )
+    assert re.search(r"\.outcome-pill--host\s*\{[^}]*color:\s*#101114\b", text), (
+        "dark-mode ink override missing for .outcome-pill--host"
+    )
+    keep = re.search(r"\.results-keep\s*\{([^}]*)\}", text)
+    assert keep is not None, ".results-keep rule not found in app.css"
+    assert re.search(r"background:\s*var\(--sp-host\)", keep.group(1))
+    assert re.search(r"color:\s*#fff\b", keep.group(1)), (
+        "Keep button is not white in light mode"
+    )
+    assert re.search(r"\.results-keep\s*\{[^}]*color:\s*#101114\b", text), (
+        "dark-mode ink override missing for .results-keep"
+    )

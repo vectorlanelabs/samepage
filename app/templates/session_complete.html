@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Your plan · {{ session.code }} · Same Page{% endblock %}
-{% block body_class %}complete-ground{% endblock %}
 {% block content %}
 <div class="page page--narrow complete-page">
   <p class="complete-context">{% if collection_name %}{{ collection_name }} · {% endif %}{{ group_name }}</p>
@@ -15,7 +14,7 @@
       {% for item in group.kept_items %}
       <div class="complete-row">
         <span class="complete-name">{{ item.name }}</span>
-        <span class="complete-pill{% if item.outcome == "kept_host" %} complete-pill--host{% endif %}">{{ item.pill }}</span>
+        <span class="outcome-pill{% if item.outcome == "kept_host" %} outcome-pill--host{% endif %}">{{ item.pill }}</span>
       </div>
       {% endfor %}
     </div>
@@ -27,6 +26,6 @@
 
   {% if collection_name %}<p class="complete-saved">Saved to {{ collection_name }}.</p>{% endif %}
 
-  <a class="btn btn-block complete-done" href="/">Done</a>
+  <a class="btn btn-secondary btn-block complete-done" href="/">Done</a>
 </div>
 {% endblock %}

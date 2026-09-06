@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Results · {{ session.code }} · Same Page{% endblock %}
+{% block body_class %}results-wide{% endblock %}
 {% block content %}
-<div class="page page--narrow">
+<div class="page">
   <p class="page-meta results-context">{{ collection_name }} · Batch {{ batch.seq }}{% if is_host %} · Host view{% endif %}</p>
   <h1 class="results-title">{% if is_host and pending %}Your call on {{ pending|length }}{% else %}Batch {{ batch.seq }} results{% endif %}</h1>
   <p class="results-subtitle">
@@ -11,90 +12,86 @@
     {%- endfor -%}
   </p>
 
-  {% if is_host and pending %}
-  <section class="card results-call-card">
-    <h2 class="results-group-label results-group-label--host">Majority said yes. Your call.</h2>
-    {% for item in pending %}
-    <div class="results-row">
-      <div class="results-row-main">
-        <div class="results-name">{{ item.name }}</div>
-        <div class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</div>
-      </div>
-      <div class="results-row-actions">
-        <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/keep">
-          <button type="submit" class="results-keep">Keep</button>
-        </form>
-        <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/pass">
-          <button type="submit" class="results-pass">Pass</button>
-        </form>
-      </div>
-    </div>
-    {% endfor %}
-  </section>
-  {% endif %}
-
-  {% if not is_host and pending %}
-  <p class="results-pending-note">The host is reviewing {{ pending|length }} option{{ "s" if pending|length != 1 }}.</p>
-  {% endif %}
-
-  {% if kept_unanimous or kept_host or not_kept %}
-  <section class="card results-card">
-    {% if kept_unanimous %}
-    <div class="results-group">
-      <h2 class="results-group-label">{% if is_host %}Kept automatically. Everyone said yes.{% else %}Everyone said yes{% endif %}</h2>
-      {% for item in kept_unanimous %}
+  {# Phone order is the DOM order: kept so far → pending → didn't make it →
+     CTAs. At >=1024px .results-grid becomes two columns (see app.css):
+     kept + didn't on the left, pending + CTAs on the right. #}
+  <div class="results-grid{% if not pending %} results-grid--no-pending{% endif %}">
+    <section class="card results-card results-kept">
+      <h2 class="results-group-label">kept so far</h2>
+      {% if kept_so_far %}
+      {% for item in kept_so_far %}
       <div class="results-row">
-        <div class="results-name">{{ item.name }}</div>
-        <div class="results-meta">{{ item.yes_count }} yes</div>
+        <span class="results-name">{{ item.name }}</span>
+        <span class="results-row-end">
+          <span class="outcome-pill{% if item.outcome == "kept_host" %} outcome-pill--host{% endif %}">{{ item.pill }}</span>
+          <span class="results-meta">{{ item.yes_count }} yes{% if item.no_count %} · {{ item.no_count }} no{% endif %}</span>
+        </span>
       </div>
       {% endfor %}
-    </div>
-    {% endif %}
-    {% if kept_host %}
-    <div class="results-group">
-      <h2 class="results-group-label results-group-label--host">Kept by the host</h2>
-      {% for item in kept_host %}
+      {% else %}
+      <p class="results-empty-note">Nothing kept yet.</p>
+      {% endif %}
+    </section>
+
+    {% if pending %}
+    <section class="card results-call-card results-pending">
+      <h2 class="results-group-label results-group-label--host">majority said yes · host's call</h2>
+      {% for item in pending %}
       <div class="results-row">
-        <div class="results-name">{{ item.name }}</div>
-        <div class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</div>
+        <div class="results-row-main">
+          <div class="results-name">{{ item.name }}</div>
+          <div class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</div>
+        </div>
+        {% if is_host %}
+        <div class="results-row-actions">
+          <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/keep">
+            <button type="submit" class="results-keep">Keep</button>
+          </form>
+          <form class="inline-form" method="post" action="/s/{{ session.code }}/batch/{{ batch.id }}/items/{{ item.batch_item_id }}/pass">
+            <button type="submit" class="results-pass">Pass</button>
+          </form>
+        </div>
+        {% endif %}
       </div>
       {% endfor %}
-    </div>
+    </section>
     {% endif %}
+
     {% if not_kept %}
-    <div class="results-group">
+    <section class="card results-card results-didnt">
       <h2 class="results-group-label results-group-label--faint">Didn't make it</h2>
       {% for item in not_kept %}
       <div class="results-row results-row--faint">
-        <div class="results-name">{{ item.name }}</div>
-        <div class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</div>
+        <span class="results-name">{{ item.name }}</span>
+        <span class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</span>
       </div>
       {% endfor %}
-    </div>
+    </section>
     {% endif %}
-  </section>
-  {% endif %}
 
-  {% if is_host %}
-    {% if not all_targets_met and next_batch_available %}
-    <form method="post" action="/s/{{ session.code }}/next-batch" style="margin-top:20px;">
-      <button type="submit" class="btn btn-primary btn-block">Start next batch{% if remaining_total > 0 %} · {{ remaining_total }} to go{% endif %}</button>
-    </form>
-    {% endif %}
-    {% if all_targets_met %}
-    <form method="post" action="/s/{{ session.code }}/finish" style="margin-top:20px;">
-      <button type="submit" class="btn btn-primary btn-block">Finish session</button>
-    </form>
-    {% else %}
-    <div class="results-finish-center">
-      <form method="post" action="/s/{{ session.code }}/finish">
-        <button type="submit" class="danger-text">End session early</button>
-      </form>
+    <div class="results-ctas">
+      {% if is_host %}
+        {% if not all_targets_met and next_batch_available %}
+        <form method="post" action="/s/{{ session.code }}/next-batch">
+          <button type="submit" class="btn btn-primary btn-block">Start next batch{% if remaining_total > 0 %} · {{ remaining_total }} to go{% endif %}</button>
+        </form>
+        {% endif %}
+        {% if all_targets_met %}
+        <form method="post" action="/s/{{ session.code }}/finish">
+          <button type="submit" class="btn btn-primary btn-block">Finish session</button>
+        </form>
+        {% else %}
+        <div class="results-finish-center">
+          <form method="post" action="/s/{{ session.code }}/finish">
+            <button type="submit" class="danger-text">End session early</button>
+          </form>
+        </div>
+        {% endif %}
+      {% else %}
+      <p class="page-meta results-waiting">Waiting for the host.</p>
+      {% endif %}
     </div>
-    {% endif %}
-  {% else %}
-    <p class="page-meta results-waiting">Waiting for the host.</p>
-  {% endif %}
+  </div>
 </div>
-<div hx-get="/s/{{ session.code }}/results-state/{{ batch.id }}" hx-trigger="every 2s" hx-swap="none"></div>
+<div hx-get="/s/{{ session.code }}/results-state/{{ batch.id }}?pending={{ pending|length }}" hx-trigger="every 2s" hx-swap="none"></div>
 {% endblock %}
