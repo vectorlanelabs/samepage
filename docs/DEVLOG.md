@@ -1143,3 +1143,19 @@ as host, a second browser + an HTTP client as participants):
 Full gauntlet passed hands-off: lobby→voting, host voting with counted votes (2-1 splits),
 auto-close on last vote, live Keep→"Kept by the host" on both views, results→completion
 auto-advance. Tests 421 → 435.
+
+## 2026-09-06 — Results UX rework + batch randomization shipped (Charlie's five findings)
+
+- Results lead with a session-wide "Kept so far" running list; the pending-majority list is
+  visible to all participants (aggregate counts, controls host-only) and live-syncs on host
+  decisions; desktop >=1024px two-column layout; completion screen follows the theme (the
+  forced-ink payoff read as a dark-mode bug in light mode — Charlie's call, reverted);
+  batch composition is a per-session seeded shuffle (was alphabetical head-of-table).
+- Review (sonnet) BLOCKED the first cut: the new ?pending= sync poll counted batch items by
+  raw batch id with no session join — a cross-tenant pending-count oracle, live-reproduced.
+  Fixed (session-scoped join, foreign batch ids inert, cross-tenant differential tests).
+  Clean: vote privacy on the shared pending card, kept_so_far scoping, shuffle stability +
+  preview/deal agreement, theme/contrast, desktop grid.
+- Tests 435 → 441. Deployed (CI green, prod 200); validated via harness renders (3-voter
+  matrix, phone + desktop, light theme confirmed on completion) — no prod test session this
+  time, keeping the freshly-reset meal stats clean.
