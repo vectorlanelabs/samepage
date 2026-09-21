@@ -16,12 +16,17 @@ from urllib.parse import urlencode
 
 from alembic.config import Config
 from fastapi import FastAPI, Request
-from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from alembic import command
+from app.errors import error_page, wants_html
 from app.mcp_server import mcp_app
 from app.routes import api, auth, collections, groups, home, library, pages, reports, sessions
 from app.security import setup_middleware
@@ -105,7 +110,26 @@ async def _handle_http_exceptions(request: Request, exc: StarletteHTTPException)
     if exc.status_code == 401 and "text/html" in request.headers.get("accept", ""):
         target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
         return RedirectResponse(f"/login?{urlencode({'next': target})}", status_code=303)
+    if wants_html(request):
+        return error_page(request, exc.status_code, str(exc.detail) if exc.detail else None)
     return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def _handle_validation_errors(request: Request, exc: RequestValidationError):
+    if wants_html(request):
+        return error_page(
+            request, 422, "The form was missing something or had a value we can't use. Go back and try again."
+        )
+    return await request_validation_exception_handler(request, exc)
+
+
+@app.exception_handler(Exception)
+async def _handle_unexpected_errors(request: Request, exc: Exception):
+    logger.exception("unhandled error on %s %s", request.method, request.url.path)
+    if wants_html(request):
+        return error_page(request, 500, None)
+    return JSONResponse({"detail": "Internal Server Error"}, status_code=500)
 
 
 app.include_router(home.router)

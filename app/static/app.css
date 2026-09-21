@@ -2743,3 +2743,6 @@ button { font-family: var(--sp-font-sans); }
   background: var(--sp-accent);
   transition: width 0.4s ease;
 }
+
+/* A form that's been sent locks its buttons (base.html double-submit guard). */
+button[aria-busy="true"] { opacity: 0.55; cursor: progress; }

@@ -1613,11 +1613,11 @@ def start_voting(
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can start voting")
     if session.status in ENDED_STATUSES:
-        raise HTTPException(400, "This session is over.")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # stale screen → the ended page
     try:
         target_status = apply_transition(session.status, "voting")
     except ValueError:
-        raise HTTPException(400, "Session can't be started from its current state")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)
 
     # Collection-backed sessions only; ad hoc option entry is deferred. Guard
     # with "no open batch exists" so a double-submitted start never assembles
@@ -1625,7 +1625,13 @@ def start_voting(
     if session.collection_id is not None and _open_batch(db, session) is None:
         track = _first_track(db, session)
         if track is None:
-            raise HTTPException(400, "This session has no targets to vote on")
+            context = _lobby_context(
+                request, db, session, account, _viewer_participant(request, db, session, account)
+            )
+            context["start_error"] = "This session has no targets to vote on."
+            return templates.TemplateResponse(
+                request, "session_lobby.html", context, status_code=400
+            )
         eligible_ids = _eligible_item_ids(db, session, track)
         chosen = assemble_batch(eligible_ids, already_offered=set(), size=BATCH_SIZE)
         if not chosen:
@@ -1699,7 +1705,8 @@ def vote(
     account = get_current_account(request, db)
     participant = _viewer_participant(request, db, session, account)
     if participant is None:
-        raise HTTPException(403, "Join the session to vote")
+        # Lost/expired participant cookie → the session page offers the join form.
+        return RedirectResponse(f"/s/{session.code}", status_code=303)
     open_batch = _open_batch(db, session)
     if open_batch is None:
         # The batch closed (auto or manual) and the host hasn't started the
@@ -1756,7 +1763,8 @@ def close_batch(
     """Host-only MANUAL batch close (§5.5/§5.6, D5): roll up the open batch's
     outcomes with missing votes counted as 'no', DELETE the per-person vote
     rows, and redirect to the results screen. Idempotent: a second POST finds
-    no open batch → 404 — the first close already applied exactly once."""
+    no open batch → a no-op redirect to results — the first close already
+    applied exactly once."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
@@ -1765,13 +1773,30 @@ def close_batch(
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can close the batch")
     if session.status in ENDED_STATUSES:
-        raise HTTPException(400, "This session is over.")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # stale screen → the ended page
     batch = _open_batch(db, session)
     if batch is None:
-        raise HTTPException(404, "No open batch to close")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # already closed (double-tap) → results
     _close_batch(db, session, batch, manual=True)
     db.commit()
     return RedirectResponse(f"/s/{session.code}", status_code=303)
+
+
+def _pass_undecided_items(db: Session, session: VotingSession) -> None:
+    """Default every still-undecided majority item of this session's CLOSED
+    batches to NOT_KEPT — the host moved on without choosing, which means
+    pass. No keep counters change. Caller commits."""
+    undecided = db.scalars(
+        select(BatchItem)
+        .join(Batch, Batch.id == BatchItem.batch_id)
+        .where(
+            (Batch.session_id == session.id)
+            & (Batch.status == "closed")
+            & BatchItem.outcome.is_(None)
+        )
+    ).all()
+    for batch_item in undecided:
+        batch_item.outcome = Outcome.NOT_KEPT.value
 
 
 def _decide_pending_item(
@@ -1781,18 +1806,18 @@ def _decide_pending_item(
     (incrementing the Item's keep counters once), NOT_KEPT on pass. The
     batch_item must belong to batch ``bid`` of THIS session, the batch must be
     'closed', and the outcome must still be NULL — a decided item can't be
-    re-decided (400); foreign or nonexistent ids are 404 (no existence oracle,
-    CLAUDE.md #6)."""
+    re-decided (a repeat tap is a silent no-op; the first decision stands);
+    foreign or nonexistent ids are 404 (no existence oracle, CLAUDE.md #6)."""
     batch = db.get(Batch, bid)
     if batch is None or batch.session_id != session.id:
         raise HTTPException(404, "Batch not found")
     batch_item = db.get(BatchItem, biid)
     if batch_item is None or batch_item.batch_id != batch.id:
         raise HTTPException(404, "Item not found")
-    if batch.status != "closed":
-        raise HTTPException(400, "Batch isn't closed yet")
-    if batch_item.outcome is not None:
-        raise HTTPException(400, "Already decided")
+    if batch.status != "closed" or batch_item.outcome is not None:
+        # Double-tap or stale screen: the first decision stands, applied
+        # exactly once (CLAUDE.md #7). The caller redirects to the current screen.
+        return
     if keep:
         batch_item.outcome = Outcome.KEPT_HOST.value
         if batch_item.item_id is not None:
@@ -1815,7 +1840,7 @@ def keep_batch_item(
 ):
     """Host-only accept of a pending majority item (M3d): KEPT_HOST, keep
     counters incremented once. The outcome-was-NULL guard makes a re-submit a
-    400, never a double increment."""
+    no-op redirect, never a double increment."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
@@ -1824,7 +1849,7 @@ def keep_batch_item(
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can decide")
     if session.status in ENDED_STATUSES:
-        raise HTTPException(400, "This session is over.")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # stale screen → the ended page
     _decide_pending_item(db, session, bid, biid, keep=True)
     db.commit()
     return RedirectResponse(f"/s/{session.code}", status_code=303)
@@ -1848,7 +1873,7 @@ def pass_batch_item(
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can decide")
     if session.status in ENDED_STATUSES:
-        raise HTTPException(400, "This session is over.")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # stale screen → the ended page
     _decide_pending_item(db, session, bid, biid, keep=False)
     db.commit()
     return RedirectResponse(f"/s/{session.code}", status_code=303)
@@ -1861,13 +1886,14 @@ def pass_batch_item(
 def next_batch(
     request: Request, code: str, db: Annotated[Session, Depends(get_db)]
 ):
-    """Host-only 'start the next batch' (M3e). Preconditions: the session is
-    'voting', no batch is open, and no closed batch still has outcome-NULL
-    (majority-pending) items — otherwise 400 'Finish reviewing the current
-    batch first.' The next batch goes to the first track in order with
-    remaining target > 0 whose pool still has items never offered in ANY
-    previous batch; every remaining track exhausted → 400 (the host finishes
-    with fewer than target — unanimous keeps are always kept)."""
+    """Host-only 'start the next batch' (M3e). Majority items the host left
+    undecided default to pass (the results screen confirms first). The next
+    batch goes to the first track in order with remaining target > 0 whose
+    pool still has items never offered in ANY previous batch. A stale or
+    repeated tap — batch already open, session not voting, targets met, pool
+    exhausted — redirects to the session page, which shows the current screen
+    (the host finishes with fewer than target — unanimous keeps are always
+    kept)."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
@@ -1876,27 +1902,19 @@ def next_batch(
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can start the next batch")
     if session.status in ENDED_STATUSES:
-        raise HTTPException(400, "This session is over.")
-    if session.status != "voting":
-        raise HTTPException(400, "Session hasn't started voting yet.")
-    if _open_batch(db, session) is not None:
-        raise HTTPException(400, "Finish reviewing the current batch first.")
-    pending = (
-        db.scalar(
-            select(func.count())
-            .select_from(BatchItem)
-            .join(Batch, Batch.id == BatchItem.batch_id)
-            .where((Batch.session_id == session.id) & BatchItem.outcome.is_(None))
-        )
-        or 0
-    )
-    if pending > 0:
-        raise HTTPException(400, "Finish reviewing the current batch first.")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # stale screen → the ended page
+    if session.status != "voting" or _open_batch(db, session) is not None:
+        # Not started, or the next batch is already open (double-tap) → the
+        # session page routes to the current screen.
+        return RedirectResponse(f"/s/{session.code}", status_code=303)
+    # Moving on without deciding every majority item means "pass" on the rest
+    # (the results screen confirms this with the host before posting).
+    _pass_undecided_items(db, session)
     track, chosen = _next_batch_assembly(db, session)
     if track is None:
-        if _all_targets_met(db, session):
-            raise HTTPException(400, "All targets met — finish the session.")
-        raise HTTPException(400, "No more options to vote on — finish the session.")
+        # Targets met or pool exhausted: the results screen offers Finish.
+        db.commit()
+        return RedirectResponse(f"/s/{session.code}", status_code=303)
     existing_seqs = list(
         db.scalars(select(Batch.seq).where(Batch.session_id == session.id)).all()
     )
@@ -1931,7 +1949,8 @@ def finish_session(
     outlive the session), and stamps finished_at. An OPEN batch is closed
     first (manual close: missing = 'no', D5) so no batch_response rows survive
     to block participant deletion. Idempotent: a second finish on an already
-    'complete' session is a 303 no-op; an 'expired' session refuses (400)."""
+    'complete' or 'expired' session is a 303 no-op. Undecided majority items
+    default to pass."""
     session = _get_session_by_code(db, code)
     if session is None:
         raise HTTPException(404, "Session not found")
@@ -1940,7 +1959,7 @@ def finish_session(
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can finish the session")
     if session.status == "expired":
-        raise HTTPException(400, "This session is over.")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # stale screen → the ended page
     if session.status == "complete":
         return RedirectResponse(f"/s/{session.code}", status_code=303)  # idempotent
     if session.status not in ("voting", "lobby"):
@@ -1948,6 +1967,7 @@ def finish_session(
     open_batch = _open_batch(db, session)
     if open_batch is not None:
         _close_batch(db, session, open_batch, manual=True)
+    _pass_undecided_items(db, session)  # undecided majority items default to pass
     if session.status == "lobby":
         # Ending before voting starts is a host decision this slice allows;
         # the base state machine only exposes lobby → voting/expired, so
@@ -2127,16 +2147,16 @@ def remove_participant(
     if session.host_account_id != account.id:
         raise HTTPException(403, "Only the host can remove participants")
     if session.status in ENDED_STATUSES:
-        raise HTTPException(400, "This session is over.")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # stale screen → the ended page
     if session.status != "lobby":
-        raise HTTPException(400, "Can't remove participants after voting starts")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # voting started → roster is frozen
     participant = db.scalar(
         select(SessionParticipant).where(
             (SessionParticipant.id == pid) & (SessionParticipant.session_id == session.id)
         )
     )
     if participant is None:
-        raise HTTPException(404, "Participant not found")
+        return RedirectResponse(f"/s/{session.code}", status_code=303)  # already removed (double-tap)
     if participant.account_id is not None and participant.account_id == session.host_account_id:
         raise HTTPException(400, "The host can't be removed")
     db.delete(participant)

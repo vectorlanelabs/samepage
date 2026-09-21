@@ -71,18 +71,19 @@
 
     <div class="results-ctas">
       {% if is_host %}
+        {% set undecided %}{% if pending|length == 1 %}the 1 undecided item{% else %}all {{ pending|length }} undecided items{% endif %}{% endset %}
         {% if not all_targets_met and next_batch_available %}
-        <form method="post" action="/s/{{ session.code }}/next-batch">
+        <form method="post" action="/s/{{ session.code }}/next-batch"{% if pending %} data-confirm="Pass on {{ undecided }} and start the next batch?"{% endif %}>
           <button type="submit" class="btn btn-primary btn-block">Start next batch{% if remaining_total > 0 %} · {{ remaining_total }} to go{% endif %}</button>
         </form>
         {% endif %}
         {% if all_targets_met %}
-        <form method="post" action="/s/{{ session.code }}/finish">
+        <form method="post" action="/s/{{ session.code }}/finish"{% if pending %} data-confirm="Pass on {{ undecided }} and finish the session?"{% endif %}>
           <button type="submit" class="btn btn-primary btn-block">Finish session</button>
         </form>
         {% else %}
         <div class="results-finish-center">
-          <form method="post" action="/s/{{ session.code }}/finish">
+          <form method="post" action="/s/{{ session.code }}/finish" data-confirm="{% if pending %}Pass on {{ undecided }} and end the session now?{% else %}End the session now?{% endif %}">
             <button type="submit" class="danger-text">End session early</button>
           </form>
         </div>

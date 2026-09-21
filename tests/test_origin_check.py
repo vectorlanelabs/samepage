@@ -162,3 +162,10 @@ def test_logout_rejects_absent_origin(client):
     resp = client.post("/logout")
     assert resp.status_code == 403
     assert resp.json() == {"detail": "CSRF origin required"}
+
+
+def test_origin_rejection_is_a_page_for_browsers(client):
+    resp = client.post("/groups", headers={"accept": "text/html"})
+    assert resp.status_code == 403
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "Reload the page and try again" in resp.text

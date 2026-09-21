@@ -1205,7 +1205,7 @@ def test_remove_participant_non_host_403(client, post, db_session):
     assert db_session.get(SessionParticipant, sam.id) is not None
 
 
-def test_remove_participant_after_start_400(client, post, db_session):
+def test_remove_participant_after_start_is_noop_redirect(client, post, db_session):
     """§5.6: removal is only allowed while no batch is open (lobby)."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
@@ -1215,9 +1215,9 @@ def test_remove_participant_after_start_400(client, post, db_session):
     db_session.commit()
     _login(client, db_session, host.email)
 
-    resp = post(f"/s/{session.code}/participants/{sam.id}/remove")
-    assert resp.status_code == 400
-    assert "Can't remove participants after voting starts" in resp.text
+    resp = post(f"/s/{session.code}/participants/{sam.id}/remove", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
     assert db_session.get(SessionParticipant, sam.id) is not None
 
 
@@ -1238,16 +1238,16 @@ def test_remove_host_own_row_400(client, post, db_session):
     assert db_session.get(SessionParticipant, host_row.id) is not None
 
 
-def test_remove_unknown_participant_404(client, post, db_session):
+def test_remove_unknown_participant_is_noop(client, post, db_session):
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
     session = _make_session(db_session, group.id, host.id)
     _login(client, db_session, host.email)
     resp = post(f"/s/{session.code}/participants/999999/remove")
-    assert resp.status_code == 404
+    assert resp.status_code == 200  # already gone → back on the session page, no error
 
 
-def test_remove_participant_from_other_session_404(client, post, db_session):
+def test_remove_participant_from_other_session_is_noop(client, post, db_session):
     """A participant id from a DIFFERENT session is 404 for this session's
     remove route — removal is scoped to the session in the URL."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
@@ -1259,8 +1259,8 @@ def test_remove_participant_from_other_session_404(client, post, db_session):
     db_session.commit()
     _login(client, db_session, host.email)
 
-    resp = post(f"/s/{session_b.code}/participants/{sam.id}/remove")
-    assert resp.status_code == 404
+    resp = post(f"/s/{session_b.code}/participants/{sam.id}/remove", follow_redirects=False)
+    assert resp.status_code == 303  # scoped no-op: same answer as an unknown id
     assert db_session.get(SessionParticipant, sam.id) is not None
 
 
@@ -1679,7 +1679,7 @@ def test_vote_records_once_and_first_vote_stands(client, post, db_session):
     assert rows[0].choice == "yes"
 
 
-def test_vote_non_participant_403(client, post, db_session):
+def test_vote_non_participant_redirects_without_voting(client, post, db_session):
     """POST /vote without a participant cookie (host who never joined) → 403."""
     session, _, _ = _make_voting_setup(
         db_session,
@@ -1693,9 +1693,12 @@ def test_vote_non_participant_403(client, post, db_session):
     resp = post(
         f"/s/{session.code}/vote",
         data={"batch_item_id": str(first.id), "choice": "yes"},
+        follow_redirects=False,
     )
-    assert resp.status_code == 403
-    assert "Join the session to vote" in resp.text
+    # No error page: back to the session page (which offers joining); no vote lands.
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
+    assert db_session.scalars(select(BatchResponse)).all() == []
 
 
 def test_vote_batch_item_not_in_open_batch_404(client, post, db_session):
@@ -1884,7 +1887,7 @@ def test_legacy_flat_participant_cookie_never_resolves_and_is_purged(
         data={"batch_item_id": str(first.id), "choice": "yes"},
         follow_redirects=False,
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 303  # bounced to the session page, never an error body
     rows = db_session.scalars(
         select(BatchResponse).where(BatchResponse.batch_item_id == first.id)
     ).all()
@@ -2427,12 +2430,21 @@ def test_majority_pending_then_host_keep_and_pass(client, post, db_session):
     assert banana_item.times_kept == 0
     assert banana_item.last_kept_at is None
 
-    # Decided items can't be re-decided.
-    resp = post(f"/s/{session.code}/batch/{batch.id}/items/{apple.id}/keep")
-    assert resp.status_code == 400
-    assert "Already decided" in resp.text
-    resp = post(f"/s/{session.code}/batch/{batch.id}/items/{cherry.id}/pass")
-    assert resp.status_code == 400
+    # Decided items can't be re-decided: a double-tap (or a contradictory
+    # second tap) is a quiet no-op redirect — the first decision stands and
+    # the keep counter moves exactly once.
+    for biid, action in [(apple.id, "keep"), (banana.id, "keep"), (cherry.id, "keep")]:
+        resp = post(
+            f"/s/{session.code}/batch/{batch.id}/items/{biid}/{action}",
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+    db_session.expire_all()
+    assert apple.outcome == "kept_host"
+    assert banana.outcome == "not_kept"
+    assert cherry.outcome == "not_kept"
+    assert apple_item.times_kept == 1
+    assert banana_item.times_kept == 0
 
 
 def test_auto_close_on_final_vote_without_manual_close(client, post, db_session):
@@ -2518,8 +2530,7 @@ def test_close_twice_applies_once(client, post, db_session):
     resp = post(f"/s/{session.code}/close", follow_redirects=False)
     assert resp.status_code == 303
     resp = post(f"/s/{session.code}/close", follow_redirects=False)
-    assert resp.status_code == 404
-    assert "No open batch to close" in resp.text
+    assert resp.status_code == 303  # double-tap: quiet no-op, straight to results
 
     db_session.expire_all()
     assert batch.status == "closed"
@@ -3177,7 +3188,7 @@ def test_close_non_host_403(client, post, db_session):
     assert batch.status == "open"
 
 
-def test_keep_open_batch_400(client, post, db_session):
+def test_keep_open_batch_is_noop(client, post, db_session):
     """Keep/pass only applies to a CLOSED batch — an open batch's item (whose
     outcome is still NULL) is 400, not silently decided."""
     session, batch, items, (_, _) = _started_roster(
@@ -3188,9 +3199,11 @@ def test_keep_open_batch_400(client, post, db_session):
         roster_names=["Sam", "Lee"],
     )
     _login(client, db_session, "host@example.com")
-    resp = post(f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/keep")
-    assert resp.status_code == 400
-    assert "Batch isn't closed yet" in resp.text
+    resp = post(
+        f"/s/{session.code}/batch/{batch.id}/items/{items[0].id}/keep", follow_redirects=False
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
     db_session.refresh(items[0])
     assert items[0].outcome is None
 
@@ -3315,7 +3328,7 @@ def test_next_batch_non_host_403(client, post, db_session):
     assert "Only the host can start the next batch" in resp.text
 
 
-def test_next_batch_with_open_batch_400(client, post, db_session):
+def test_next_batch_with_open_batch_is_noop(client, post, db_session):
     """An unresolved (still open) batch blocks the next batch."""
     session, _batch, _, (_, _) = _started_roster(
         client,
@@ -3326,14 +3339,17 @@ def test_next_batch_with_open_batch_400(client, post, db_session):
     )
     assert _open_batch(db_session, session.id) is not None
     _login(client, db_session, "host@example.com")
-    resp = post(f"/s/{session.code}/next-batch")
-    assert resp.status_code == 400
-    assert "Finish reviewing the current batch first." in resp.text
+    resp = post(f"/s/{session.code}/next-batch", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(Batch)) == 1  # no second batch
 
 
-def test_next_batch_with_pending_majority_item_400(client, post, db_session):
-    """A closed batch with outcome-NULL (majority-pending) items blocks the
-    next batch until the host keeps/passes them."""
+def test_next_batch_passes_undecided_majority_items(client, post, db_session):
+    """Starting the next batch with majority items still undecided defaults
+    them to pass (the results screen confirms with the host first) — never an
+    error page."""
     session, _, items, (sam, lee, rae) = _started_roster(
         client,
         post,
@@ -3347,9 +3363,13 @@ def test_next_batch_with_pending_majority_item_400(client, post, db_session):
     db_session.expire_all()
     assert items[0].outcome is None
     _login(client, db_session, "host@example.com")
-    resp = post(f"/s/{session.code}/next-batch")
-    assert resp.status_code == 400
-    assert "Finish reviewing the current batch first." in resp.text
+    resp = post(f"/s/{session.code}/next-batch", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
+    db_session.expire_all()
+    assert items[0].outcome == "not_kept"  # undecided → pass, by default
+    apple = db_session.scalar(select(Item).where(Item.name == "Apple"))
+    assert apple.times_kept == 0
 
 
 def test_next_batch_advances_track_when_current_met(client, post, db_session):
@@ -3384,7 +3404,7 @@ def test_next_batch_advances_track_when_current_met(client, post, db_session):
     assert _item_names(db_session, _batch_items(db_session, batches[1].id)) == dinner_order
 
 
-def test_next_batch_pool_exhausted_400(client, post, db_session):
+def test_next_batch_pool_exhausted_redirects_to_results(client, post, db_session):
     """Every remaining track's pool already offered → 400; the host finishes
     with fewer than target (unanimous keeps always stand)."""
     session, _, items, (sam, lee) = _started_roster(
@@ -3402,12 +3422,12 @@ def test_next_batch_pool_exhausted_400(client, post, db_session):
     _cast(client, post, db_session, session, lee, banana.id, "no")  # auto-closes
     _login(client, db_session, "host@example.com")
 
-    resp = post(f"/s/{session.code}/next-batch")
-    assert resp.status_code == 400
-    assert "No more options to vote on — finish the session." in resp.text
+    resp = post(f"/s/{session.code}/next-batch", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
 
 
-def test_next_batch_all_targets_met_400(client, post, db_session):
+def test_next_batch_all_targets_met_redirects_to_results(client, post, db_session):
     """All targets met → 400 with the 'finish' hint (the UI shows Finish)."""
     session, _, items, (sam, lee) = _started_roster(
         client,
@@ -3423,9 +3443,9 @@ def test_next_batch_all_targets_met_400(client, post, db_session):
         _cast(client, post, db_session, session, lee, bi.id, "yes")  # auto-closes
     _login(client, db_session, "host@example.com")
 
-    resp = post(f"/s/{session.code}/next-batch")
-    assert resp.status_code == 400
-    assert "All targets met — finish the session." in resp.text
+    resp = post(f"/s/{session.code}/next-batch", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
 
 
 def test_finish_non_host_403(client, post, db_session):
@@ -3663,8 +3683,8 @@ def test_complete_session_never_expires(client, db_session):
 
 
 def test_expired_session_refuses_mutations(client, post, db_session):
-    """Expiry blocks mutations: /start and /next-batch refuse (400) and a
-    stale /vote tap redirects (303) after the lazy transition to 'expired' —
+    """Expiry blocks mutations: /start, /next-batch and a stale /vote tap
+    all redirect (303) after the lazy transition to 'expired' —
     the voter lands on the ended screen instead of a JSON error."""
     host = _get_or_make_account(db_session, "host@example.com", "Host")
     group = _make_group(db_session, "Household", host.email)
@@ -3673,18 +3693,16 @@ def test_expired_session_refuses_mutations(client, post, db_session):
     # /start on a stale lobby session.
     lobby = _make_session(db_session, group.id, host.id)
     _backdate(db_session, lobby, hours=25)
-    resp = post(f"/s/{lobby.code}/start")
-    assert resp.status_code == 400
-    assert "This session is over." in resp.text
+    resp = post(f"/s/{lobby.code}/start", follow_redirects=False)
+    assert resp.status_code == 303
     db_session.expire_all()
     assert lobby.status == "expired"
 
     # /next-batch on a stale voting session.
     voting = _make_session(db_session, group.id, host.id, status="voting")
     _backdate(db_session, voting, hours=25)
-    resp = post(f"/s/{voting.code}/next-batch")
-    assert resp.status_code == 400
-    assert "This session is over." in resp.text
+    resp = post(f"/s/{voting.code}/next-batch", follow_redirects=False)
+    assert resp.status_code == 303
     db_session.expire_all()
     assert voting.status == "expired"
 
@@ -4153,3 +4171,70 @@ def test_results_state_poll_foreign_batch_id_never_404s(client, post, db_session
     resp = client.get(f"/s/{session_a.code}/results-state/{batch_b.id}?pending=1")
     assert resp.status_code == 200
     assert resp.headers.get("hx-refresh") == "true"
+
+
+# ---------------------------------------------------------------------------
+# Friendly errors + pass-by-default
+# ---------------------------------------------------------------------------
+
+
+def _pending_majority_session(client, post, db_session):
+    session, _, items, (sam, lee, rae) = _started_roster(
+        client,
+        post,
+        db_session,
+        item_specs=[("Apple", "dinner")],
+        roster_names=["Sam", "Lee", "Rae"],
+    )
+    _cast(client, post, db_session, session, sam, items[0].id, "yes")
+    _cast(client, post, db_session, session, lee, items[0].id, "yes")
+    _cast(client, post, db_session, session, rae, items[0].id, "no")  # auto-close → pending
+    _login(client, db_session, "host@example.com")
+    return session, items[0]
+
+
+def test_finish_passes_undecided_majority_items(client, post, db_session):
+    session, pending_item = _pending_majority_session(client, post, db_session)
+    resp = post(f"/s/{session.code}/finish", follow_redirects=False)
+    assert resp.status_code == 303
+    db_session.expire_all()
+    assert session.status == "complete"
+    assert pending_item.outcome == "not_kept"
+
+
+def test_results_page_confirms_before_passing_undecided(client, post, db_session):
+    session, _ = _pending_majority_session(client, post, db_session)
+    page = client.get(f"/s/{session.code}")
+    assert page.status_code == 200
+    assert 'data-confirm="Pass on the 1 undecided item and' in page.text
+
+
+def test_browser_errors_render_a_page_never_json(client, post, db_session):
+    """A browser (Accept: text/html) gets the branded error page with a way
+    back; a non-browser client keeps the JSON detail."""
+    session, _ = _pending_majority_session(client, post, db_session)
+    other = _get_or_make_account(db_session, "someone-else@example.com", "Other")
+    _login(client, db_session, other.email)
+    browser = {"accept": "text/html,application/xhtml+xml"}
+
+    resp = post(f"/s/{session.code}/next-batch", headers=browser)
+    assert resp.status_code == 403
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "Only the host can start the next batch" in resp.text
+    assert f'href="/s/{session.code}"' in resp.text
+    assert '{"detail"' not in resp.text
+
+    resp = client.get("/s/NOPE99/recipe/1", headers=browser)
+    assert resp.status_code == 404
+    assert resp.headers["content-type"].startswith("text/html")
+
+    # Missing form fields (422) are a page too.
+    resp = post(f"/s/{session.code}/vote", data={}, headers=browser)
+    assert resp.status_code == 422
+    assert resp.headers["content-type"].startswith("text/html")
+    assert '"detail"' not in resp.text
+
+    # Non-browser clients are unchanged.
+    resp = post(f"/s/{session.code}/next-batch")
+    assert resp.status_code == 403
+    assert resp.json() == {"detail": "Only the host can start the next batch"}

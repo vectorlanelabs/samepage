@@ -61,6 +61,10 @@ def _static_version(name: str) -> str:
 
 def _current_account(request: Request) -> dict:
     """Context processor: expose the signed-in identity (or None) to templates."""
+    if "session" not in request.scope:
+        # Rendered outside the session middleware (the origin-check rejection
+        # page) — treat as signed-out rather than asserting.
+        return {"current_account": None}
     account_id = request.session.get("account_id")
     if account_id is None:
         return {"current_account": None}

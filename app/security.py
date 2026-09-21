@@ -18,12 +18,25 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.errors import error_page, wants_html
 from app.settings import settings
 
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # /api/ prefix (M6): Bearer auth makes Origin irrelevant. /mcp is matched
 # with exact-boundary logic in origin_check (below), not via this tuple.
 _ORIGIN_EXEMPT_PREFIXES = ("/api/",)
+
+
+def _origin_rejected(request: Request, detail: str):
+    """403 for a failed origin check: the branded error page for a browser,
+    the JSON detail for everything else."""
+    if wants_html(request):
+        return error_page(
+            request,
+            403,
+            "We couldn't confirm that request came from this site. Reload the page and try again.",
+        )
+    return JSONResponse({"detail": detail}, status_code=403)
 
 
 def setup_middleware(app: FastAPI) -> None:
@@ -55,10 +68,10 @@ def setup_middleware(app: FastAPI) -> None:
                 )
                 if is_exempt:
                     return await call_next(request)  # token-authenticated (M6)
-                return JSONResponse({"detail": "CSRF origin required"}, status_code=403)
+                return _origin_rejected(request, "CSRF origin required")
             parsed = urlparse(origin)
             scheme_ok = parsed.scheme in ("http", "https")
             host = request.headers.get("host", "")
             if not scheme_ok or not parsed.netloc or parsed.netloc != host:
-                return JSONResponse({"detail": "CSRF origin mismatch"}, status_code=403)
+                return _origin_rejected(request, "CSRF origin mismatch")
         return await call_next(request)

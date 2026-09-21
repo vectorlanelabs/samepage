@@ -23,6 +23,32 @@
       navigator.serviceWorker.register("/sw.js").catch(function () {});
     });
   }
+  // Every form: an optional data-confirm prompt, then a double-submit guard —
+  // the submit buttons lock the moment a form is sent, so a second tap on a
+  // slow connection can't fire the action twice.
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (e.defaultPrevented || !form.querySelectorAll) return;
+    if (form.dataset.submitting) { e.preventDefault(); return; }
+    if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) { e.preventDefault(); return; }
+    form.dataset.submitting = "1";
+    setTimeout(function () {
+      form.querySelectorAll("button[type=submit], button:not([type])").forEach(function (b) {
+        b.disabled = true;
+        b.setAttribute("aria-busy", "true");
+      });
+    }, 0);
+  });
+  // Back/forward cache restores the page with the lock still on — clear it.
+  window.addEventListener("pageshow", function () {
+    document.querySelectorAll("form[data-submitting]").forEach(function (form) {
+      delete form.dataset.submitting;
+      form.querySelectorAll("button[aria-busy]").forEach(function (b) {
+        b.disabled = false;
+        b.removeAttribute("aria-busy");
+      });
+    });
+  });
 </script>
 </head>
 <body class="{% block body_class %}{% endblock %}">

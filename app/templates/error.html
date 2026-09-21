@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · Same Page{% endblock %}
+{% block content %}
+<div class="page page--narrow">
+  <section class="card hero-card hero-card--center">
+    <h1 class="page-title">{{ heading }}</h1>
+    <p class="hero-sub">{{ message }}</p>
+    <div class="hero-cta">
+      {% if back_href %}<a class="btn btn-primary" href="{{ back_href }}">{{ back_label }}</a>{% endif %}
+      <a class="btn{% if not back_href %} btn-primary{% endif %}" href="/">Go home</a>
+    </div>
+  </section>
+</div>
+{% endblock %}
