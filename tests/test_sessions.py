@@ -454,8 +454,8 @@ def test_create_session_happy_path_meal_collection(client, post, db_session):
     assert session.host_account_id == host.id
     assert session.group_id == group.id
     assert session.collection_id == collection.id
-    # M7 S4: creation lands on the host-only share screen.
-    assert resp.headers["location"] == f"/s/{session.code}/share"
+    # Creation lands straight in the lobby (which carries the invite code).
+    assert resp.headers["location"] == f"/s/{session.code}"
 
     targets = db_session.scalars(
         select(SessionTarget)
@@ -644,7 +644,7 @@ def test_create_session_ad_hoc(client, post, db_session):
         select(SessionTarget).where(SessionTarget.session_id == session.id)
     ).all()
     assert [(t.track_label, t.target_count) for t in targets] == [("picks", 4)]
-    assert resp.headers["location"] == f"/s/{session.code}/share"
+    assert resp.headers["location"] == f"/s/{session.code}"
 
     lobby = client.get(f"/s/{session.code}")
     assert lobby.status_code == 200
@@ -700,7 +700,7 @@ def test_signed_out_join_flow(client, post, db_session):
     assert resp.status_code == 303
     session = db_session.scalar(select(VotingSession).order_by(VotingSession.id.desc()))
     assert session is not None
-    assert resp.headers["location"] == f"/s/{session.code}/share"
+    assert resp.headers["location"] == f"/s/{session.code}"
     client.cookies.clear()  # signed out now
 
     # Stranger hits the code → join page, no account required.
@@ -922,22 +922,29 @@ def _share_session(db_session, host_email="host@example.com"):
     return session, host, group, collection
 
 
-def test_share_page_host_renders_invite(client, db_session):
-    """M7 S4: the host sees the invite screen — the code, copy button, live
-    joined-count poll — with the collection/group context and the invite URL."""
+def test_share_url_sends_host_to_lobby(client, db_session):
+    """The old /share pre-lobby is gone: the host is sent to the lobby."""
     session, host, _group, _collection = _share_session(db_session)
     _login(client, db_session, host.email)
-    resp = client.get(f"/s/{session.code}/share")
+    resp = client.get(f"/s/{session.code}/share", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/s/{session.code}"
+
+
+def test_host_lobby_carries_invite_card(client, db_session):
+    """The host lobby shows the join code, copy/share buttons, the live roster
+    and the Start voting CTA — all on one screen."""
+    session, host, _group, _collection = _share_session(db_session)
+    _login(client, db_session, host.email)
+    resp = client.get(f"/s/{session.code}")
     assert resp.status_code == 200
-    assert "Invite the table" in resp.text
     assert session.code in resp.text
     assert "Copy invite link" in resp.text
-    assert f'hx-get="/s/{session.code}/joined-count"' in resp.text
-    assert 'hx-trigger="every 3s"' in resp.text
+    assert f"{settings.base_url}/s/{session.code}" in resp.text  # invite_url
     assert "Weeknight dinners · Household" in resp.text
     assert "Nobody has joined yet" in resp.text
-    assert f'href="/s/{session.code}"' in resp.text  # Go to the lobby
-    assert f"{settings.base_url}/s/{session.code}" in resp.text  # invite_url
+    assert f'action="/s/{session.code}/start"' in resp.text
+    assert "/share" not in resp.text
 
 
 def test_share_page_guest_participant_404(client, post, db_session):
@@ -3807,8 +3814,8 @@ def test_create_session_auto_inserts_host_row_and_starts_share_count_at_one(
     client, post, db_session
 ):
     """HOTFIX3: POST /sessions inserts the host's participant row and points
-    the cookie at it — the roster starts at 1 ('★ you, host') and the share
-    screen's joined count reads '1 person has joined' immediately."""
+    the cookie at it — the roster starts at 1 ('★ you, host') and the joined
+    count reads '1 person has joined' immediately."""
     session, host, _collection = _create_session_via_http(
         client, post, db_session, dinners="2"
     )
@@ -3825,10 +3832,7 @@ def test_create_session_auto_inserts_host_row_and_starts_share_count_at_one(
     assert "1 at the table" in lobby.text
     assert "★ you, host" in lobby.text
 
-    # The share screen and its every-3s poll start at 1, not 'Nobody'.
-    share = client.get(f"/s/{session.code}/share")
-    assert share.status_code == 200
-    assert "1 person has joined" in share.text
+    # The joined-count poll starts at 1, not 'Nobody'.
     assert client.get(f"/s/{session.code}/joined-count").text == "1 person has joined"
 
 

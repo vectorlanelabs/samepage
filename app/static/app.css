@@ -1739,11 +1739,30 @@ button { font-family: var(--sp-font-sans); }
   background: var(--sp-accent);
 }
 
-/* Pushes "Go to the lobby" to the bottom of the session-flow column (the
-   mobile .content--session is a full-height flex column). */
-.share-spacer { flex: 1; }
+/* Lobby invite card: compact, so the roster and Start voting stay in view. */
+.invite-card { padding: 22px 20px; }
 
-.share-go-lobby { margin-top: 22px; }
+.invite-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.invite-actions .btn { flex: 1; margin: 0; }
+
+/* Primary CTAs that must never need a scroll: pinned to the bottom of the
+   viewport while the content above is taller than the screen, in the page
+   flow otherwise. */
+.sticky-cta {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--sp-bg);
+  padding: 12px 0 max(8px, env(safe-area-inset-bottom));
+  margin-top: 12px;
+}
+
+.sticky-cta .lobby-lock-caption { margin: 0 0 10px; }
 
 /* ---------- Groups ---------- */
 
@@ -1965,6 +1984,22 @@ button { font-family: var(--sp-font-sans); }
      the total vertical chrome ≤ 60px, so a .vote-screen of
      calc(100dvh - 60px) fits a 390x844 viewport without scroll. */
   .content--session { min-height: 100dvh; padding: 16px 18px 24px; }
+  .vote-screen { min-height: calc(100dvh - 40px); }
+
+  /* Phone: a long option name or description must not push Yes/No off
+     screen — the card shrinks its type and clamps the description, and
+     .vote-actions is a .sticky-cta anyway. */
+  .vote-card { padding: 22px 20px; }
+  .vote-name { font-size: clamp(26px, 7.5vw, 34px); }
+  .vote-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .vote-middle { margin: 14px 0 0; }
+  .invite-card { padding: 16px 16px; }
+  .share-code { font-size: clamp(22px, 7vw, 32px); margin-top: 6px; }
 
   .hub-signout { display: block; }
 
@@ -2518,11 +2553,6 @@ button { font-family: var(--sp-font-sans); }
   font-weight: 500;
   color: var(--sp-sub);
   margin: 18px 0 0;
-}
-
-/* Quiet 'Show invite code' text link under the host's roster card. */
-.lobby-invite-link {
-  margin: 14px 0 0;
 }
 
 /* Host roster rows ("N at the table"). */

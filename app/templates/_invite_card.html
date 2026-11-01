@@ -1,25 +1,13 @@
-{% extends "base.html" %}
-{% block title %}Invite the table · Same Page{% endblock %}
-{% block content %}
-<p class="share-context">{{ collection_name }} · {{ group_name }}</p>
-<h1 class="share-title">Invite the table</h1>
-
-<section class="card share-card">
+{# Invite card (host lobby): join code, copy / native-share buttons. The
+   former /share pre-lobby screen folded into the lobby. #}
+<section class="card share-card invite-card">
   <div class="share-code-label">Join code</div>
   <div class="share-code">{{ session.code }}</div>
-  <button type="button" class="btn btn-primary btn-block share-copy" id="copy-link" data-url="{{ invite_url }}">Copy invite link</button>
-  <button type="button" class="btn btn-secondary btn-block share-native hidden" id="native-share" data-url="{{ invite_url }}">Share…</button>
+  <div class="invite-actions">
+    <button type="button" class="btn btn-primary share-copy" id="copy-link" data-url="{{ invite_url }}">Copy invite link</button>
+    <button type="button" class="btn btn-secondary share-native hidden" id="native-share" data-url="{{ invite_url }}">Share…</button>
+  </div>
 </section>
-
-<div class="share-joined">
-  <span class="share-dot" aria-hidden="true"></span>
-  <span id="joined-count" class="share-joined-count" hx-get="/s/{{ session.code }}/joined-count" hx-trigger="every 3s" hx-swap="innerHTML">{{ joined_label }}</span>
-</div>
-
-<div class="share-spacer"></div>
-
-<a class="btn btn-ink btn-block share-go-lobby" href="/s/{{ session.code }}">Go to the lobby</a>
-
 <script>
   // Copy invite link + optional native share (M7 S4). No globals.
   (function () {
@@ -68,4 +56,3 @@
     }
   })();
 </script>
-{% endblock %}

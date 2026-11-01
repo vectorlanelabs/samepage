@@ -433,6 +433,7 @@ def _lobby_context(
         "participants": roster,
         "participant_count": len(roster),
         "is_host": is_host,
+        "invite_url": f"{settings.base_url}/s/{session.code}",
         "chrome": "session",
     }
     if preview:
@@ -1141,9 +1142,9 @@ def create_session(
     db.add(host_participant)
     db.commit()
     _set_session_cookie_participant(request, session.code, host_participant.id)
-    # M7 S4: the host lands on the share screen — the invite surface — right
-    # after creating the session, then walks to the lobby.
-    return RedirectResponse(f"/s/{session.code}/share", status_code=303)
+    # The host lands straight in the lobby, which carries the invite code and
+    # copy/share buttons — no separate pre-lobby screen.
+    return RedirectResponse(f"/s/{session.code}", status_code=303)
 
 
 # --- Join flow (no account required) -----------------------------------------
@@ -1397,31 +1398,16 @@ def session_share_page(
     code: str,
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Host-only share screen (M7 S4): the invite surface right after
-    creation — the join code, copy / native-share buttons, and a live joined
-    count. Sharing is a lobby-time surface: once voting starts the host is
-    redirected to the session itself.
-
-    Membership-exempt throttling (same carve-out as ``GET /s/{code}`` and the
-    recipe view): the join limiter is enforced ONLY for viewers who are not
-    the host. An unknown code pays a bucket hit before the 404 (guessers
-    can't probe for free), and a stranger/participant who knows a valid code
-    pays before the host-only 404 (no existence oracle, CLAUDE.md #6) — but
-    the HOST never pays, because /share is host-only and every legitimate
-    call IS the host: a host reloading their own invite screen must not burn
-    the shared bucket and lock themselves out of it. Ended sessions render
-    the ended page; a non-lobby session bounces to itself."""
+    """Legacy host-only /share URL: the invite surface now lives in the lobby,
+    so the host is sent there. Non-hosts and unknown codes still pay the join
+    limiter and get 404 (no existence oracle, CLAUDE.md #6); ended sessions
+    render the ended page."""
     session = _get_session_by_code(db, code)
     if session is None:
-        # Unknown code: the guesser keeps burning the bucket — enforce BEFORE
-        # the 404 so the status code can't be read without paying.
         _enforce_join_rate_limit(request)
         raise HTTPException(404, "Session not found")
     account = get_current_account(request, db)
     if account is None or account.id != session.host_account_id:
-        # Only the host may share: everyone else — participants and strangers
-        # alike — pays the code-guessing bucket before the 404, so /share
-        # can't be probed for free either.
         _enforce_join_rate_limit(request)
         raise HTTPException(404, "Only the host can share this session")
     _expire_if_stale(db, session)  # lazy §5.5 expiry on load
@@ -1429,32 +1415,7 @@ def session_share_page(
         return templates.TemplateResponse(
             request, "session_ended.html", {"session": session, "chrome": "session"}
         )
-    if session.status != "lobby":
-        # Sharing is lobby-time: a voting/complete session sends the host to
-        # the session itself.
-        return RedirectResponse(f"/s/{session.code}", status_code=303)
-    collection = db.get(Collection, session.collection_id) if session.collection_id else None
-    group = db.get(Group, session.group_id)
-    joined = (
-        db.scalar(
-            select(func.count())
-            .select_from(SessionParticipant)
-            .where(SessionParticipant.session_id == session.id)
-        )
-        or 0
-    )
-    return templates.TemplateResponse(
-        request,
-        "session_share.html",
-        {
-            "session": session,
-            "collection_name": collection.name if collection else "Ad hoc session",
-            "group_name": group.name if group else "",
-            "joined_label": _joined_label(joined),
-            "invite_url": f"{settings.base_url}/s/{session.code}",
-            "chrome": "session",
-        },
-    )
+    return RedirectResponse(f"/s/{session.code}", status_code=303)
 
 
 @router.get("/s/{code}/joined-count")
