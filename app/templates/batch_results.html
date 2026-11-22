@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Results · {{ session.code }} · Same Page{% endblock %}
-{% block body_class %}results-wide{% endblock %}
+{% block body_class %}{% if pending %}results-wide{% endif %}{% endblock %}
 {% block content %}
 <div class="page">
   <p class="page-meta results-context">{{ collection_name }} · Batch {{ batch.seq }}{% if is_host %} · Host view{% endif %}</p>
@@ -12,10 +12,12 @@
     {%- endfor -%}
   </p>
 
-  {# Phone order is the DOM order: kept so far → pending → didn't make it →
-     CTAs. At >=1024px .results-grid becomes two columns (see app.css):
-     kept + didn't on the left, pending + CTAs on the right. #}
+  {# Two wrappers: the sidebar (kept + didn't make it) and the main column
+     (pending + CTAs). On phones both are display:contents and flex `order`
+     restores the phone sequence: kept → pending → didn't → CTAs. At >=1024px
+     with something pending they become real columns — see app.css. #}
   <div class="results-grid{% if not pending %} results-grid--no-pending{% endif %}">
+    <div class="results-side">
     <section class="card results-card results-kept">
       <h2 class="results-group-label">kept so far</h2>
       {% if kept_so_far %}
@@ -33,6 +35,20 @@
       {% endif %}
     </section>
 
+    {% if not_kept %}
+    <section class="card results-card results-didnt">
+      <h2 class="results-group-label results-group-label--faint">Didn't make it</h2>
+      {% for item in not_kept %}
+      <div class="results-row results-row--faint">
+        <span class="results-name">{{ item.name }}</span>
+        <span class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</span>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+    </div>
+
+    <div class="results-main">
     {% if pending %}
     <section class="card results-call-card results-pending">
       <h2 class="results-group-label results-group-label--host">majority said yes · host's call</h2>
@@ -52,18 +68,6 @@
           </form>
         </div>
         {% endif %}
-      </div>
-      {% endfor %}
-    </section>
-    {% endif %}
-
-    {% if not_kept %}
-    <section class="card results-card results-didnt">
-      <h2 class="results-group-label results-group-label--faint">Didn't make it</h2>
-      {% for item in not_kept %}
-      <div class="results-row results-row--faint">
-        <span class="results-name">{{ item.name }}</span>
-        <span class="results-meta">{{ item.yes_count }} yes · {{ item.no_count }} no</span>
       </div>
       {% endfor %}
     </section>
@@ -91,6 +95,7 @@
       {% else %}
       <p class="page-meta results-waiting">Waiting for the host.</p>
       {% endif %}
+    </div>
     </div>
   </div>
 </div>

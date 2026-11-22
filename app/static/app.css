@@ -2351,37 +2351,50 @@ button { font-family: var(--sp-font-sans); }
   text-align: center;
 }
 
-/* Results desktop layout (>=1024px, UX-RESULTS): the results screen widens
-   past the 720px session column to ~1080px and the content becomes TWO
-   columns — "Kept so far" + "Didn't make it" on the left, the pending card +
-   the CTAs on the right. Phone stays the single column above (the DOM order
-   is the phone order). The body class is set by batch_results.html only, so
-   other session screens keep the narrow column. */
+/* Results layout wrappers. On phones (and whenever nothing is pending) they
+   are display:contents, so .results-grid's flex column sees the four cards
+   directly; `order` puts them in the phone sequence kept → pending → didn't
+   make it → CTAs regardless of the wrapper DOM. */
+.results-side,
+.results-main {
+  display: contents;
+}
+
+.results-kept { order: 1; }
+.results-pending { order: 2; }
+.results-didnt { order: 3; }
+.results-ctas { order: 4; }
+
+/* Results desktop layout (>=1024px, UX-RESULTS): when the host has calls to
+   make, the screen widens past the 720px session column to ~1080px and
+   becomes a main column + sidebar. The main column (left) is the host's
+   work: the pending card with Keep/Pass, then the CTAs directly under it.
+   The sidebar (right) is context: "Kept so far" stacked tightly over
+   "Didn't make it". Each column is its own flex column, so the sidebar's
+   cards never get tied to the pending card's row height (the old equal-column
+   grid left a tall hole under a one-item kept card and pushed the rejects
+   below the fold). With nothing pending the page stays the single 720px
+   column: it is just a list to read. */
 @media (min-width: 1024px) {
   body.results-wide .content--session { max-width: 1080px; }
 
-  .results-grid {
+  .results-grid:not(.results-grid--no-pending) {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas:
-      "kept pending"
-      "didnt ctas";
+    grid-template-columns: minmax(0, 1fr) 340px;
     align-items: start;
-    gap: 24px;
+    gap: 28px;
   }
 
-  /* Nothing pending → the CTAs take the top-right cell next to the kept card
-     instead of sitting under an empty pending card. */
-  .results-grid--no-pending {
-    grid-template-areas:
-      "kept ctas"
-      "didnt .";
+  .results-grid:not(.results-grid--no-pending) > .results-main,
+  .results-grid:not(.results-grid--no-pending) > .results-side {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
   }
 
-  .results-kept { grid-area: kept; }
-  .results-pending { grid-area: pending; }
-  .results-didnt { grid-area: didnt; }
-  .results-ctas { grid-area: ctas; }
+  .results-grid:not(.results-grid--no-pending) > .results-main { order: 1; }
+  .results-grid:not(.results-grid--no-pending) > .results-side { order: 2; }
 }
 
 /* Completion plan (session_complete.html) — UX-RESULTS: the forced ink ground
